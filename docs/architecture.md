@@ -18,6 +18,7 @@ plumo/
 ├── backend/
 │   ├── app/
 │   │   ├── api/routes/
+│   │   ├── admin/{views,templates,static}/
 │   │   ├── core/
 │   │   ├── db/
 │   │   ├── models/
@@ -28,13 +29,15 @@ plumo/
 │   │   ├── integrations/{llm,channels}/
 │   │   └── workers/
 │   ├── migrations/
-│   └── tests/{unit,integration}/
+│   └── tests/{unit,integration,admin,fixtures}/
 ├── data/demo/
 ├── docs/
 └── infra/
 ```
 
 Это каталоги для будущей реализации, не перечень работающих функций. Пустые каталоги сохраняются в Git через .gitkeep.
+
+Backend дополнен Python-пакетами и файлами-заготовками; подробное дерево — в [backend/README.md](../backend/README.md). `app/admin` предназначен для внутренней панели сотрудников и ручного управления пилотами. Панель ещё не реализована; доступ и изоляция по `business_id` обязательны при её подключении. Личный кабинет бизнеса остаётся отложенным.
 
 ## Демонстрационный поток
 

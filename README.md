@@ -16,6 +16,7 @@ Plumo — ИИ-ассистент для входящих обращений б�
 |---|---|
 | [frontend](frontend/README.md) | Лендинг, демо-чат, форма заявки |
 | [backend](backend/README.md) | FastAPI, агент, хранение и интеграции |
+| [backend/app/admin](backend/app/admin/README.md) | Каркас внутренней админки сотрудников |
 | [data/demo](data/demo/README.md) | Вымышленные данные для демонстрации |
 | [docs](docs/architecture.md) | Полное дерево проекта и границы модулей |
 | [infra](infra/README.md) | Будущая конфигурация запуска и инфраструктуры |
