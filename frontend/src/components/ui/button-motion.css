@@ -9,12 +9,20 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
+  border-radius: calc(var(--button-radius, 0px) + 20px) !important;
   background: var(--button-base) !important;
   color: var(--button-ink) !important;
-  transition: color 280ms ease, border-color 280ms ease;
+  transition: color 560ms ease, border-color 560ms ease;
 }
+.login-link { --button-radius: 7px; }
+.auth-submit { --button-radius: 18px; }
+:is(.primary-cta, .text-cta, .menu-toggle) { --button-radius: 6px; }
+:is(.pilot-form button, .chat-options button) { --button-radius: 5px; }
+.password-toggle { --button-radius: 8px; }
+.language-switch button { --button-radius: 4px; }
+:is(.reset-demo, .social-icon) { --button-radius: 50%; }
 :is(.login-link, .auth-submit, .primary-cta, .pilot-form button, .chat-options button) {
-  border: 1px solid #111113;
+  border: 1px solid #111113 !important;
 }
 .primary-cta {
   --button-base: var(--blue);
@@ -40,7 +48,7 @@
   --button-wave: #fff;
   --button-hover-ink: #111113;
 }
-.menu-active .login-link { border-color: #fff; }
+.menu-active .login-link { border-color: #fff !important; }
 .burger-panel .language-switch button:not([aria-pressed="true"]) { --button-ink: #a1a1a7; }
 .language-switch button:not([aria-pressed="true"]) { --button-ink: #73737c; }
 :is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
@@ -48,12 +56,13 @@
     .menu-toggle, a.social-icon)::before {
   content: "";
   position: absolute;
-  inset: -1px;
+  inset: 0;
+  border-radius: inherit;
   z-index: -1;
   pointer-events: none;
   background: var(--button-wave);
   clip-path: ellipse(0% 150% at 0% 50%);
-  transition: clip-path 550ms cubic-bezier(.22, 1, .36, 1);
+  transition: clip-path 1100ms cubic-bezier(.22, 1, .36, 1);
 }
 :is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
     .chat-options button, .reset-demo, .password-toggle, .language-switch button,
@@ -67,7 +76,7 @@
   clip-path: ellipse(150% 150% at 0% 50%);
 }
 /* Chart bars keep their own selection colours; animate their surface as well. */
-.bar-chart .chart-bar { background-image: linear-gradient(#ffffff33, #ffffff33); background-size: 0% 100%; background-repeat: no-repeat; transition: background-size 550ms cubic-bezier(.22,1,.36,1); }
+.bar-chart .chart-bar { background-image: linear-gradient(#ffffff33, #ffffff33); background-size: 0% 100%; background-repeat: no-repeat; transition: background-size 1100ms cubic-bezier(.22,1,.36,1); }
 .bar-chart button:is(:hover, :focus-visible) .chart-bar { background-size: 100% 100%; }
 @media (prefers-reduced-motion: reduce) {
   .bar-chart .chart-bar { transition: none; }
