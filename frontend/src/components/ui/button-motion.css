@@ -53,7 +53,7 @@
 .language-switch button:not([aria-pressed="true"]) { --button-ink: #73737c; }
 :is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
     .chat-options button, .reset-demo, .password-toggle, .language-switch button,
-    .menu-toggle, a.social-icon)::before {
+    .menu-toggle, .social-icon)::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -66,13 +66,13 @@
 }
 :is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
     .chat-options button, .reset-demo, .password-toggle, .language-switch button,
-    .menu-toggle, a.social-icon):not(:disabled):is(:hover, :focus-visible) {
+    .menu-toggle, .social-icon):not(:disabled):is(:hover, :focus-visible) {
   color: var(--button-hover-ink) !important;
 }
 .primary-cta:is(:hover, :focus-visible) { border-color: #111113; }
 :is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
     .chat-options button, .reset-demo, .password-toggle, .language-switch button,
-    .menu-toggle, a.social-icon):not(:disabled):is(:hover, :focus-visible)::before {
+    .menu-toggle, .social-icon):not(:disabled):is(:hover, :focus-visible)::before {
   clip-path: ellipse(150% 150% at 0% 50%);
 }
 /* Chart bars keep their own selection colours; animate their surface as well. */
