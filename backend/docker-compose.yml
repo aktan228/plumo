@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: plumo
+      POSTGRES_PASSWORD: plumo
+      POSTGRES_DB: plumo
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plumo -d plumo"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - plumo_pg:/var/lib/postgresql/data
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+asyncpg://plumo:plumo@db:5432/plumo
+      AI_MODE: mock
+      SMALL_MODEL_PROVIDER: mock
+      BIG_MODEL_PROVIDER: mock
+      STT_PROVIDER: mock
+      TTS_PROVIDER: mock
+      LANGUAGE_DETECTOR: mock
+      HANDOFF_PROVIDER: mock
+      ROUTER: rules
+      DEFAULT_LANGUAGE: ru
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  plumo_pg:
