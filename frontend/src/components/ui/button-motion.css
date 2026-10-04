@@ -1,4 +1,12 @@
 /* Shared button treatment. Override these tokens for additional variants. */
+.button-pill.button-pill { border-radius: 999px !important; }
+.button-text { display: inline-flex; align-items: center; gap: 16px; width: fit-content; padding: 12px 0; background: transparent; border: 0; color: var(--ink); font-size: 14px; font-weight: 500; }
+.button-text > span:first-child { text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1px; }
+.button-text-symbol { position: relative; width: 20px; height: 20px; display: inline-block; font-size: 20px; line-height: 20px; }
+.button-text-symbol > span { position: absolute; inset: 0; transition: opacity 220ms ease, transform 300ms ease; }
+.symbol-plus { opacity: 0; transform: rotate(-90deg) scale(.7); }
+.button-text:is(:hover, :focus-visible) .symbol-arrow { opacity: 0; transform: translateX(6px); }
+.button-text:is(:hover, :focus-visible) .symbol-plus { opacity: 1; transform: rotate(0) scale(1); }
 :is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
     .chat-options button, .reset-demo, .password-toggle, .language-switch button,
     .menu-toggle, .social-icon) {
