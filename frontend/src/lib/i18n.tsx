@@ -79,5 +79,8 @@ export function LanguageSwitch() {
     {(["ru", "en"] as const).map((value) => <button key={value} type="button" lang={value}
       aria-label={localeCatalog[value].label} aria-pressed={locale === value}
       onClick={() => setLocale(value)}>{value.toUpperCase()}</button>)}
+    <button type="button" lang="ky" disabled aria-pressed={false}
+      aria-label={locale === "en" ? "Кыргызча — translation coming soon" : "Кыргызча — перевод готовится"}
+      title={locale === "en" ? "Kyrgyz translation coming soon" : "Кыргызский перевод готовится"}>KY</button>
   </div>;
 }

@@ -152,7 +152,7 @@ export function Header() {
           <nav aria-label={menuLabel}>
             <ul>{links.map(([id, label], index) => <li key={id}>
               <motion.div initial={{ y: reducedMotion ? 0 : "115%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: reducedMotion ? 0 : "-90%", opacity: 0, transition: { duration: reducedMotion ? 0 : 0.45, delay: reducedMotion ? 0 : (links.length - index - 1) * 0.06, ease: easing } }} transition={{ duration: reducedMotion ? 0 : 0.72, delay: reducedMotion ? 0 : 0.2 + index * 0.09, ease: easing }}>
-                <a href={`#${id}`} onClick={(event) => { event.preventDefault(); pendingAnchor.current = id; closeMenu(); }}><span className="menu-index">0{index + 1}</span>{label}<span className="menu-arrow" aria-hidden="true">↗</span></a>
+                <a href={`#${id}`} onClick={(event) => { event.preventDefault(); pendingAnchor.current = id; closeMenu(); }}>{label}<span className="menu-arrow" aria-hidden="true">↗</span></a>
               </motion.div>
             </li>)}</ul>
           </nav>
