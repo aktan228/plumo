@@ -8,7 +8,7 @@
 .button-text:is(:hover, :focus-visible) .symbol-arrow { opacity: 0; transform: translateX(6px); }
 .button-text:is(:hover, :focus-visible) .symbol-plus { opacity: 1; transform: rotate(0) scale(1); }
 :is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
-    .chat-options button, .reset-demo, .password-toggle, .language-switch button,
+    .chat-options button, .reset-demo, .password-toggle,
     .menu-toggle, .social-icon) {
   --button-base: #fff;
   --button-ink: #111113;
@@ -60,7 +60,7 @@
 .burger-panel .language-switch button:not([aria-pressed="true"]) { --button-ink: #a1a1a7; }
 .language-switch button:not([aria-pressed="true"]) { --button-ink: #73737c; }
 :is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
-    .chat-options button, .reset-demo, .password-toggle, .language-switch button,
+    .chat-options button, .reset-demo, .password-toggle,
     .menu-toggle, .social-icon)::before {
   content: "";
   position: absolute;
@@ -73,13 +73,13 @@
   transition: clip-path 1100ms cubic-bezier(.22, 1, .36, 1);
 }
 :is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
-    .chat-options button, .reset-demo, .password-toggle, .language-switch button,
+    .chat-options button, .reset-demo, .password-toggle,
     .menu-toggle, .social-icon):not(:disabled):is(:hover, :focus-visible) {
   color: var(--button-hover-ink) !important;
 }
 .primary-cta:is(:hover, :focus-visible) { border-color: #111113; }
 :is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
-    .chat-options button, .reset-demo, .password-toggle, .language-switch button,
+    .chat-options button, .reset-demo, .password-toggle,
     .menu-toggle, .social-icon):not(:disabled):is(:hover, :focus-visible)::before {
   clip-path: ellipse(150% 150% at 0% 50%);
 }
