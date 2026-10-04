@@ -67,7 +67,7 @@ export function Hero() {
   useEffect(() => { if (tick >= cycleLength) setTick(0); }, [tick, cycleLength]);
   const messages = reduced ? c.messages : shown;
 
-  return <section ref={root} className="conversation-hero section-shell" aria-label="Plumo">
+  return <section ref={root} className={`conversation-hero section-shell${expanded ? " chat-active" : ""}`} aria-label="Plumo">
     <div className="hero-pitch"><h1>{c.title}</h1><p className="hero-pitch-description">{c.description}</p><div className="hero-pitch-actions"><a className="primary-cta" href="#pilot">{c.demo}<span aria-hidden="true">↗</span></a><a className="login-link" href="#demo">{c.try}<span aria-hidden="true">→</span></a></div><small>{c.note}</small></div>
     <div className={`hero-preview${expanded ? " preview-expanded" : ""}`} onFocusCapture={() => setHovered(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHovered(false); }} onPointerEnter={(event) => { if (event.pointerType === "mouse") setHovered(true); }} onPointerLeave={() => setHovered(false)} onKeyDown={(event) => { if (event.key === "Escape") { setPinned(false); setHovered(false); } }}>
     <motion.div className={`hero-chat${expanded ? " is-expanded" : ""}`} aria-label={c.status} animate={{ scale: 1 }} transition={{ duration: reduced ? 0 : 1.5, ease: [.22, 1, .36, 1] }}>

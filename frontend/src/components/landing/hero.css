@@ -124,8 +124,6 @@
   .hero-preview.preview-expanded .hero-chat { left: -66.666%; }
   .hero-preview .hero-chat::after { content: ""; position: absolute; top: 0; bottom: 0; left: 40%; right: 0; z-index: 3; pointer-events: none; background: linear-gradient(90deg, #ffffff00, #ffffffd9 25%, #fff 34%); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); opacity: 1; transition: opacity 1300ms ease; }
   .hero-preview.preview-expanded .hero-chat::after { opacity: 0; }
-  .hero-preview .hero-window-controls { position: relative; z-index: 4; margin-right: 40%; transition: margin-right 1500ms cubic-bezier(.22,1,.36,1); }
-  .hero-preview.preview-expanded .hero-window-controls { margin-right: 0; }
   .hero-preview-hint { text-align: left; }
 }
 @media (hover: hover) and (pointer: fine) {
@@ -185,4 +183,35 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .hero-preview .hero-chat, .hero-preview.preview-expanded .hero-chat { transition: none; }
+}
+
+/* Cover the entire concealed area, including separately composited children. */
+@media (min-width: 901px) {
+  .hero-preview .hero-chat { isolation: isolate; }
+  .hero-preview .hero-chat::after {
+    content: "";
+    display: block;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(52.8% + var(--hero-gutter) - 110px);
+    right: 0;
+    width: auto;
+    z-index: 20;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent 0, #fff 110px, #fff 100%);
+    opacity: 1;
+    transition: opacity 1500ms cubic-bezier(.22,1,.36,1);
+  }
+  .hero-preview.preview-expanded .hero-chat::after { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .hero-preview .hero-chat::after { transition: none; } }
+
+@media (min-width: 901px) {
+  .hero-pitch { transform-origin: left center; transition: transform 1500ms cubic-bezier(.22,1,.36,1); }
+  .conversation-hero.chat-active .hero-pitch { transform: translateX(-18px) scale(.96); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-pitch { transition: none; }
+  .conversation-hero.chat-active .hero-pitch { transform: none; }
 }
