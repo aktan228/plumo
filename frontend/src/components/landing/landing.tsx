@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { useLanguage } from "@/lib/i18n";
 import "./landing.css";
+import { Hero } from "./hero";
 
 const copy = {
   ru: {
@@ -56,23 +57,7 @@ export function Landing() {
     setMailReady(true);
   }
   return <main id="main" className="landing">
-    <section className="hero section-shell">
-      <p className="section-label"><span className="small-dot" />{c.label}</p>
-      <h1>{c.title}<br />{c.title2}<br /><span>{c.title3}</span></h1>
-      <div className="hero-bottom"><p>{c.intro}</p><div><div className="hero-actions"><a className="primary-cta" href="#demo">{c.try}<span>↗</span></a><a className="text-cta" href="#pilot">{c.pilot} →</a></div><small>{c.note}</small></div></div>
-      <div className="hero-stage">
-        <span className="stage-label">{c.sample}</span><div className="stage-grid" aria-hidden="true" />
-        <motion.div className="conversation-card" initial={false} whileInView={reduced ? {} : { y: [18, 0], opacity: [0.6, 1] }} viewport={{ once: true }} transition={{ duration: .6 }}>
-          <div className="mini-heading"><span className="avatar">A</span><div><b>{c.person}</b><small>{c.incoming}</small></div><span className="time">21:48</span></div>
-          <p className="bubble customer">{c.question}</p><p className="bubble agent"><b>plumo</b>{c.answer}</p>
-        </motion.div>
-        <div className="stage-connection" aria-hidden="true"><span /><i>↗</i><span /></div>
-        <motion.div className="lead-card" initial={false} whileInView={reduced ? {} : { y: [26, 0], opacity: [0.6, 1] }} viewport={{ once: true }} transition={{ duration: .7, delay: .15 }}>
-          <div className="lead-top"><span className="small-dot" />{c.lead}<span>↗</span></div><h3>{c.need}</h3><p>{c.rooms}</p><div className="lead-rule" /><small>{c.next}</small><strong>{c.nextValue}</strong><div className="lead-footer">✓ {c.context}</div>
-        </motion.div>
-      </div>
-      <div className="benefit-strip">{c.strip.map((text, i) => <span key={text}><i>0{i + 1}</i>{text}</span>)}</div>
-    </section>
+    <Hero />
 
     <section id="demo" className="section-shell split-section">
       <div className="section-copy"><p className="section-label">{c.demoLabel}</p><h2>{c.demoTitle}</h2><p>{c.demoDesc}</p><small className="disclosure">{c.demoNotice}</small></div>
