@@ -1,0 +1,100 @@
+"use client";
+
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { useLanguage } from "@/lib/i18n";
+import "./landing.css";
+
+const copy = {
+  ru: {
+    label: "ДЛЯ РАЗГОВОРОВ, КОТОРЫЕ ВАЖНЫ", title: "Ваш клиент уже", title2: "начал разговор.", title3: "Plumo продолжит.",
+    intro: "ИИ-ассистент для входящих обращений. От первого вопроса до готовой заявки — с вниманием к клиенту и контекстом для вашей команды.",
+    try: "Посмотреть демо", pilot: "Обсудить пилот", note: "Знакомьтесь с продуктом · Без регистрации", sample: "Демонстрационный сценарий",
+    person: "Айбек", incoming: "Новое обращение", question: "Ищу квартиру для семьи. Есть варианты?", answer: "Давайте подберём. Какой район и сколько комнат рассматриваете?",
+    lead: "Заявка для менеджера", need: "Квартира для семьи", rooms: "2 комнаты · южная часть города", context: "Потребность и история — в одной карточке", next: "Следующий шаг", nextValue: "Согласовать просмотр", strip: ["Внимание к каждому запросу", "Контекст между разговорами", "Человек всегда рядом"],
+    demoLabel: "01 / ПОПРОБУЙТЕ САМИ", demoTitle: "Хороший разговор\nначинается с внимания.", demoDesc: "Пройдите короткий пример подбора квартиры. Выберите вопрос и посмотрите, как обращение становится заявкой.", demoNotice: "Интерактивный пример с готовыми ответами и вымышленными объектами. Это не подключённый ИИ.",
+    chatTitle: "Plumo · агентство недвижимости", chatStatus: "Демо-режим", welcome: "Здравствуйте! Помогу с вопросами о квартире и передам ваш запрос менеджеру. Что вас интересует?",
+    prompts: ["Какие квартиры есть?", "Можно записаться на просмотр?", "Хочу поговорить с человеком"],
+    replies: ["В нашем вымышленном каталоге — двухкомнатная квартира 64 м² в южной части города. Какой метраж вы рассматриваете?", "Да, в этом примере можно оставить пожелание на субботу. Менеджер должен проверить расписание и подтвердить время — запись пока не создана.", "В реальном подключении менеджер получит историю и ваш запрос. В этом демо уведомление не отправляется."],
+    reset: "Начать заново", choose: "Выберите вопрос ниже", memoryLabel: "02 / КОНТЕКСТ", memoryTitle: "Начинайте с того,\nна чём остановились.", memoryDesc: "Покупателю не хочется рассказывать всё заново. Plumo задуман так, чтобы потребность, детали и следующий шаг оставались с клиентом.", memoryPoints: ["Краткое резюме вместо поиска по переписке", "Факты из базы знаний вашего бизнеса", "Передача человеку вместе с историей"], memoryNote: "Объединение чатов и звонков — следующий этап продукта.", memoryCard: "КАРТОЧКА КЛИЕНТА", memorySummary: "Интересуется двухкомнатной квартирой. Предпочитает южную часть города. Хочет обсудить просмотр в субботу.", source: "Из демонстрационного диалога", human: "Передать менеджеру", humanNote: "Пример карточки — передача не выполняется",
+    processLabel: "03 / КАК РАБОТАЕТ", processTitle: "Ваш бизнес.\nВаши правила общения.", steps: [ ["Знакомимся", "Определяем один сценарий и то, что должно стать результатом разговора."], ["Добавляем знания", "Собираем услуги, цены и ответы. Вы проверяете, что всё верно."], ["Проверяем вместе", "Прогоняем реальные вопросы и настраиваем передачу вашей команде."], ["Запускаем пилот", "Подключаем согласованный канал и разбираем результаты обращений."] ],
+    channelLabel: "04 / КАНАЛЫ", channelTitle: "Там, где начинается\nваш следующий разговор.", channelDesc: "Начинаем с одного канала. Остальные подключаем по результатам пилота и технической проверки.", channels: [["↗", "Веб-чат", "Демо на этой странице"], ["↗", "WhatsApp", "Планируется"], ["◎", "Instagram", "Планируется"], ["➤", "Telegram", "Планируется"], ["↗", "Телефония", "Техническая проверка впереди"]],
+    statsLabel: "05 / РЕЗУЛЬТАТ В ЦИФРАХ", statsTitle: "Видно не только разговор.\nВиден следующий шаг.", statsDesc: "Обращения, заявки и передачи менеджеру — показатели, по которым будем оценивать пилот.", statsBadge: "Пример данных · не результаты клиентов", statsPeriod: "Обращения за неделю", statsUnits: "обращений", days: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"], metrics: ["Обращений", "Заявок на встречу", "Передано человеку"],
+    faqLabel: "06 / ВОПРОСЫ", faqTitle: "Давайте проясним.", faqs: [["Plumo заменит моего менеджера?", "Задача Plumo — обработать первичный запрос и собрать контекст. Сложные вопросы, переговоры и завершение сделки остаются у вашей команды."], ["Откуда агент знает цены и условия?", "Из утверждённых данных вашего бизнеса. Если нужной информации нет, сценарий должен предусматривать уточнение у менеджера."], ["Какие языки предусмотрены?", "Продукт ориентирован на русский и кыргызский, включая смешанную речь. Качество агента проверяется отдельно перед пилотом. Интерфейс сайта сейчас доступен на русском и английском; кыргызская версия будет добавлена позже."], ["Можно подключить существующий номер?", "Это проверяется с вашим оператором и провайдером телефонии. До технического теста мы не обещаем подключение любого номера."], ["Демо действительно создаёт заявку на просмотр?", "Нет. На этой странице показан сценарий с вымышленными данными. Демо не отправляет уведомления менеджеру и не резервирует время."], ["Как попасть в пилот?", "Расскажите о бизнесе через форму ниже. Мы обсудим канал, задачу, условия и критерии результата до запуска."]],
+    ctaLabel: "НАЧНЁМ С ВАШЕГО БИЗНЕСА", ctaTitle: "Дадим следующему\nразговору продолжение.", ctaDesc: "Расскажите, какие обращения приходят вашей команде. Вместе выберем сценарий для первого пилота.", name: "Ваше имя", business: "Компания", email: "Электронная почта", message: "Что хотите автоматизировать?", send: "Подготовить письмо", mailNote: "Откроется ваша почта с заполненным письмом. Отправку подтверждаете вы.", mailReady: "Почтовая программа запрошена. Если она не открылась, напишите на contact@plumo.app. Заявка через сайт не отправлялась.", subject: "Заявка на пилот Plumo",
+  },
+  en: {
+    label: "FOR CONVERSATIONS THAT MATTER", title: "Your customer", title2: "started a conversation.", title3: "Plumo takes it further.", intro: "An AI assistant for inbound inquiries. From the first question to a qualified request, with care for your customer and context for your team.", try: "Explore the demo", pilot: "Discuss a pilot", note: "Meet the product · No sign-up needed", sample: "Illustrative scenario", person: "Aibek", incoming: "New inquiry", question: "Looking for an apartment for my family. Any options?", answer: "Let's find a fit. Which area and how many rooms are you looking for?", lead: "Request for the manager", need: "Family apartment", rooms: "2 rooms · south of the city", context: "Needs and history, in one place", next: "Next step", nextValue: "Arrange a viewing", strip: ["Attention to every inquiry", "Context across conversations", "A human within reach"],
+    demoLabel: "01 / TRY THE FLOW", demoTitle: "A good conversation\nstarts with listening.", demoDesc: "Explore a short apartment inquiry. Pick a question and see how a conversation turns into a request.", demoNotice: "Interactive example with scripted replies and fictional properties. No live AI is connected.", chatTitle: "Plumo · real estate agency", chatStatus: "Demo mode", welcome: "Hello! I can help with apartment questions and prepare a request for a manager. What would you like to know?", prompts: ["What apartments are available?", "Can I arrange a viewing?", "I'd like to speak to a person"], replies: ["Our fictional catalog has a two-room, 64 m² apartment in the south of the city. What size are you looking for?", "In this example, you can request Saturday. A manager needs to check availability and confirm the time. No booking has been made.", "In a live integration, a manager would receive your request and conversation history. This demo does not send a notification."], reset: "Start again", choose: "Choose a question below",
+    memoryLabel: "02 / CONTEXT", memoryTitle: "Pick up right where\nyou left off.", memoryDesc: "Customers shouldn't have to repeat their story. Plumo is designed to keep their needs, details and next step together.", memoryPoints: ["A concise summary instead of searching through messages", "Facts from your business knowledge base", "Conversation history passed to your team"], memoryNote: "Linking chats and calls is a future product milestone.", memoryCard: "CUSTOMER CONTEXT", memorySummary: "Interested in a two-room apartment. Prefers the south of the city. Would like to discuss a Saturday viewing.", source: "From an illustrative conversation", human: "Hand off to a manager", humanNote: "Example card — no handoff is performed",
+    processLabel: "03 / HOW IT WORKS", processTitle: "Your business.\nYour way of talking.", steps: [["Get acquainted", "Choose one workflow and define what a successful conversation looks like."], ["Add your knowledge", "Collect services, prices and answers. You review the information."], ["Test together", "Try real customer questions and define when your team takes over."], ["Launch a pilot", "Connect an agreed channel and review the outcomes together."]],
+    channelLabel: "04 / CHANNELS", channelTitle: "Where your next\nconversation begins.", channelDesc: "We start with one channel. More follow after the pilot and technical validation.", channels: [["↗", "Web chat", "Demo on this page"], ["↗", "WhatsApp", "Planned"], ["◎", "Instagram", "Planned"], ["➤", "Telegram", "Planned"], ["↗", "Phone calls", "Technical validation pending"]],
+    statsLabel: "05 / MEASURE WHAT MATTERS", statsTitle: "See the conversation.\nUnderstand the next step.", statsDesc: "Inquiries, meeting requests and human handoffs — the metrics we will use to evaluate a pilot.", statsBadge: "Sample data · not customer results", statsPeriod: "Weekly inquiries", statsUnits: "inquiries", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], metrics: ["Inquiries", "Meeting requests", "Human handoffs"],
+    faqLabel: "06 / QUESTIONS", faqTitle: "Let's clear things up.", faqs: [["Will Plumo replace my sales manager?", "Plumo is designed to handle initial inquiries and gather context. Complex questions, negotiation and closing the deal stay with your team."], ["Where do prices and terms come from?", "From your approved business information. When a fact is missing, the workflow should ask a manager rather than invent an answer."], ["Which languages are planned?", "The product targets Russian and Kyrgyz, including mixed speech. Agent quality is evaluated separately before a pilot. This website is available in Russian and English; Kyrgyz will follow."], ["Can we use our existing phone number?", "That needs to be checked with your carrier and telephony provider. Compatibility is confirmed through a technical test."], ["Does the demo actually book a viewing?", "No. It illustrates a workflow using fictional data. It does not notify a manager or reserve a time slot."], ["How can I join a pilot?", "Tell us about your business using the form below. We will discuss the channel, workflow, terms and success criteria before launch."]],
+    ctaLabel: "LET'S START WITH YOUR BUSINESS", ctaTitle: "Give the next conversation\na next chapter.", ctaDesc: "Tell us what your customers ask. Together, we'll choose a workflow for your first pilot.", name: "Your name", business: "Company", email: "Email address", message: "What would you like to automate?", send: "Prepare an email", mailNote: "Opens your email app with a draft. You review and send it.", mailReady: "Your email app has been requested. If it didn't open, write to contact@plumo.app. No request was submitted through this website.", subject: "Plumo pilot inquiry",
+  },
+};
+
+export function Landing() {
+  const { locale } = useLanguage();
+  const c = copy[locale];
+  const reduced = useReducedMotion();
+  const [questions, setQuestions] = useState<number[]>([]);
+  const logRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const log = logRef.current;
+    if (log) log.scrollTop = log.scrollHeight;
+  }, [questions]);
+  const [day, setDay] = useState(6);
+  const [mailReady, setMailReady] = useState(false);
+  const values = [12, 18, 14, 25, 19, 16, 24];
+  function prepareMail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const body = `${c.name}: ${data.get("name")}\n${c.business}: ${data.get("company")}\n${c.email}: ${data.get("email")}\n\n${data.get("message")}`;
+    window.location.href = `mailto:contact@plumo.app?subject=${encodeURIComponent(c.subject)}&body=${encodeURIComponent(body)}`;
+    setMailReady(true);
+  }
+  return <main id="main" className="landing">
+    <section className="hero section-shell">
+      <p className="section-label"><span className="small-dot" />{c.label}</p>
+      <h1>{c.title}<br />{c.title2}<br /><span>{c.title3}</span></h1>
+      <div className="hero-bottom"><p>{c.intro}</p><div><div className="hero-actions"><a className="primary-cta" href="#demo">{c.try}<span>↗</span></a><a className="text-cta" href="#pilot">{c.pilot} →</a></div><small>{c.note}</small></div></div>
+      <div className="hero-stage">
+        <span className="stage-label">{c.sample}</span><div className="stage-grid" aria-hidden="true" />
+        <motion.div className="conversation-card" initial={false} whileInView={reduced ? {} : { y: [18, 0], opacity: [0.6, 1] }} viewport={{ once: true }} transition={{ duration: .6 }}>
+          <div className="mini-heading"><span className="avatar">A</span><div><b>{c.person}</b><small>{c.incoming}</small></div><span className="time">21:48</span></div>
+          <p className="bubble customer">{c.question}</p><p className="bubble agent"><b>plumo</b>{c.answer}</p>
+        </motion.div>
+        <div className="stage-connection" aria-hidden="true"><span /><i>↗</i><span /></div>
+        <motion.div className="lead-card" initial={false} whileInView={reduced ? {} : { y: [26, 0], opacity: [0.6, 1] }} viewport={{ once: true }} transition={{ duration: .7, delay: .15 }}>
+          <div className="lead-top"><span className="small-dot" />{c.lead}<span>↗</span></div><h3>{c.need}</h3><p>{c.rooms}</p><div className="lead-rule" /><small>{c.next}</small><strong>{c.nextValue}</strong><div className="lead-footer">✓ {c.context}</div>
+        </motion.div>
+      </div>
+      <div className="benefit-strip">{c.strip.map((text, i) => <span key={text}><i>0{i + 1}</i>{text}</span>)}</div>
+    </section>
+
+    <section id="demo" className="section-shell split-section">
+      <div className="section-copy"><p className="section-label">{c.demoLabel}</p><h2>{c.demoTitle}</h2><p>{c.demoDesc}</p><small className="disclosure">{c.demoNotice}</small></div>
+      <div className="demo-window"><div className="demo-top"><span className="plumo-mark" aria-hidden="true" /><div><b>{c.chatTitle}</b><small>{c.chatStatus}</small></div><button className="reset-demo" onClick={() => setQuestions([])} aria-label={c.reset} title={c.reset}>↺</button></div>
+        <div ref={logRef} className="chat-log" role="log" aria-live="polite" tabIndex={0} aria-label={c.chatTitle}><p className="chat-agent">{c.welcome}</p>{questions.map((q, i) => <div key={`${i}-${q}`}><p className="chat-customer">{c.prompts[q]}</p><p className="chat-agent">{c.replies[q]}</p></div>)}</div>
+        <div className="chat-options"><small>{c.choose}</small>{c.prompts.map((prompt, i) => <button key={prompt} disabled={questions.includes(i)} onClick={() => setQuestions((old) => [...old, i])}>{prompt}<span>↗</span></button>)}</div>
+      </div>
+    </section>
+
+    <section id="product" className="memory-section"><div className="section-shell split-section">
+      <div className="memory-sheet"><span className="section-label">{c.memoryCard}</span><div className="memory-person"><span className="avatar">A</span><h3>{c.person}</h3><span className="memory-id">#0001</span></div><p className="memory-summary">{c.memorySummary}</p><div className="memory-facts"><span>64 м²</span><span>{c.rooms.split(" · ")[0]}</span></div><small>{c.source}</small><div className="handoff-example">{c.human}<span>↗</span></div><small>{c.humanNote}</small></div>
+      <div className="section-copy"><p className="section-label">{c.memoryLabel}</p><h2>{c.memoryTitle}</h2><p>{c.memoryDesc}</p><ul className="memory-list">{c.memoryPoints.map(text => <li key={text}><span>↗</span>{text}</li>)}</ul><small className="disclosure">{c.memoryNote}</small></div>
+    </div></section>
+
+    <section id="how-it-works" className="section-shell process-section"><p className="section-label">{c.processLabel}</p><h2>{c.processTitle}</h2><div className="process-grid">{c.steps.map(([title, description], i) => <article key={title}><span className="step-number">0{i + 1}</span><h3>{title}</h3><p>{description}</p></article>)}</div></section>
+
+    <section id="channels" className="section-shell channel-section"><div className="section-copy"><p className="section-label">{c.channelLabel}</p><h2>{c.channelTitle}</h2><p>{c.channelDesc}</p></div><div className="channel-list">{c.channels.map(([icon, title, status]) => <div key={title}><span className="channel-icon" aria-hidden="true">{icon}</span><h3>{title}</h3><small>{status}</small></div>)}</div></section>
+
+    <section id="statistics" className="stats-section"><div className="section-shell"><div className="stats-heading"><div><p className="section-label">{c.statsLabel}</p><h2>{c.statsTitle}</h2></div><p>{c.statsDesc}</p></div><div className="stats-board"><div className="stats-board-top"><b>{c.statsPeriod}</b><span>{c.statsBadge}</span></div><div className="metrics">{[128, 32, 18].map((n, i) => <div key={n}><small>{c.metrics[i]}</small><strong>{n}</strong></div>)}</div><div className="chart-heading" aria-live="polite"><span>{c.days[day]}</span><b>{values[day]} {c.statsUnits}</b></div><div className="bar-chart" role="group" aria-label={c.statsPeriod}>{values.map((v, i) => <button key={i} className={day === i ? "selected" : ""} aria-pressed={day === i} aria-label={`${c.days[i]}: ${v} ${c.statsUnits}`} onClick={() => setDay(i)}><span className="chart-track"><span className="chart-bar" style={{ height: `${v / 25 * 100}%` }}><span>{v}</span></span></span><small>{c.days[i]}</small></button>)}</div></div></div></section>
+
+    <section id="faq" className="section-shell faq-section"><div><p className="section-label">{c.faqLabel}</p><h2>{c.faqTitle}</h2></div><div className="faq-list">{c.faqs.map(([q, a]) => <details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
+
+    <section id="pilot" className="pilot-section"><div className="section-shell pilot-grid"><div><p className="section-label">{c.ctaLabel}</p><h2>{c.ctaTitle}</h2><p className="pilot-description">{c.ctaDesc}</p><a className="pilot-email" href="mailto:contact@plumo.app">contact@plumo.app ↗</a></div><form onSubmit={prepareMail} className="pilot-form"><div className="form-row"><label>{c.name}<input name="name" autoComplete="name" required maxLength={100} /></label><label>{c.business}<input name="company" autoComplete="organization" required maxLength={150} /></label></div><label>{c.email}<input type="email" name="email" autoComplete="email" required maxLength={254} /></label><label>{c.message}<textarea name="message" rows={3} required maxLength={1500} /></label><button type="submit">{c.send}<span>↗</span></button><small>{c.mailNote}</small>{mailReady && <p role="status">{c.mailReady}</p>}</form></div></section>
+  </main>;
+}
