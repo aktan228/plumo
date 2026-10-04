@@ -1,6 +1,7 @@
 "use client";
 
 import { Header } from "@/components/landing/header";
+import { Footer } from "@/components/landing/footer";
 import { useLanguage } from "@/lib/i18n";
 
 export default function Home() {
@@ -21,6 +22,7 @@ export default function Home() {
           <p>{t.down}<br />{t.up}</p>
         </section>
       </main>
+      <Footer />
     </>
   );
 }

@@ -21,6 +21,9 @@ const ru = {
   description: "Здесь появится история Plumo. Сейчас — первый элемент: ваш хедер.",
   scroll: "Прокрутите вниз, затем вверх", down: "Вниз — больше пространства.", up: "Вверх — навигация снова рядом.",
   skip: "К содержимому",
+  footerTagline: "Каждый разговор имеет продолжение.", footerContact: "Свяжитесь с нами",
+  footerAddress: "Токтоналиева 104/2", footerRights: "Все права защищены.",
+  footerSocials: "Социальные сети", footerSoon: "Ссылка скоро появится", footerNewTab: "откроется в новой вкладке",
 };
 type Messages = { [Key in keyof typeof ru]: string };
 const en: Messages = {
@@ -39,6 +42,9 @@ const en: Messages = {
   description: "The Plumo story will appear here. For now, meet your header.",
   scroll: "Scroll down, then back up", down: "Scroll down for more space.", up: "Scroll up. Navigation is back.",
   skip: "Skip to content",
+  footerTagline: "Every conversation has a next chapter.", footerContact: "Get in touch",
+  footerAddress: "104/2 Toktonalieva Street", footerRights: "All rights reserved.",
+  footerSocials: "Social media", footerSoon: "Link coming soon", footerNewTab: "opens in a new tab",
 };
 export const localeCatalog = {
   ru: { label: "Русский", available: true },
