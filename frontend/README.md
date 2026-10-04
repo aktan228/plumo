@@ -1,6 +1,6 @@
 # Frontend Plumo
 
-Создан минимальный Next.js (App Router) + TypeScript frontend с Motion. Tailwind CSS и shadcn/ui пока не подключены: текущий хедер оформлен обычным CSS.
+Создан минимальный Next.js (App Router) + TypeScript frontend с Motion. Tailwind CSS подключён через PostCSS без Preflight: существующий CSS сохраняется. Новые компоненты оформляем utility-классами Tailwind; shadcn/ui пока не подключён. Цветовые токены: plumo-blue, plumo-ink, plumo-muted, plumo-line, plumo-soft. Конфигурация — postcss.config.mjs и src/app/tailwind.css.
 
 ## Запуск
 
