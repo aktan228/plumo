@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import "@/components/ui/button-motion.css";
 import { LanguageProvider } from "@/lib/i18n";
 
 export const metadata: Metadata = {

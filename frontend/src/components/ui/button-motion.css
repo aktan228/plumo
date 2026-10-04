@@ -1,0 +1,74 @@
+/* Shared button treatment. Override these tokens for additional variants. */
+:is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
+    .chat-options button, .reset-demo, .password-toggle, .language-switch button,
+    .menu-toggle, .social-icon) {
+  --button-base: #fff;
+  --button-ink: #111113;
+  --button-wave: #111113;
+  --button-hover-ink: #fff;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--button-base) !important;
+  color: var(--button-ink) !important;
+  transition: color 280ms ease, border-color 280ms ease;
+}
+:is(.login-link, .auth-submit, .primary-cta, .pilot-form button, .chat-options button) {
+  border: 1px solid #111113;
+}
+.primary-cta {
+  --button-base: var(--blue);
+  --button-ink: #fff;
+  --button-wave: #fff;
+  --button-hover-ink: #111113;
+  border-color: var(--blue);
+}
+.button-black {
+  --button-base: #111113;
+  --button-ink: #fff;
+  --button-wave: #fff;
+  --button-hover-ink: #111113;
+}
+:is(.text-cta, .password-toggle, .language-switch button, .menu-toggle, .reset-demo) {
+  --button-base: transparent;
+}
+.text-cta { display: inline-flex; align-items: center; padding: 17px 16px; border-radius: 6px; }
+.reset-demo { border-radius: 50%; }
+.menu-toggle { border-radius: 6px; }
+:is(.burger-panel, .menu-active) :is(.language-switch button, .menu-toggle) {
+  --button-ink: #fff;
+  --button-wave: #fff;
+  --button-hover-ink: #111113;
+}
+.menu-active .login-link { border-color: #fff; }
+.burger-panel .language-switch button:not([aria-pressed="true"]) { --button-ink: #a1a1a7; }
+.language-switch button:not([aria-pressed="true"]) { --button-ink: #73737c; }
+:is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
+    .chat-options button, .reset-demo, .password-toggle, .language-switch button,
+    .menu-toggle, a.social-icon)::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--button-wave);
+  clip-path: ellipse(0% 150% at 0% 50%);
+  transition: clip-path 550ms cubic-bezier(.22, 1, .36, 1);
+}
+:is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
+    .chat-options button, .reset-demo, .password-toggle, .language-switch button,
+    .menu-toggle, a.social-icon):not(:disabled):is(:hover, :focus-visible) {
+  color: var(--button-hover-ink) !important;
+}
+.primary-cta:is(:hover, :focus-visible) { border-color: #111113; }
+:is(.login-link, .auth-submit, .primary-cta, .text-cta, .pilot-form button,
+    .chat-options button, .reset-demo, .password-toggle, .language-switch button,
+    .menu-toggle, a.social-icon):not(:disabled):is(:hover, :focus-visible)::before {
+  clip-path: ellipse(150% 150% at 0% 50%);
+}
+/* Chart bars keep their own selection colours; animate their surface as well. */
+.bar-chart .chart-bar { background-image: linear-gradient(#ffffff33, #ffffff33); background-size: 0% 100%; background-repeat: no-repeat; transition: background-size 550ms cubic-bezier(.22,1,.36,1); }
+.bar-chart button:is(:hover, :focus-visible) .chart-bar { background-size: 100% 100%; }
+@media (prefers-reduced-motion: reduce) {
+  .bar-chart .chart-bar { transition: none; }
+}
