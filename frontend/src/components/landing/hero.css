@@ -45,7 +45,7 @@
 .window-green { background: #28c840; }
 .hero-window-controls svg { color: #969aa2; margin-left: 12px; }
 .hero-customer-avatar { width: 40px; height: 40px; background: transparent; image-rendering: pixelated; }
-.hero-plumo-avatar { display: block; width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; background: #fff; border: 0; }
+.hero-plumo-avatar { display: block; width: 40px; height: 40px; flex-shrink: 0; background: transparent; border: 0; }
 .hero-chat .plumo-mark { background: #fff; }
 .hero-chat .plumo-mark::after { background: #0c0e10; }
 .hero-chat .from-agent b { color: #b3c6ff; }
@@ -53,6 +53,13 @@
 .hero-composer > span:first-child { color: #c1c5ce; }
 .composer-send { background: #30343c; color: #b2b8c4; }
 .composer-send.active { background: #fff; color: #111113; }
+.composer-send { border: 0; padding: 0; cursor: pointer; }
+.composer-send:disabled { cursor: default; }
+.composer-send:focus-visible { outline-color: #fff; }
+.hero-message-meta { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 8px; font-size: 10px; color: #9298a3; }
+.hero-message-meta time { font-size: 10px; }
+.hero-message-meta.is-viewed > span { color: #9db8ff; }
+.message-checks { display: inline-flex; align-items: center; }
 .hero-thinking { color: #b3c6ff; }
 .typing-caret { background: #b3c6ff; }
 @media (max-width: 760px) {
@@ -206,6 +213,9 @@
   .hero-preview.preview-expanded .hero-chat::after { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .hero-preview .hero-chat::after { transition: none; } }
+
+.hero-preview .hero-chat { box-shadow: 0 10px 22px #00000016, 0 28px 64px #0000002e; }
+.hero-preview .hero-chat.is-expanded { box-shadow: 0 14px 30px #00000020, 0 40px 90px #00000040; }
 
 @media (min-width: 901px) {
   .hero-pitch { transform-origin: left center; transition: transform 1500ms cubic-bezier(.22,1,.36,1); }

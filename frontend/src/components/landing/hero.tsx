@@ -66,6 +66,15 @@ export function Hero() {
   const cycleLength = c.messages.reduce((sum, text, i) => sum + text.length + (i % 2 === 0 ? 20 : 30), 0) + 160;
   useEffect(() => { if (tick >= cycleLength) setTick(0); }, [tick, cycleLength]);
   const messages = reduced ? c.messages : shown;
+  function viewed(index: number) {
+    const sentAt = c.messages.slice(0, index + 1).reduce((sum, text, i) => sum + text.length + (i % 2 === 0 ? 20 : 30), 0);
+    return reduced || tick >= sentAt + 15;
+  }
+  function sendDemoMessage() {
+    if (!draft) return;
+    const index = messages.length;
+    setTick(c.messages.slice(0, index + 1).reduce((sum, text, i) => sum + text.length + (i % 2 === 0 ? 20 : 30), 0));
+  }
 
   return <section ref={root} className={`conversation-hero section-shell${expanded ? " chat-active" : ""}`} aria-label="Plumo">
     <div className="hero-pitch"><h1>{c.title}</h1><p className="hero-pitch-description">{c.description}</p><div className="hero-pitch-actions"><a className="primary-cta" href="#pilot">{c.demo}<span aria-hidden="true">↗</span></a><a className="login-link" href="#demo">{c.try}<span aria-hidden="true">→</span></a></div><small>{c.note}</small></div>
@@ -74,11 +83,12 @@ export function Hero() {
       <div className="hero-chat-heading"><div className="hero-traffic-lights" aria-hidden="true"><span className="window-red" /><span className="window-yellow" /><span className="window-green" /></div><div className="hero-window-title"><b>{c.agent}</b><small>{c.status}</small></div><div className="hero-window-controls"><button className="hero-expand" type="button" aria-expanded={expanded} aria-controls="hero-conversation" aria-label={locale === "en" ? (expanded ? "Collapse conversation" : "Expand conversation") : (expanded ? "Свернуть переписку" : "Раскрыть переписку")} onClick={() => { setPinned(!expanded); setHovered(false); }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.6" /><path d="M10 4v16" stroke="currentColor" strokeWidth="1.6" /></svg></button></div></div>
       <motion.div id="hero-conversation" ref={transcript} className="hero-transcript" aria-live="off" animate={{ height: expanded ? 430 : 290 }} transition={{ duration: reduced ? 0 : 1.3, ease: [.22, 1, .36, 1] }}>
         {messages.map((text, index) => <motion.div key={`${locale}-${index}`} className={`hero-message ${index % 2 ? "from-agent" : "from-customer"}`} initial={reduced ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .35 }}>
-          <div>{index % 2 === 0 ? <Image className="hero-customer-avatar" src="/images/customer-pixel.svg" alt="" width={40} height={40} /> : <Image className="hero-plumo-avatar" src="/images/plumo-avatar.svg" alt="" width={40} height={40} />}<b>{index % 2 ? "Plumo" : c.customer}</b><time>{`12:${index < 2 ? "04" : "05"}`}</time></div><p>{text}</p>
+          <div>{index % 2 === 0 ? <Image className="hero-customer-avatar" src="/images/customer-pixel-girl.png" alt="" width={40} height={40} /> : <Image className="hero-plumo-avatar" src="/images/plumo-avatar.svg" alt="" width={40} height={40} />}<b>{index % 2 ? "Plumo" : c.customer}</b></div><p>{text}</p>
+          {text === c.messages[index] && <footer className={`hero-message-meta${index % 2 === 0 && viewed(index) ? " is-viewed" : ""}`}><time>{`12:${index < 2 ? "04" : "05"}`}</time>{index % 2 === 0 && <><span className="message-checks" aria-label={locale === "en" ? (viewed(index) ? "Viewed" : "Sent") : (viewed(index) ? "Просмотрено" : "Отправлено")}><svg width="20" height="14" viewBox="0 0 20 14" fill="none" aria-hidden="true"><path d="m2 7 3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />{viewed(index) && <path d="m7 7 3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />}</svg></span></>}</footer>}
         </motion.div>)}
         {thinking && !reduced && <div className="hero-thinking"><span /><span /><span /><small>{c.typing}</small></div>}
       </motion.div>
-      <div className="hero-composer" aria-hidden="true"><span>{draft || c.input}{draft && <i className="typing-caret" />}</span><span className={draft ? "composer-send active" : "composer-send"}>↑</span></div>
+      <div className="hero-composer"><span aria-hidden="true">{draft || c.input}{draft && <i className="typing-caret" />}</span><motion.button type="button" className={draft ? "composer-send active" : "composer-send"} disabled={!draft} onClick={sendDemoMessage} aria-label={locale === "en" ? "Send demo message" : "Отправить сообщение в демо"} whileTap={reduced ? undefined : { scale: .8 }} animate={reduced ? {} : { scale: messages.length % 2 ? [1, .82, 1] : 1 }} transition={{ duration: .35 }}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 10 18-7-7 18-3-8-8-3Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /><path d="m11 13 10-10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg></motion.button></div>
       <small className="hero-chat-disclaimer">{c.disclaimer}</small>
     </motion.div>
     <small className="hero-preview-hint">{locale === "en" ? "Hover or tap the panel icon to expand" : "Наведите курсор или нажмите значок панели, чтобы раскрыть чат"}</small>
