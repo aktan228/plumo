@@ -13,11 +13,35 @@ export function Header() {
   const shellRef = useRef<HTMLDivElement>(null);
   const burgerRef = useRef<HTMLButtonElement>(null);
   const pendingAnchor = useRef<string | null>(null);
+  const keyboardNavigation = useRef(false);
   const [visible, setVisible] = useState(true);
   const [scrolled, setScrolled] = useState(false);
   const [focused, setFocused] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") {
+        keyboardNavigation.current = true;
+        if (headerRef.current?.contains(document.activeElement)) setFocused(true);
+      }
+    };
+    const onPointerInteraction = () => {
+      keyboardNavigation.current = false;
+      setFocused(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerInteraction, true);
+    window.addEventListener("wheel", onPointerInteraction, { passive: true });
+    window.addEventListener("touchmove", onPointerInteraction, { passive: true });
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerInteraction, true);
+      window.removeEventListener("wheel", onPointerInteraction);
+      window.removeEventListener("touchmove", onPointerInteraction);
+    };
+  }, []);
 
   useEffect(() => {
     let previous = Math.max(0, window.scrollY);
@@ -107,7 +131,7 @@ export function Header() {
         ease: [0.22, 1, 0.36, 1],
       }}
       style={{ pointerEvents: shown ? "auto" : "none" }}
-      onFocusCapture={() => setFocused(true)}
+      onFocusCapture={() => setFocused(keyboardNavigation.current)}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
       }}
@@ -138,6 +162,7 @@ export function Header() {
     <AnimatePresence onExitComplete={() => {
       setMenuPresent(false);
       burgerRef.current?.focus({ preventScroll: true });
+      setFocused(keyboardNavigation.current);
       const anchor = pendingAnchor.current;
       pendingAnchor.current = null;
       if (anchor) requestAnimationFrame(() => {
