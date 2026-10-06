@@ -27,16 +27,11 @@ class MockActionExecutor:
     async def execute(self, actions: list[Action], ctx: ActionContext) -> list[ActionResult]:
         results: list[ActionResult] = []
         for action in actions:
-            handler = {
-                ActionType.schedule_meeting: self._schedule,
-                ActionType.request_phone: self._request_phone,
-                ActionType.handoff: self._handoff,
-                ActionType.update_customer: self._update_customer,
-            }.get(action.type)
-            if handler is None:
+            name = _HANDLER_NAMES.get(action.type)
+            if name is None:
                 results.append(ActionResult(action.type, "skipped", {"reason": "unknown_action"}))
                 continue
-            results.append(await handler(action, ctx))
+            results.append(await getattr(self, name)(action, ctx))
         return results
 
     async def _schedule(self, action: Action, ctx: ActionContext) -> ActionResult:
@@ -72,7 +67,7 @@ class MockActionExecutor:
             conversation=ctx.conversation,
             reason=reason,
             priority=priority,
-            summary=ctx.summary_text or ctx.recent_messages[-1].text if ctx.recent_messages else "",
+            summary=ctx.summary_text or (ctx.recent_messages[-1].text if ctx.recent_messages else ""),
             recent_messages=ctx.recent_messages,
         )
         return ActionResult(
@@ -96,3 +91,11 @@ class MockActionExecutor:
             customer.updated_at = utcnow()
             await self.customers.save(customer)
         return ActionResult(action.type, "executed" if changed else "skipped", {"need": customer.need})
+
+
+_HANDLER_NAMES = {
+    ActionType.schedule_meeting: "_schedule",
+    ActionType.request_phone: "_request_phone",
+    ActionType.handoff: "_handoff",
+    ActionType.update_customer: "_update_customer",
+}

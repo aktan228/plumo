@@ -32,7 +32,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
         summary="Ядро AI-менеджера. Каналы и модели подключаются адаптерами.",
         description=(
             "Нормализованный контракт для WhatsApp, Telegram, Instagram и телефона. "
-            "Сейчас модели, речь и каналы — mock. Замена описана в INTEGRATION.md. "
+            "Текст — через OpenRouter или mock. Речь и каналы пока mock. "
             "POST /api/v1/messages принимает InboundMessage и возвращает AgentResponse."
         ),
         lifespan=lifespan,

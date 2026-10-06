@@ -22,8 +22,6 @@ from app.infrastructure.database.models import CustomerChannelRow, CustomerRow, 
 from app.infrastructure.database.repositories import (
     ConversationRepository,
     CustomerRepository,
-    HandoffRepository,
-    MeetingRepository,
     MessageRepository,
     SummaryRepository,
 )
@@ -454,11 +452,6 @@ async def run_identity(agent, session) -> list[str]:
     summary = await SummaryRepository(session).get(wa.customer_id)
     if summary is None or not summary.summary:
         fail("summary was not written for the merged customer")
-
-    meetings = await MeetingRepository(session).list_for_customer(wa.customer_id)
-    _ = meetings
-    handoffs = HandoffRepository(session)
-    _ = handoffs
     return failures
 
 

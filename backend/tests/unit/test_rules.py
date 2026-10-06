@@ -124,6 +124,7 @@ async def test_language_detection():
     assert detect_language("Здравствуйте, квартира еще продается?") == "ru"
     assert detect_language("Салам, кантип баасы?") == "ky"
     assert detect_language("Салам, квартира еще продается?") == "mixed"
+    assert detect_language("hello") == "unknown"
     detector = MockLanguageDetector()
     assert await detector.detect("Салам") == "ky"
 

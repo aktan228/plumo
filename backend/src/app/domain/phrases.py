@@ -24,3 +24,13 @@ def unknown_phrase(topic: str | None, language: str) -> str:
     if topic == "installment":
         return UNKNOWN_INSTALLMENT_RU
     return UNKNOWN_FACT_RU
+
+
+def role_phrase(language: str) -> str:
+    return ROLE_PHRASE_KY if language == "ky" else ROLE_PHRASE_RU
+
+
+def human_phrase(language: str) -> str:
+    if language == "ky":
+        return "Макул, суроону менеджерге берем."
+    return "Конечно, передам диалог менеджеру."

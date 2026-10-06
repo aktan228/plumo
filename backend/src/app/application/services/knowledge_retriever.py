@@ -7,6 +7,9 @@ from app.domain.models import KnowledgeHit
 from app.domain.ports import KnowledgeStore
 from app.domain.text_signals import compact_numbers, normalize_text
 
+_TOKEN = re.compile(r"[a-zа-я0-9]+")
+_CATALOG = ("квартир", "прода", "объект", "жиль", "апарта", "каталог", "баз", "наличи", "доступ")
+
 
 class SimpleKnowledgeRetriever:
     """Score active knowledge items for one business.
@@ -20,38 +23,54 @@ class SimpleKnowledgeRetriever:
 
     async def retrieve(self, business_id: UUID, query: str, limit: int = 5) -> list[KnowledgeHit]:
         items = await self.knowledge.list_active(business_id)
-        ranked = [KnowledgeHit(item=item, score=self.score(query, item)) for item in items]
+        prepared = _PreparedQuery.from_text(query)
+        ranked = [KnowledgeHit(item=item, score=_score(prepared, item)) for item in items]
         ranked.sort(key=lambda hit: hit.score, reverse=True)
         hits = [hit for hit in ranked if hit.score >= 1][:limit]
         if hits:
             return hits
-        # Small catalogs go to the model even if keywords did not match.
-        # The validator still blocks invented facts.
         return [KnowledgeHit(item=item, score=0.5) for item in items[:limit]]
 
     @staticmethod
     def score(query: str, item) -> float:
-        hay = normalize_text(f"{item.title} {item.content} {item.category}")
-        hay_numbers = set(compact_numbers(hay))
-        score = 0.0
-        for number in compact_numbers(query):
-            if number in hay_numbers:
-                score += 5
-        for token in re.findall(r"[a-zа-я0-9]+", normalize_text(query)):
-            if len(token) >= 4 and token in hay:
-                score += 1
-        if _catalog_query(query) and (item.category == "property" or "квартир" in hay):
-            score += 2
-            if "продан" in hay:
-                score -= 2
-            if "аренд" in hay:
-                score -= 0.5
-        return score
+        return _score(_PreparedQuery.from_text(query), item)
 
 
-_CATALOG = ("квартир", "прода", "объект", "жиль", "апарта", "каталог", "баз", "наличи", "доступ")
+class _PreparedQuery:
+    __slots__ = ("normalized", "numbers", "tokens", "catalog")
+
+    def __init__(self, normalized: str, numbers: list[str], tokens: list[str], catalog: bool) -> None:
+        self.normalized = normalized
+        self.numbers = numbers
+        self.tokens = tokens
+        self.catalog = catalog
+
+    @classmethod
+    def from_text(cls, query: str) -> "_PreparedQuery":
+        normalized = normalize_text(query)
+        tokens = [token for token in _TOKEN.findall(normalized) if len(token) >= 4]
+        return cls(
+            normalized,
+            compact_numbers(normalized),
+            tokens,
+            any(token in normalized for token in _CATALOG),
+        )
 
 
-def _catalog_query(query: str) -> bool:
-    blob = normalize_text(query)
-    return any(token in blob for token in _CATALOG)
+def _score(query: _PreparedQuery, item) -> float:
+    hay = normalize_text(f"{item.title} {item.content} {item.category}")
+    hay_numbers = set(compact_numbers(hay))
+    score = 0.0
+    for number in query.numbers:
+        if number in hay_numbers:
+            score += 5
+    for token in query.tokens:
+        if token in hay:
+            score += 1
+    if query.catalog and (item.category == "property" or "квартир" in hay):
+        score += 2
+        if "продан" in hay:
+            score -= 2
+        if "аренд" in hay:
+            score -= 0.5
+    return score

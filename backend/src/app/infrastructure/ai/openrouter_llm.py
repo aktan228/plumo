@@ -22,7 +22,6 @@ from app.domain.models import (
     RouteDecision,
     SummaryDraft,
 )
-from app.domain.text_signals import detect_language
 from app.infrastructure.ai.mock_llm import MockLLMProvider
 
 logger = logging.getLogger("plumo.openrouter")

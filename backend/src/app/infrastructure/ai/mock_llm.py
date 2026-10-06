@@ -14,7 +14,7 @@ from app.domain.models import (
     SummaryDraft,
     utcnow,
 )
-from app.domain.phrases import unknown_phrase
+from app.domain.phrases import human_phrase, unknown_phrase
 from app.domain.scheduling import parse_slot
 from app.domain.text_signals import (
     analyze_message,
@@ -53,7 +53,7 @@ class MockLLMProvider:
                 prompt=prompt,
             )
         if signals.human_request:
-            return self._out(_human(context.language), 0.97, prompt=prompt)
+            return self._out(human_phrase(context.language), 0.97, prompt=prompt)
         if signals.meeting and not signals.installment:
             return self._meeting(context, prompt)
         if signals.hours and context.business.working_hours:
@@ -199,12 +199,6 @@ def _greeting(language: str) -> str:
     if language == "ky":
         return "Салам! Кандай жардам бере алам?"
     return "Здравствуйте! Чем могу помочь?"
-
-
-def _human(language: str) -> str:
-    if language == "ky":
-        return "Макул, суроону менеджерге берем."
-    return "Конечно, передам диалог менеджеру."
 
 
 def _corpus_has(context: AgentContext, *needles: str) -> bool:

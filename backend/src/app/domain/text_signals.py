@@ -183,19 +183,16 @@ class MessageSignals:
 
 
 def detect_language(text: str) -> str:
-    tokens = set(re.findall(r"[a-zа-я]+", normalize_text(text)))
+    normalized = normalize_text(text)
+    tokens = set(re.findall(r"[a-zа-я]+", normalized))
     ky = bool(tokens & KY_MARKERS)
-    ru = bool(tokens & RU_MARKERS) or bool(re.search(r"[а-я]", normalize_text(text))) and not ky
-    # A Kyrgyz marker plus a clear Russian marker is mixed.
     ru_hit = bool(tokens & RU_MARKERS)
     if ky and ru_hit:
         return "mixed"
     if ky:
         return "ky"
-    if ru or ru_hit:
+    if ru_hit or re.search(r"[а-я]", normalized):
         return "ru"
-    if re.search(r"[а-яa-z]", normalize_text(text)):
-        return "ru" if re.search(r"[а-я]", normalize_text(text)) else "unknown"
     return "unknown"
 
 

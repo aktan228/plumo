@@ -1,7 +1,7 @@
 """SQLAlchemy repositories. They map rows to domain records and never leave the session open."""
 
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,7 +63,12 @@ class CustomerRepository:
             )
         )
         row = await self.session.scalar(stmt)
-        return _customer(row) if row else None
+        if row is None:
+            return None
+        customer = _customer(row)
+        if customer.merged_into_id is None:
+            return customer
+        return await self._live(customer.id)
 
     async def add(self, customer: Customer) -> Customer:
         self.session.add(_customer_row(customer))
@@ -146,7 +151,8 @@ class CustomerRepository:
 
         source_row = await self.session.get(CustomerRow, source.id)
         target_row = await self.session.get(CustomerRow, target.id)
-        assert source_row is not None and target_row is not None
+        if source_row is None or target_row is None:
+            raise CustomerNotFound("customer disappeared during merge")
         if target_row.phone is None and source_row.phone:
             moved = source_row.phone
             source_row.phone = None
@@ -229,6 +235,7 @@ class ConversationRepository:
                 ConversationRow.ended_at.is_(None),
             )
             .order_by(ConversationRow.started_at.desc())
+            .limit(1)
         )
         row = await self.session.scalar(stmt)
         return _conversation(row) if row else None
@@ -546,8 +553,6 @@ class MetricsRepository:
 
 
 def _new_id() -> UUID:
-    from uuid import uuid4
-
     return uuid4()
 
 

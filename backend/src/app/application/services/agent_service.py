@@ -30,7 +30,7 @@ from app.domain.models import (
     UsageLog,
     utcnow,
 )
-from app.domain.phrases import ROLE_PHRASE_KY, ROLE_PHRASE_RU, unknown_phrase
+from app.domain.phrases import human_phrase, role_phrase, unknown_phrase
 from app.domain.ports import (
     ActionExecutor,
     BusinessStore,
@@ -146,10 +146,10 @@ class AgentService:
         signals = analyze_message(message.text)
         assessment = self.validator.assess(message.text, context)
         if signals.human_request:
-            response_text = _human_phrase(language)
-        elif assessment.factual and not assessment.answerable and not context.knowledge:
-            response_text = unknown_phrase(assessment.topic, language)
-        elif assessment.factual and not assessment.answerable and assessment.topic == "installment":
+            response_text = human_phrase(language)
+        elif assessment.factual and not assessment.answerable and (
+            not context.knowledge or assessment.topic == "installment"
+        ):
             response_text = unknown_phrase(assessment.topic, language)
         else:
             response_text = generation.text
@@ -158,7 +158,7 @@ class AgentService:
                 response_text = quote_knowledge(context)
                 steps.append("grounded_fallback")
             elif not assessment.factual:
-                response_text = ROLE_PHRASE_KY if language == "ky" else ROLE_PHRASE_RU
+                response_text = role_phrase(language)
                 steps.append("role_fallback")
 
         actions = [item for item in generation.actions if item.type != ActionType.handoff]
@@ -181,7 +181,7 @@ class AgentService:
             if assessment.factual:
                 response_text = unknown_phrase(assessment.topic, language)
             else:
-                response_text = ROLE_PHRASE_KY if language == "ky" else ROLE_PHRASE_RU
+                response_text = role_phrase(language)
             steps.append(f"validator:{validation.reason}")
 
         unclear = read_unclear_count(summary.important_facts if summary else [])
@@ -439,12 +439,6 @@ class AgentService:
         if customer is None:
             raise CustomerNotFound("customer disappeared during processing")
         return customer
-
-
-def _human_phrase(language: str) -> str:
-    if language == "ky":
-        return "Макул, суроону менеджерге берем."
-    return "Конечно, передам диалог менеджеру."
 
 
 def _as_assistant_preview(conversation: Conversation, customer_id: UUID, text: str) -> Message:

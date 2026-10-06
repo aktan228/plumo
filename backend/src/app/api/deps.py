@@ -12,7 +12,7 @@ from app.application.services.meeting_service import MeetingService
 from app.application.services.metrics_service import MetricsService
 from app.application.services.voice_service import VoiceService
 from app.application.use_cases.handle_channel_event import HandleChannelEvent
-from app.container import Runtime, build_agent, build_channel_handler, build_handoffs, build_meetings, build_metrics, build_voice
+from app.container import Runtime, build_agent, build_handoffs, build_meetings, build_metrics
 from app.infrastructure.database.repositories import (
     BusinessRepository,
     ConversationRepository,
@@ -58,12 +58,13 @@ def get_services(
     session: AsyncSession = Depends(get_session),
     runtime: Runtime = Depends(get_runtime),
 ) -> Services:
+    agent = build_agent(session, runtime)
     return Services(
         session=session,
         runtime=runtime,
-        agent=build_agent(session, runtime),
-        voice=build_voice(session, runtime),
-        channels=build_channel_handler(session, runtime),
+        agent=agent,
+        voice=VoiceService(runtime.providers.stt(), runtime.providers.tts(), agent),
+        channels=HandleChannelEvent(runtime.channels, agent),
         handoffs=build_handoffs(session, runtime),
         meetings=build_meetings(session, runtime),
         metrics=build_metrics(session),
