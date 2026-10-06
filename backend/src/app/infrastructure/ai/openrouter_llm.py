@@ -22,7 +22,8 @@ from app.domain.models import (
     RouteDecision,
     SummaryDraft,
 )
-from app.domain.text_signals import detect_language, find_phones
+from app.domain.text_signals import detect_language
+from app.infrastructure.ai.mock_llm import MockLLMProvider
 
 logger = logging.getLogger("plumo.openrouter")
 
@@ -52,6 +53,7 @@ class OpenRouterLLMProvider:
         self.timeout_s = timeout_s
         self.referer = referer
         self.title = title
+        self._local = MockLLMProvider("local_memory", "small")
         if not self.api_key:
             raise ProviderUnavailable("OPENROUTER_API_KEY is empty")
 
@@ -111,61 +113,10 @@ class OpenRouterLLMProvider:
         return Classification(label, _confidence(parsed.get("confidence"), default=0.5))
 
     async def summarize(self, messages: list[Message], previous: str | None) -> SummaryDraft:
-        lines = [f"{item.role}: {item.text}" for item in messages[-12:]]
-        payload = await self._chat(
-            [
-                {
-                    "role": "system",
-                    "content": (
-                        "Собери резюме клиента. JSON: "
-                        '{"summary":"...","need":null,"important_facts":[],"status":"active"}'
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"previous={previous or '-'}\n" + "\n".join(lines),
-                },
-            ],
-            temperature=0,
-        )
-        parsed = parse_json_object(payload["text"]) or {}
-        facts = parsed.get("important_facts") or []
-        if not isinstance(facts, list):
-            facts = []
-        return SummaryDraft(
-            summary=str(parsed.get("summary") or previous or "диалог")[:2000],
-            need=_optional_str(parsed.get("need")),
-            important_facts=[str(item) for item in facts][:20],
-            status=_optional_str(parsed.get("status")) or "active",
-        )
+        return await self._local.summarize(messages, previous)
 
     async def extract_customer_data(self, text: str) -> ExtractedCustomerData:
-        phones = find_phones(text)
-        payload = await self._chat(
-            [
-                {
-                    "role": "system",
-                    "content": (
-                        "Извлеки данные клиента. JSON: "
-                        '{"phone":null,"need":null,"language":"ru"}. '
-                        "need только personal или investment, иначе null. "
-                        "language только ru, ky, mixed."
-                    ),
-                },
-                {"role": "user", "content": text},
-            ],
-            temperature=0,
-        )
-        parsed = parse_json_object(payload["text"]) or {}
-        language = _optional_str(parsed.get("language"))
-        if language not in ("ru", "ky", "mixed"):
-            detected = detect_language(text)
-            language = None if detected == "unknown" else detected
-        need = _optional_str(parsed.get("need"))
-        if need not in ("personal", "investment"):
-            need = None
-        phone = _optional_str(parsed.get("phone")) or (phones[0] if phones else None)
-        return ExtractedCustomerData(phone=phone, need=need, language=language)
+        return await self._local.extract_customer_data(text)
 
     async def _chat(self, messages: list[dict[str, str]], *, temperature: float) -> dict[str, Any]:
         body = {
@@ -254,6 +205,7 @@ def _system_prompt(context: AgentContext) -> str:
         f"Резюме клиента: {summary}\n"
         f"Факты: {facts}\n"
         f"Последние сообщения:\n{history}\n"
+        "Говори как живой менеджер: понимай смысл вопроса, даже если слова не совпали с базой. "
         "Ответ только JSON: "
         '{"text":"...","actions":[],"handoff_required":false,"handoff_reason":null,"confidence":0.8}. '
         "actions.type: schedule_meeting, request_phone, handoff, update_customer. "

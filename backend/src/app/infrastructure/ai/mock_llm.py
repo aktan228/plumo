@@ -264,5 +264,5 @@ def _render_listing(hit, signals) -> str:
 
 def _render_many(context: AgentContext, signals) -> str:
     lead = "Здравствуйте! " if signals.greeting else ""
-    lines = [f"{hit.item.title}: {hit.item.content}" for hit in context.knowledge[:3]]
+    lines = [f"{hit.item.title}: {hit.item.content}" for hit in context.knowledge[:5]]
     return lead + "В базе такие объекты:\n" + "\n".join(lines)

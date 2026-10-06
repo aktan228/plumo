@@ -1,9 +1,12 @@
 """Async engine and session factory."""
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 
-def create_engine(database_url: str) -> AsyncEngine:
+def create_engine(database_url: str, *, null_pool: bool = False) -> AsyncEngine:
+    if null_pool:
+        return create_async_engine(database_url, poolclass=NullPool)
     return create_async_engine(database_url, pool_pre_ping=True)
 
 

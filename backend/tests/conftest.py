@@ -58,12 +58,11 @@ async def _ensure_database() -> None:
         await conn.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def engine() -> AsyncIterator[AsyncEngine]:
     await _ensure_database()
-    db = create_engine(test_database_url())
+    db = create_engine(test_database_url(), null_pool=True)
     async with db.begin() as connection:
-        await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
     yield db
     await db.dispose()
@@ -77,7 +76,7 @@ async def session(engine: AsyncEngine):
             await db_session.execute(text(f'TRUNCATE TABLE "{table.name}" RESTART IDENTITY CASCADE'))
         await db_session.commit()
         yield db_session
-        await db_session.rollback()
+        await db_session.close()
 
 
 @pytest.fixture

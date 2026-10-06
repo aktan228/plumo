@@ -3,6 +3,8 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from app.application.services.grounded_reply import is_unusable_reply, quote_knowledge
+from app.application.services.knowledge_retriever import SimpleKnowledgeRetriever
 from app.application.services.response_validator import ResponseValidator
 from app.application.services.router import RuleBasedRouter
 from app.domain.models import AgentContext, Business, Customer, KnowledgeHit, KnowledgeItem
@@ -144,3 +146,20 @@ def test_installment_signal():
     signals = analyze_message("А рассрочка есть?")
     assert signals.installment is True
     assert signals.complex is True
+
+
+def test_catalog_query_scores_listings():
+    item = _item("2-комнатная квартира, 58 м², 5 этаж, цена 85000 USD. Статус: доступна.")
+    assert SimpleKnowledgeRetriever.score("привет, что продается?", item) >= 2
+    assert SimpleKnowledgeRetriever.score("посмотри именно со своей базы данных", item) >= 2
+
+
+def test_short_russian_ack_is_usable():
+    assert is_unusable_reply("Хорошо.") is False
+    assert is_unusable_reply("ok") is True
+    assert is_unusable_reply("User Safety: safe") is True
+
+
+def test_two_people_is_not_a_human_request():
+    assert analyze_message("мне нужна более дешевая квартира для двух человек").human_request is False
+    assert analyze_message("позовите менеджера").human_request is True

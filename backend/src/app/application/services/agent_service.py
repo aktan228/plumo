@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 from app.application.services.context_builder import ContextBuilder
 from app.application.services.customer_resolver import CustomerResolver
+from app.application.services.grounded_reply import is_unusable_reply, quote_knowledge
 from app.application.services.handoff_service import evaluate_handoff
 from app.application.services.memory_service import MemoryService, read_unclear_count, write_unclear_count
 from app.application.services.response_validator import ResponseValidator
@@ -29,7 +30,7 @@ from app.domain.models import (
     UsageLog,
     utcnow,
 )
-from app.domain.phrases import unknown_phrase
+from app.domain.phrases import ROLE_PHRASE_KY, ROLE_PHRASE_RU, unknown_phrase
 from app.domain.ports import (
     ActionExecutor,
     BusinessStore,
@@ -146,10 +147,19 @@ class AgentService:
         assessment = self.validator.assess(message.text, context)
         if signals.human_request:
             response_text = _human_phrase(language)
-        elif assessment.factual and not assessment.answerable:
+        elif assessment.factual and not assessment.answerable and not context.knowledge:
+            response_text = unknown_phrase(assessment.topic, language)
+        elif assessment.factual and not assessment.answerable and assessment.topic == "installment":
             response_text = unknown_phrase(assessment.topic, language)
         else:
             response_text = generation.text
+        if is_unusable_reply(response_text):
+            if assessment.factual and context.knowledge:
+                response_text = quote_knowledge(context)
+                steps.append("grounded_fallback")
+            elif not assessment.factual:
+                response_text = ROLE_PHRASE_KY if language == "ky" else ROLE_PHRASE_RU
+                steps.append("role_fallback")
 
         actions = [item for item in generation.actions if item.type != ActionType.handoff]
         if signals.meeting and not any(item.type == ActionType.schedule_meeting for item in actions):
@@ -163,8 +173,15 @@ class AgentService:
 
         extra = json.dumps([item.payload for item in actions], ensure_ascii=False, default=str)
         validation = self.validator.validate(response_text, context, extra=extra)
+        if not validation.safe and context.knowledge and assessment.factual:
+            response_text = quote_knowledge(context)
+            validation = self.validator.validate(response_text, context, extra=extra)
+            steps.append("grounded_fallback")
         if not validation.safe:
-            response_text = unknown_phrase(assessment.topic, language)
+            if assessment.factual:
+                response_text = unknown_phrase(assessment.topic, language)
+            else:
+                response_text = ROLE_PHRASE_KY if language == "ky" else ROLE_PHRASE_RU
             steps.append(f"validator:{validation.reason}")
 
         unclear = read_unclear_count(summary.important_facts if summary else [])
