@@ -30,6 +30,7 @@ from app.domain.events import (
 )
 from app.domain.ports import Router
 from app.infrastructure.ai.factory import AIProviderFactory
+from app.infrastructure.ai.openrouter_llm import OpenRouterLLMProvider
 from app.infrastructure.channels.mock_adapters import mock_channels
 from app.infrastructure.database.repositories import (
     BusinessRepository,
@@ -78,11 +79,13 @@ def build_runtime(settings: Settings, engine: AsyncEngine | None = None) -> Runt
     ):
         events.subscribe(name, log_event)
     router = _router(settings)
+    providers = AIProviderFactory(settings)
+    _register_llm_providers(providers, settings)
     return Runtime(
         settings=settings,
         engine=engine,
         session_factory=create_session_factory(engine),
-        providers=AIProviderFactory(settings),
+        providers=providers,
         router=router,
         handoff_provider=_handoff_provider(settings),
         channels=_channels(settings),
@@ -168,7 +171,27 @@ def _handoff_provider(settings: Settings) -> MockHandoffProvider:
     )
 
 
-def _channels(settings: Settings) -> dict:
+def _register_llm_providers(providers: AIProviderFactory, settings: Settings) -> None:
     if settings.mock_mode:
-        return mock_channels()
-    return {}
+        return
+    names = {settings.small_model_provider, settings.big_model_provider}
+    if not any(name.startswith("openrouter") for name in names):
+        return
+    small = OpenRouterLLMProvider(
+        "openrouter_small",
+        settings.openrouter_small_model,
+        base_url=settings.openrouter_base_url,
+    )
+    big = OpenRouterLLMProvider(
+        "openrouter_big",
+        settings.openrouter_big_model,
+        base_url=settings.openrouter_base_url,
+    )
+    providers.register_llm("openrouter_small", small)
+    providers.register_llm("openrouter_big", big)
+    providers.register_llm("openrouter", big)
+
+
+def _channels(settings: Settings) -> dict:
+    del settings
+    return mock_channels()

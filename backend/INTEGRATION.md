@@ -5,10 +5,25 @@
 ```
 AgentService
   → LLMProvider
-    → MockLLMProvider
+    → OpenRouterLLMProvider   # если AI_MODE=production
+    → MockLLMProvider         # если AI_MODE=mock
 ```
 
-Чтобы поставить OpenAI, Gemini, Claude или свою модель, пишется новый класс, он регистрируется в фабрике и выбирается конфигурацией. `AgentService`, память, база знаний, роутер, API и таблицы не переписываются.
+OpenRouter уже есть в репозитории: `src/app/infrastructure/ai/openrouter_llm.py`.
+Чтобы взять Gemini:
+
+```
+AI_MODE=production
+SMALL_MODEL_PROVIDER=openrouter_small
+BIG_MODEL_PROVIDER=openrouter_big
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_SMALL_MODEL=google/gemini-2.5-flash
+OPENROUTER_BIG_MODEL=google/gemini-2.5-flash
+```
+
+Проверка ключа без базы: `python -m app.ping_llm`.
+
+Чтобы поставить другого провайдера, пишется новый класс, он регистрируется в фабрике и выбирается конфигурацией. `AgentService`, память, база знаний, роутер, API и таблицы не переписываются.
 
 То же самое для STT, TTS, языка и, отдельно, для роутера.
 

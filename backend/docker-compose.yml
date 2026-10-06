@@ -17,11 +17,13 @@ services:
 
   api:
     build: .
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://plumo:plumo@db:5432/plumo
-      AI_MODE: mock
-      SMALL_MODEL_PROVIDER: mock
-      BIG_MODEL_PROVIDER: mock
+      AI_MODE: ${AI_MODE:-mock}
+      SMALL_MODEL_PROVIDER: ${SMALL_MODEL_PROVIDER:-mock}
+      BIG_MODEL_PROVIDER: ${BIG_MODEL_PROVIDER:-mock}
       STT_PROVIDER: mock
       TTS_PROVIDER: mock
       LANGUAGE_DETECTOR: mock
@@ -29,6 +31,8 @@ services:
       ROUTER: rules
       DEFAULT_LANGUAGE: ru
       LOG_LEVEL: INFO
+      OPENROUTER_SMALL_MODEL: ${OPENROUTER_SMALL_MODEL:-google/gemini-2.5-flash}
+      OPENROUTER_BIG_MODEL: ${OPENROUTER_BIG_MODEL:-google/gemini-2.5-flash}
     ports:
       - "8000:8000"
     depends_on:
