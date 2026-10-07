@@ -8,7 +8,7 @@ import { CustomerSituations } from "./customer-situations";
 import { DialogueToLead } from "./dialogue-to-lead";
 import { SetupPipeline } from "./setup-pipeline";
 import { Statistics } from "./statistics";
-import { Pricing, pricingChoiceLabel, type PricingChoice } from "./pricing";
+import { Pricing, pricingRequestLabel, type PricingRequest } from "./pricing";
 
 const copy = {
   ru: {
@@ -44,12 +44,12 @@ export function Landing() {
   const { locale } = useLanguage();
   const c = copy[locale];
   const [mailReady, setMailReady] = useState(false);
-  const [pricingChoice, setPricingChoice] = useState<PricingChoice | null>(null);
+  const [pricingChoice, setPricingChoice] = useState<PricingRequest | null>(null);
   function prepareMail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const body = `${c.name}: ${data.get("name")}\n${c.business}: ${data.get("company")}\n${c.email}: ${data.get("email")}\n\n${data.get("message")}`;
-    window.location.href = `mailto:contact@plumo.app?subject=${encodeURIComponent(c.subject)}&body=${encodeURIComponent(pricingChoice ? `${locale === "ru" ? "Тариф / запрос" : "Plan / inquiry"}: ${pricingChoiceLabel(locale, pricingChoice)}\n\n${body}` : body)}`;
+    window.location.href = `mailto:contact@plumo.app?subject=${encodeURIComponent(c.subject)}&body=${encodeURIComponent(pricingChoice ? `${locale === "ru" ? "Тариф / запрос" : "Plan / inquiry"}: ${pricingRequestLabel(locale, pricingChoice)}\n\n${body}` : body)}`;
     setMailReady(true);
   }
   return <main id="main" className="landing">
@@ -66,6 +66,6 @@ export function Landing() {
 
     <section id="faq" className="section-shell faq-section"><div><p className="section-label">{c.faqLabel}</p><h2>{c.faqTitle}</h2></div><div className="faq-list">{c.faqs.map(([q, a]) => <details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
 
-    <section id="pilot" className="pilot-section"><div className="section-shell pilot-grid"><div><p className="section-label">{c.ctaLabel}</p><h2>{c.ctaTitle}</h2><p className="pilot-description">{c.ctaDesc}</p><a className="pilot-email" href="mailto:contact@plumo.app">contact@plumo.app ↗</a></div><form onSubmit={prepareMail} className="pilot-form">{pricingChoice && <p role="status" className="m-0 text-[14px] text-white">{locale === "ru" ? "Ваш выбор: " : "Your selection: "}{pricingChoiceLabel(locale, pricingChoice)}</p>}<div className="form-row"><label>{c.name}<input name="name" autoComplete="name" required maxLength={100} /></label><label>{c.business}<input name="company" autoComplete="organization" required maxLength={150} /></label></div><label>{c.email}<input type="email" name="email" autoComplete="email" required maxLength={254} /></label><label>{c.message}<textarea name="message" rows={3} required maxLength={1500} /></label><button type="submit">{c.send}<span>↗</span></button><small>{c.mailNote}</small>{mailReady && <p role="status">{c.mailReady}</p>}</form></div></section>
+    <section id="pilot" className="pilot-section"><div className="section-shell pilot-grid"><div><p className="section-label">{c.ctaLabel}</p><h2>{c.ctaTitle}</h2><p className="pilot-description">{c.ctaDesc}</p><a className="pilot-email" href="mailto:contact@plumo.app">contact@plumo.app ↗</a></div><form onSubmit={prepareMail} className="pilot-form">{pricingChoice && <p role="status" className="m-0 text-[14px] text-white">{locale === "ru" ? "Ваш выбор: " : "Your selection: "}{pricingRequestLabel(locale, pricingChoice)}</p>}<div className="form-row"><label>{c.name}<input name="name" autoComplete="name" required maxLength={100} /></label><label>{c.business}<input name="company" autoComplete="organization" required maxLength={150} /></label></div><label>{c.email}<input type="email" name="email" autoComplete="email" required maxLength={254} /></label><label>{c.message}<textarea name="message" rows={3} required maxLength={1500} /></label><button type="submit">{c.send}<span>↗</span></button><small>{c.mailNote}</small>{mailReady && <p role="status">{c.mailReady}</p>}</form></div></section>
   </main>;
 }

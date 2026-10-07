@@ -1,14 +1,17 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
+import { useState } from "react";
 import { useLanguage } from "@/lib/i18n";
 
 export type PricingChoice = "start" | "business" | "custom" | "demo";
+export type PricingRequest = { choice: PricingChoice; volume: number; billing: "month" | "quarter"; voice: boolean };
 
 const content = {
   ru: {
     title: "Выберите объём.", subtitle: "Остальное настроим вместе.",
     intro: "Начните с одного канала. Расширяйте подключение, когда вашему бизнесу понадобится больше.",
+    volume: "Ваш объём", replies: "ответов ИИ / месяц", volumeHint: "Один ответ — одно исходящее сообщение Plumo", month: "Месяц", quarter: "Квартал · −10%", billingLabel: "Период оплаты", voice: "Голосовой агент", voiceHint: "Добавить звонки · стоимость по запросу", voiceSelected: "Звонки включены в запрос на расчёт", fit: "Под ваш объём", quote: "По запросу", extra: "Этот объём рассчитаем отдельно", quarterly: "при оплате за 3 месяца", total: "за квартал", recommended: "Подходящий план",
     currency: "сом", period: "/ месяц", monthly: "Помесячная оплата", soon: "Скоро", pilot: "Для первых пилотов",
     action: "Обсудить подключение", customAction: "Связаться с нами", futureAction: "Обсудить будущий запуск",
     names: { start: "Старт", business: "Бизнес", custom: "Индивидуальный", demo: "Бесплатное демо" },
@@ -27,6 +30,7 @@ const content = {
   en: {
     title: "Choose your volume.", subtitle: "We’ll set up the rest together.",
     intro: "Start with one channel. Expand when your business needs more.",
+    volume: "Your volume", replies: "AI replies / month", volumeHint: "One reply is one outgoing Plumo message", month: "Month", quarter: "Quarter · −10%", billingLabel: "Billing period", voice: "Voice agent", voiceHint: "Add calls · quoted separately", voiceSelected: "Calls included in your quote request", fit: "Fits your volume", quote: "Let’s talk", extra: "We’ll quote this volume separately", quarterly: "when paying for 3 months", total: "per quarter", recommended: "Suggested plan",
     currency: "KGS", period: "/ month", monthly: "Monthly billing", soon: "Coming soon", pilot: "For our first pilots",
     action: "Discuss setup", customAction: "Contact us", futureAction: "Discuss a future launch",
     names: { start: "Start", business: "Business", custom: "Custom", demo: "Free demo" },
@@ -48,14 +52,26 @@ export function pricingChoiceLabel(locale: "ru" | "en", choice: PricingChoice) {
   return content[locale].names[choice];
 }
 
+export function pricingRequestLabel(locale: "ru" | "en", request: PricingRequest) {
+  const c = content[locale];
+  const format = new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-GB");
+  return `${c.names[request.choice]} · ${format.format(request.volume)} ${c.replies} · ${request.billing === "quarter" ? c.quarter : c.month}${request.voice ? ` · ${c.voice}` : ""}`;
+}
+
 function Check() {
   return <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0"><path d="m5 12 4 4L19 6" /></svg>;
 }
 
-export function Pricing({ onChoose }: { onChoose: (choice: PricingChoice) => void }) {
+export function Pricing({ onChoose }: { onChoose: (request: PricingRequest) => void }) {
   const { locale } = useLanguage();
   const c = content[locale];
   const reduced = useReducedMotion();
+  const [volume, setVolume] = useState(1000);
+  const [billing, setBilling] = useState<"month" | "quarter">("month");
+  const [voice, setVoice] = useState(false);
+  const number = new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-GB");
+  const suggested: PricingChoice = volume <= 1000 ? "start" : volume <= 3000 ? "business" : "custom";
+  const choose = (choice: PricingChoice) => onChoose({ choice, volume, billing, voice });
   const plans = ["start", "business", "custom"] as const;
 
   return <section id="pricing" aria-labelledby="pricing-title" className="mx-auto max-w-[1440px] px-6 py-20 text-plumo-ink md:px-8 md:py-28 lg:px-16">
@@ -63,19 +79,37 @@ export function Pricing({ onChoose }: { onChoose: (choice: PricingChoice) => voi
       <h2 id="pricing-title" className="!text-[clamp(36px,4.7vw,64px)] !font-bold !leading-[1.06]">{c.title}<br /><span className="text-plumo-blue">{c.subtitle}</span></h2>
       <p className="mb-0 mt-6 max-w-[580px] text-[16px] leading-relaxed text-plumo-muted">{c.intro}</p>
     </div>
-    <p className="mb-5 mt-10 text-[12px] text-plumo-muted md:mt-14">{c.monthly}</p>
+    <div className="mb-6 mt-10 grid grid-cols-1 gap-8 rounded-[28px] bg-[#f5f6f8] p-6 md:mt-14 md:grid-cols-2 md:p-8">
+      <div>
+        <p className="m-0 text-[12px] text-plumo-muted">{c.volume}</p>
+        <p className="mb-0 mt-3 text-[25px] font-medium tracking-tight tabular-nums md:text-[29px]">{number.format(volume)} <span className="text-[15px] font-normal tracking-normal">{c.replies}</span></p>
+        <p className="mb-0 mt-3 text-[11px] text-plumo-muted">{c.volumeHint}</p>
+        <div role="group" aria-label={c.billingLabel} className="mt-6 flex w-fit flex-wrap gap-1 rounded-full border border-solid border-plumo-line bg-white p-1">{(["month", "quarter"] as const).map(value => <button key={value} type="button" aria-pressed={billing === value} onClick={() => setBilling(value)} className={`cursor-pointer rounded-full border-0 px-4 py-2.5 font-[inherit] text-[12px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue ${billing === value ? "bg-plumo-ink text-white" : "bg-white text-plumo-muted hover:text-plumo-ink"}`}>{value === "month" ? c.month : c.quarter}</button>)}</div>
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-center justify-between gap-4"><label htmlFor="pricing-volume" className="text-[12px] text-plumo-muted">{c.replies}</label><output htmlFor="pricing-volume" className="min-w-[80px] rounded-full border border-solid border-plumo-line bg-white px-4 py-1.5 text-center text-[12px] tabular-nums">{number.format(volume)}</output></div>
+        <input id="pricing-volume" type="range" min={1000} max={10000} step={500} value={volume} onChange={event => setVolume(Number(event.target.value))} aria-valuetext={`${number.format(volume)} ${c.replies}`} className="mx-0 mb-0 mt-4 h-6 w-full cursor-pointer accent-plumo-blue" />
+        <div aria-hidden="true" className="mt-1 flex justify-between text-[10px] text-plumo-muted"><span>{number.format(1000)}</span><span>{number.format(10000)}</span></div>
+        <button type="button" role="switch" aria-checked={voice} onClick={() => setVoice(value => !value)} className="mt-5 flex w-full cursor-pointer items-center justify-between gap-4 rounded-[20px] border border-solid border-plumo-line bg-white px-5 py-4 text-left font-[inherit] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-plumo-blue"><span><span className="block text-[13px] text-plumo-ink">{c.voice}</span><span className="mt-1 block text-[11px] text-plumo-muted">{voice ? c.voiceSelected : c.voiceHint}</span></span><span aria-hidden="true" className={`flex h-6 w-10 shrink-0 items-center rounded-full p-1 transition-colors ${voice ? "bg-plumo-blue" : "bg-[#e7e8eb]"}`}><span className={`size-4 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none ${voice ? "translate-x-4" : "translate-x-0"}`} /></span></button>
+      </div>
+    </div>
+    <p className="mb-5 mt-0 text-[12px] text-plumo-muted">{c.recommended}: <span className="text-plumo-ink">{c.names[suggested]}</span></p>
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
       {plans.map((plan, index) => {
         const featured = plan === "business";
+        const included = plan === "start" ? 1000 : 3000;
+        const needsQuote = plan === "custom" || volume > included;
+        const price = Math.round((plan === "start" ? 5900 : 12900) * (billing === "quarter" ? 0.9 : 1));
         return <motion.article key={plan} initial={reduced ? false : { opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.15 }} transition={{ duration: reduced ? 0 : 0.5, delay: reduced ? 0 : index * 0.08 }} className={`flex min-w-0 flex-col rounded-[32px] border border-solid p-7 md:p-8 ${featured ? "border-plumo-blue bg-plumo-blue text-white" : "border-plumo-line bg-white text-plumo-ink"}`}>
-          <div className="mb-6 min-h-[22px] text-[11px]">{plan === "start" ? <span className="text-plumo-muted">{c.pilot}</span> : featured ? <span className="rounded-full border border-solid border-white/40 px-3 py-1">{c.soon}</span> : null}</div>
+          <div className="mb-6 flex min-h-[22px] items-center justify-between gap-2 text-[11px]">{plan === "start" ? <span className="text-plumo-muted">{c.pilot}</span> : featured ? <span className="rounded-full border border-solid border-white/40 px-3 py-1">{c.soon}</span> : <span />}{suggested === plan && <span className={featured ? "text-white" : "text-plumo-blue"}>{c.fit}</span>}</div>
           <h3 className="m-0 text-[27px] font-semibold tracking-[-0.04em]">{c.names[plan]}</h3>
           <p className={`mb-0 mt-3 min-h-[44px] text-[14px] leading-relaxed ${featured ? "text-white/85" : "text-plumo-muted"}`}>{c.descriptions[index]}</p>
           <div className="my-8 flex min-h-[80px] flex-col justify-center">
-            <div className="flex flex-wrap items-baseline gap-2"><strong className={`${plan === "custom" ? "text-[34px]" : "text-[48px]"} font-medium leading-none tracking-[-0.055em]`}>{c.prices[index]}</strong>{plan !== "custom" && <span className="text-[15px]">{c.currency}</span>}</div>
-            {plan !== "custom" && <span className={`mt-3 text-[12px] ${featured ? "text-white/80" : "text-plumo-muted"}`}>{c.period}</span>}
+            <div className="flex flex-wrap items-baseline gap-2"><strong className={`${needsQuote ? "text-[34px]" : "text-[48px]"} font-medium leading-none tracking-[-0.055em]`}>{needsQuote ? c.quote : number.format(price)}</strong>{!needsQuote && <span className="text-[15px]">{c.currency}</span>}</div>
+            {plan !== "custom" && <span className={`mt-3 text-[12px] ${featured ? "text-white/80" : "text-plumo-muted"}`}>{needsQuote ? c.extra : billing === "quarter" ? `${c.period} · ${c.quarterly}` : c.period}</span>}
+            {!needsQuote && billing === "quarter" && <span className={`mt-2 text-[11px] ${featured ? "text-white/80" : "text-plumo-muted"}`}>{number.format(price * 3)} {c.currency} {c.total}</span>}
           </div>
-          <a href="#pilot" onClick={() => onChoose(plan)} className="login-link button-pill !flex !min-h-[52px] !w-full !justify-center !px-4 !py-3 !text-center !text-[13px] !font-medium">{featured ? c.futureAction : plan === "custom" ? c.customAction : c.action}</a>
+          <a href="#pilot" onClick={() => choose(plan)} className="login-link button-pill !flex !min-h-[52px] !w-full !justify-center !px-4 !py-3 !text-center !text-[13px] !font-medium">{featured ? c.futureAction : plan === "custom" ? c.customAction : c.action}</a>
           <div className={`mt-8 border-0 border-t border-solid pt-6 ${featured ? "border-white/25" : "border-plumo-line"}`}>
             <p className="mb-5 mt-0 text-[15px] font-semibold">{c.limits[index]}</p>
             <ul className="m-0 flex list-none flex-col gap-4 p-0">{c.features[index].map(feature => <li key={feature} className="flex items-start gap-3 text-[13px] leading-[1.6]"><Check /><span>{feature}</span></li>)}</ul>
@@ -86,7 +120,7 @@ export function Pricing({ onChoose }: { onChoose: (choice: PricingChoice) => voi
     </div>
     <div className="mt-6 flex flex-col items-start justify-between gap-5 rounded-[24px] bg-plumo-soft px-6 py-7 md:flex-row md:items-center md:px-8">
       <div><h3 className="m-0 text-[20px] font-medium tracking-[-0.035em]">{c.demoTitle}</h3><p className="mb-0 mt-2 text-[14px] leading-relaxed text-plumo-muted">{c.demoText}</p></div>
-      <a href="#pilot" onClick={() => onChoose("demo")} className="button-text shrink-0"><span>{c.demoAction}</span><span className="button-text-symbol" aria-hidden="true"><span className="symbol-arrow">→</span><span className="symbol-plus">+</span></span></a>
+      <a href="#pilot" onClick={() => choose("demo")} className="button-text shrink-0"><span>{c.demoAction}</span><span className="button-text-symbol" aria-hidden="true"><span className="symbol-arrow">→</span><span className="symbol-plus">+</span></span></a>
     </div>
     <p className="mb-0 mt-5 max-w-[940px] text-[11px] leading-[1.7] text-plumo-muted">{c.terms}</p>
   </section>;
