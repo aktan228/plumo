@@ -5,6 +5,7 @@ import { useLanguage } from "@/lib/i18n";
 import "./landing.css";
 import { Hero } from "./hero";
 import { CustomerSituations } from "./customer-situations";
+import { VoiceCallDemo } from "./voice-call-demo";
 import { DialogueToLead } from "./dialogue-to-lead";
 import { SetupPipeline } from "./setup-pipeline";
 import { Statistics } from "./statistics";
@@ -58,6 +59,8 @@ export function Landing() {
   return <main id="main" className="landing">
     <Hero />
     <CustomerSituations />
+
+    <VoiceCallDemo />
 
     <DialogueToLead />
 

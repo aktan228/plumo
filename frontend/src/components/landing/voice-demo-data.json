@@ -1,0 +1,84 @@
+{
+  "ru": {
+    "duration": 33.068,
+    "cues": [
+      {
+        "speaker": "plumo",
+        "text": "Здравствуйте! Я Плюмо, ИИ-ассистент агентства. Чем могу помочь?",
+        "start": 0.0,
+        "end": 5.171
+      },
+      {
+        "speaker": "customer",
+        "text": "Здравствуйте. Ищу двухкомнатную квартиру для семьи. Желательно на юге города, рядом со школой.",
+        "start": 5.171,
+        "end": 12.06
+      },
+      {
+        "speaker": "plumo",
+        "text": "Понял. Какой бюджет вы рассматриваете?",
+        "start": 12.06,
+        "end": 15.373
+      },
+      {
+        "speaker": "customer",
+        "text": "До восьми миллионов сомов. Можно посмотреть в субботу после двух?",
+        "start": 15.373,
+        "end": 19.87
+      },
+      {
+        "speaker": "plumo",
+        "text": "Передам менеджеру ваш бюджет и пожелания. Он проверит варианты, школу рядом и время просмотра, затем свяжется с вами. Пока просмотр не подтверждён.",
+        "start": 19.87,
+        "end": 29.778
+      },
+      {
+        "speaker": "customer",
+        "text": "Отлично, спасибо. Буду ждать звонка.",
+        "start": 29.778,
+        "end": 33.068
+      }
+    ]
+  },
+  "en": {
+    "duration": 42.366,
+    "cues": [
+      {
+        "speaker": "plumo",
+        "text": "Hello! I'm Plumo, the agency's AI assistant. How can I help?",
+        "start": 0.0,
+        "end": 7.099
+      },
+      {
+        "speaker": "customer",
+        "text": "Hi. I'm looking for a two-bedroom apartment for my family, in the south of the city, near a school.",
+        "start": 7.099,
+        "end": 14.952
+      },
+      {
+        "speaker": "plumo",
+        "text": "Got it. What budget do you have in mind?",
+        "start": 14.952,
+        "end": 19.356
+      },
+      {
+        "speaker": "customer",
+        "text": "Up to eight million soms. Could we arrange a viewing on Saturday after two?",
+        "start": 19.356,
+        "end": 25.555
+      },
+      {
+        "speaker": "plumo",
+        "text": "I'll pass your budget and preferences to the manager. They'll check the options, nearby school and viewing time, then call you back. The viewing isn't confirmed yet.",
+        "start": 25.555,
+        "end": 37.647
+      },
+      {
+        "speaker": "customer",
+        "text": "Great, thank you. I'll wait for their call.",
+        "start": 37.647,
+        "end": 42.366
+      }
+    ]
+  }
+}
