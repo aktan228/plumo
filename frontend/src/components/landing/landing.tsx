@@ -6,6 +6,7 @@ import "./landing.css";
 import { Hero } from "./hero";
 import { CustomerSituations } from "./customer-situations";
 import { DialogueToLead } from "./dialogue-to-lead";
+import { SetupPipeline } from "./setup-pipeline";
 import { Pricing, pricingChoiceLabel, type PricingChoice } from "./pricing";
 
 const copy = {
@@ -58,7 +59,7 @@ export function Landing() {
 
     <DialogueToLead />
 
-    <section id="how-it-works" className="section-shell process-section"><p className="section-label">{c.processLabel}</p><h2>{c.processTitle}</h2><div className="process-grid">{c.steps.map(([title, description], i) => <article key={title}><span className="step-number">0{i + 1}</span><h3>{title}</h3><p>{description}</p></article>)}</div></section>
+    <SetupPipeline />
 
     <section id="channels" className="section-shell channel-section"><div className="section-copy"><p className="section-label">{c.channelLabel}</p><h2>{c.channelTitle}</h2><p>{c.channelDesc}</p></div><div className="channel-list">{c.channels.map(([icon, title, status]) => <div key={title}><span className="channel-icon" aria-hidden="true">{icon}</span><h3>{title}</h3><small>{status}</small></div>)}</div></section>
 
