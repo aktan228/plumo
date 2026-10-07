@@ -8,6 +8,7 @@ import { CustomerSituations } from "./customer-situations";
 import { DialogueToLead } from "./dialogue-to-lead";
 import { SetupPipeline } from "./setup-pipeline";
 import { Statistics } from "./statistics";
+import { PilotCTA } from "./pilot-cta";
 import { Pricing, pricingRequestLabel, type PricingRequest } from "./pricing";
 
 const copy = {
@@ -44,6 +45,7 @@ export function Landing() {
   const { locale } = useLanguage();
   const c = copy[locale];
   const [mailReady, setMailReady] = useState(false);
+  const [pilotExpanded, setPilotExpanded] = useState(false);
   const [pricingChoice, setPricingChoice] = useState<PricingRequest | null>(null);
   function prepareMail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,10 +64,10 @@ export function Landing() {
 
     <Statistics />
 
-    <Pricing onChoose={setPricingChoice} />
+    <Pricing onChoose={request => { setPricingChoice(request); setPilotExpanded(true); }} />
 
     <section id="faq" className="section-shell faq-section"><div><p className="section-label">{c.faqLabel}</p><h2>{c.faqTitle}</h2></div><div className="faq-list">{c.faqs.map(([q, a]) => <details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
 
-    <section id="pilot" className="pilot-section"><div className="section-shell pilot-grid"><div><p className="section-label">{c.ctaLabel}</p><h2>{c.ctaTitle}</h2><p className="pilot-description">{c.ctaDesc}</p><a className="pilot-email" href="mailto:contact@plumo.app">contact@plumo.app ↗</a></div><form onSubmit={prepareMail} className="pilot-form">{pricingChoice && <p role="status" className="m-0 text-[14px] text-white">{locale === "ru" ? "Ваш выбор: " : "Your selection: "}{pricingRequestLabel(locale, pricingChoice)}</p>}<div className="form-row"><label>{c.name}<input name="name" autoComplete="name" required maxLength={100} /></label><label>{c.business}<input name="company" autoComplete="organization" required maxLength={150} /></label></div><label>{c.email}<input type="email" name="email" autoComplete="email" required maxLength={254} /></label><label>{c.message}<textarea name="message" rows={3} required maxLength={1500} /></label><button type="submit">{c.send}<span>↗</span></button><small>{c.mailNote}</small>{mailReady && <p role="status">{c.mailReady}</p>}</form></div></section>
+    <PilotCTA expanded={pilotExpanded} onToggle={() => setPilotExpanded(value => !value)} onSubmit={prepareMail} selection={pricingChoice} mailReady={mailReady} formCopy={c} />
   </main>;
 }
