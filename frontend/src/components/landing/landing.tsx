@@ -9,6 +9,7 @@ import { DialogueToLead } from "./dialogue-to-lead";
 import { SetupPipeline } from "./setup-pipeline";
 import { Statistics } from "./statistics";
 import { PilotCTA } from "./pilot-cta";
+import { FAQ } from "./faq";
 import { Pricing, pricingRequestLabel, type PricingRequest } from "./pricing";
 
 const copy = {
@@ -66,7 +67,7 @@ export function Landing() {
 
     <Pricing onChoose={request => { setPricingChoice(request); setPilotExpanded(true); }} />
 
-    <section id="faq" className="section-shell faq-section"><div><p className="section-label">{c.faqLabel}</p><h2>{c.faqTitle}</h2></div><div className="faq-list">{c.faqs.map(([q, a]) => <details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
+    <FAQ items={c.faqs} />
 
     <PilotCTA expanded={pilotExpanded} onToggle={() => setPilotExpanded(value => !value)} onSubmit={prepareMail} selection={pricingChoice} mailReady={mailReady} formCopy={c} />
   </main>;
