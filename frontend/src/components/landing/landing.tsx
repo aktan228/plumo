@@ -5,7 +5,7 @@ import { useLanguage } from "@/lib/i18n";
 import "./landing.css";
 import { Hero } from "./hero";
 import { CustomerSituations } from "./customer-situations";
-import { DialogueToLead } from "./dialogue-to-lead";
+import { AgentCapabilities } from "./agent-capabilities";
 
 const copy = {
   ru: {
@@ -54,12 +54,7 @@ export function Landing() {
     <Hero />
     <CustomerSituations />
 
-    <DialogueToLead />
-
-    <section id="product" className="memory-section"><div className="section-shell split-section">
-      <div className="memory-sheet"><span className="section-label">{c.memoryCard}</span><div className="memory-person"><span className="avatar">A</span><h3>{c.person}</h3><span className="memory-id">#0001</span></div><p className="memory-summary">{c.memorySummary}</p><div className="memory-facts"><span>64 м²</span><span>{c.rooms.split(" · ")[0]}</span></div><small>{c.source}</small><div className="handoff-example">{c.human}<span>↗</span></div><small>{c.humanNote}</small></div>
-      <div className="section-copy"><p className="section-label">{c.memoryLabel}</p><h2>{c.memoryTitle}</h2><p>{c.memoryDesc}</p><ul className="memory-list">{c.memoryPoints.map(text => <li key={text}><span>↗</span>{text}</li>)}</ul><small className="disclosure">{c.memoryNote}</small></div>
-    </div></section>
+    <AgentCapabilities />
 
     <section id="how-it-works" className="section-shell process-section"><p className="section-label">{c.processLabel}</p><h2>{c.processTitle}</h2><div className="process-grid">{c.steps.map(([title, description], i) => <article key={title}><span className="step-number">0{i + 1}</span><h3>{title}</h3><p>{description}</p></article>)}</div></section>
 
