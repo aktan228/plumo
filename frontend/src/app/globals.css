@@ -1,4 +1,4 @@
-:root { --background: #fff; --ink: #111113; --blue: #142b6f; --blue-soft: #e8ecf5; --muted: #73737c; --line: #eaeaec; }
+:root { --background: #fff; --ink: #111113; --blue: #2b55ff; --blue-soft: #edf1ff; --muted: #73737c; --line: #eaeaec; }
 * { box-sizing: border-box; }
 html { scroll-padding-top: 100px; }
 body { margin: 0; color: var(--ink); background: var(--background); font-family: Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased; }

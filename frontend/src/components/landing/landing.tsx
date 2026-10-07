@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { useLanguage } from "@/lib/i18n";
 import "./landing.css";
 import { Hero } from "./hero";
+import { CustomerSituations } from "./customer-situations";
 
 const copy = {
   ru: {
@@ -58,6 +59,7 @@ export function Landing() {
   }
   return <main id="main" className="landing">
     <Hero />
+    <CustomerSituations />
 
     <section id="demo" className="section-shell split-section">
       <div className="section-copy"><p className="section-label">{c.demoLabel}</p><h2>{c.demoTitle}</h2><p>{c.demoDesc}</p><small className="disclosure">{c.demoNotice}</small></div>
