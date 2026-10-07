@@ -61,8 +61,6 @@ export function Landing() {
 
     <SetupPipeline />
 
-    <section id="channels" className="section-shell channel-section"><div className="section-copy"><p className="section-label">{c.channelLabel}</p><h2>{c.channelTitle}</h2><p>{c.channelDesc}</p></div><div className="channel-list">{c.channels.map(([icon, title, status]) => <div key={title}><span className="channel-icon" aria-hidden="true">{icon}</span><h3>{title}</h3><small>{status}</small></div>)}</div></section>
-
     <section id="statistics" className="stats-section"><div className="section-shell"><div className="stats-heading"><div><p className="section-label">{c.statsLabel}</p><h2>{c.statsTitle}</h2></div><p>{c.statsDesc}</p></div><div className="stats-board"><div className="stats-board-top"><b>{c.statsPeriod}</b><span>{c.statsBadge}</span></div><div className="metrics">{[128, 32, 18].map((n, i) => <div key={n}><small>{c.metrics[i]}</small><strong>{n}</strong></div>)}</div><div className="chart-heading" aria-live="polite"><span>{c.days[day]}</span><b>{values[day]} {c.statsUnits}</b></div><div className="bar-chart" role="group" aria-label={c.statsPeriod}>{values.map((v, i) => <button key={i} className={day === i ? "selected" : ""} aria-pressed={day === i} aria-label={`${c.days[i]}: ${v} ${c.statsUnits}`} onClick={() => setDay(i)}><span className="chart-track"><span className="chart-bar" style={{ height: `${v / 25 * 100}%` }}><span>{v}</span></span></span><small>{c.days[i]}</small></button>)}</div></div></div></section>
 
     <Pricing onChoose={setPricingChoice} />
