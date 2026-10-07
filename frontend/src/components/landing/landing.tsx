@@ -7,6 +7,7 @@ import { Hero } from "./hero";
 import { CustomerSituations } from "./customer-situations";
 import { DialogueToLead } from "./dialogue-to-lead";
 import { SetupPipeline } from "./setup-pipeline";
+import { Statistics } from "./statistics";
 import { Pricing, pricingChoiceLabel, type PricingChoice } from "./pricing";
 
 const copy = {
@@ -42,10 +43,8 @@ const copy = {
 export function Landing() {
   const { locale } = useLanguage();
   const c = copy[locale];
-  const [day, setDay] = useState(6);
   const [mailReady, setMailReady] = useState(false);
   const [pricingChoice, setPricingChoice] = useState<PricingChoice | null>(null);
-  const values = [12, 18, 14, 25, 19, 16, 24];
   function prepareMail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -61,7 +60,7 @@ export function Landing() {
 
     <SetupPipeline />
 
-    <section id="statistics" className="stats-section"><div className="section-shell"><div className="stats-heading"><div><p className="section-label">{c.statsLabel}</p><h2>{c.statsTitle}</h2></div><p>{c.statsDesc}</p></div><div className="stats-board"><div className="stats-board-top"><b>{c.statsPeriod}</b><span>{c.statsBadge}</span></div><div className="metrics">{[128, 32, 18].map((n, i) => <div key={n}><small>{c.metrics[i]}</small><strong>{n}</strong></div>)}</div><div className="chart-heading" aria-live="polite"><span>{c.days[day]}</span><b>{values[day]} {c.statsUnits}</b></div><div className="bar-chart" role="group" aria-label={c.statsPeriod}>{values.map((v, i) => <button key={i} className={day === i ? "selected" : ""} aria-pressed={day === i} aria-label={`${c.days[i]}: ${v} ${c.statsUnits}`} onClick={() => setDay(i)}><span className="chart-track"><span className="chart-bar" style={{ height: `${v / 25 * 100}%` }}><span>{v}</span></span></span><small>{c.days[i]}</small></button>)}</div></div></div></section>
+    <Statistics />
 
     <Pricing onChoose={setPricingChoice} />
 
