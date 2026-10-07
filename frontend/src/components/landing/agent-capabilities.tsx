@@ -59,7 +59,6 @@ function CapabilitiesExample({ locale }: { locale: "ru" | "en" }) {
   const footer = (index: number) => <div className="px-1 pb-1 pt-6"><h3 className="m-0 text-[21px] font-semibold tracking-[-0.035em]">{c.titles[index]}</h3><p className="mb-0 mt-3 text-[14px] leading-[1.7] text-plumo-muted">{c.descriptions[index]}</p></div>;
 
   return <section ref={section} id="product" aria-labelledby="capabilities-title" className="mx-auto max-w-[1440px] px-6 py-20 text-plumo-ink md:px-8 md:py-28 lg:px-16">
-    <span id="demo" className="block scroll-mt-24" />
     <div className="mx-auto max-w-[800px] text-center"><h2 id="capabilities-title" className="!text-[clamp(38px,5vw,68px)] !font-bold !leading-[1.05]">{c.title}<br /><span className="text-plumo-blue">{c.accent}</span></h2><p className="mx-auto mb-0 mt-6 max-w-[570px] text-[17px] leading-relaxed text-plumo-muted">{c.intro}</p></div>
 
     <div className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-3 lg:mt-16">

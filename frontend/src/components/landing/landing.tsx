@@ -5,7 +5,7 @@ import { useLanguage } from "@/lib/i18n";
 import "./landing.css";
 import { Hero } from "./hero";
 import { CustomerSituations } from "./customer-situations";
-import { AgentCapabilities } from "./agent-capabilities";
+import { DialogueToLead } from "./dialogue-to-lead";
 
 const copy = {
   ru: {
@@ -54,7 +54,7 @@ export function Landing() {
     <Hero />
     <CustomerSituations />
 
-    <AgentCapabilities />
+    <DialogueToLead />
 
     <section id="how-it-works" className="section-shell process-section"><p className="section-label">{c.processLabel}</p><h2>{c.processTitle}</h2><div className="process-grid">{c.steps.map(([title, description], i) => <article key={title}><span className="step-number">0{i + 1}</span><h3>{title}</h3><p>{description}</p></article>)}</div></section>
 
