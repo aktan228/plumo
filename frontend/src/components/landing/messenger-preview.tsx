@@ -1,3 +1,4 @@
+// @refresh reset
 "use client";
 
 import Image from "next/image";
@@ -21,6 +22,7 @@ const iconPaths: Record<IconName, string> = {
 function Icon({ name }: { name: IconName }) {
   return <svg aria-hidden="true" className="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={name === "more" ? 3 : 1.6} strokeLinecap="round" strokeLinejoin="round"><path d={iconPaths[name]} />{name === "smile" && <circle cx="12" cy="12" r="9" />}{name === "camera" && <circle cx="12" cy="12" r="4" />}</svg>;
 }
+export { Icon as MessengerIcon };
 export function ChannelIcon({ channel }: { channel: Channel }) {
   const bg = channel === "whatsapp" ? "bg-[#25d366]" : channel === "telegram" ? "bg-[#2aabee]" : "bg-linear-to-tr from-[#ffb545] via-[#ed327b] to-[#7445da]";
   return <span className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] text-white ${bg}`}><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -104,7 +106,7 @@ export function MessengerPreview({ channel, scenario, locale, delay }: { channel
           <input readOnly tabIndex={-1} value={draft} placeholder={c.message} aria-label={c.message} className="pointer-events-none h-full w-full min-w-0 flex-1 border-0 bg-transparent p-0 font-[inherit] text-[13px] text-plumo-ink outline-none placeholder:text-[#87939c]" />
           {wa && <span className="text-[#87939c]"><Icon name="camera" /></span>}{ig && !draft && <span className="text-plumo-ink"><Icon name="mic" /></span>}
         </div>
-        <motion.button type="button" aria-label={c.send} title={c.send} disabled={Boolean(sent) || !draft} onClick={() => setTick(sendAt)} animate={{ scale: !reduced && tick >= sendAt - 2 && tick < sendAt + 2 ? 0.88 : 1 }} transition={{ duration: reduced ? 0 : 0.15 }} whileTap={reduced ? undefined : { scale: 0.88 }} className={`flex size-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full border-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue disabled:cursor-default ${wa ? "bg-[#128c7e] text-white" : tg ? "bg-[#3390ec] text-white" : "bg-plumo-blue text-white"}`}><Icon name="send" /></motion.button>
+        <motion.button type="button" aria-label={c.send} title={c.send} aria-disabled={Boolean(sent) || !draft} onClick={() => { if (!sent && draft) setTick(sendAt); }} animate={{ scale: !reduced && tick >= sendAt - 2 && tick < sendAt + 2 ? 0.88 : 1 }} transition={{ duration: reduced ? 0 : 0.15 }} whileTap={reduced ? undefined : { scale: 0.88 }} className={`flex size-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full border-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue aria-disabled:cursor-default ${wa ? "bg-[#128c7e] text-white" : tg ? "bg-[#3390ec] text-white" : "bg-plumo-blue text-white"}`}><Icon name="send" /></motion.button>
       </div>
     </div>
   </>;

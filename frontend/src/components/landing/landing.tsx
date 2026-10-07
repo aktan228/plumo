@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { useState, type FormEvent } from "react";
 import { useLanguage } from "@/lib/i18n";
 import "./landing.css";
 import { Hero } from "./hero";
 import { CustomerSituations } from "./customer-situations";
+import { DialogueToLead } from "./dialogue-to-lead";
 
 const copy = {
   ru: {
@@ -40,13 +40,6 @@ const copy = {
 export function Landing() {
   const { locale } = useLanguage();
   const c = copy[locale];
-  const reduced = useReducedMotion();
-  const [questions, setQuestions] = useState<number[]>([]);
-  const logRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const log = logRef.current;
-    if (log) log.scrollTop = log.scrollHeight;
-  }, [questions]);
   const [day, setDay] = useState(6);
   const [mailReady, setMailReady] = useState(false);
   const values = [12, 18, 14, 25, 19, 16, 24];
@@ -61,13 +54,7 @@ export function Landing() {
     <Hero />
     <CustomerSituations />
 
-    <section id="demo" className="section-shell split-section">
-      <div className="section-copy"><p className="section-label">{c.demoLabel}</p><h2>{c.demoTitle}</h2><p>{c.demoDesc}</p><small className="disclosure">{c.demoNotice}</small></div>
-      <div className="demo-window"><div className="demo-top"><span className="plumo-mark" aria-hidden="true" /><div><b>{c.chatTitle}</b><small>{c.chatStatus}</small></div><button className="reset-demo" onClick={() => setQuestions([])} aria-label={c.reset} title={c.reset}>↺</button></div>
-        <div ref={logRef} className="chat-log" role="log" aria-live="polite" tabIndex={0} aria-label={c.chatTitle}><p className="chat-agent">{c.welcome}</p>{questions.map((q, i) => <div key={`${i}-${q}`}><p className="chat-customer">{c.prompts[q]}</p><p className="chat-agent">{c.replies[q]}</p></div>)}</div>
-        <div className="chat-options"><small>{c.choose}</small>{c.prompts.map((prompt, i) => <button key={prompt} disabled={questions.includes(i)} onClick={() => setQuestions((old) => [...old, i])}>{prompt}<span>↗</span></button>)}</div>
-      </div>
-    </section>
+    <DialogueToLead />
 
     <section id="product" className="memory-section"><div className="section-shell split-section">
       <div className="memory-sheet"><span className="section-label">{c.memoryCard}</span><div className="memory-person"><span className="avatar">A</span><h3>{c.person}</h3><span className="memory-id">#0001</span></div><p className="memory-summary">{c.memorySummary}</p><div className="memory-facts"><span>64 м²</span><span>{c.rooms.split(" · ")[0]}</span></div><small>{c.source}</small><div className="handoff-example">{c.human}<span>↗</span></div><small>{c.humanNote}</small></div>

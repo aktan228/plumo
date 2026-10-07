@@ -54,7 +54,7 @@
 .composer-send { background: #30343c; color: #b2b8c4; }
 .composer-send.active { background: #fff; color: #111113; }
 .composer-send { border: 0; padding: 0; cursor: pointer; }
-.composer-send:disabled { cursor: default; }
+.composer-send:is(:disabled, [aria-disabled="true"]) { cursor: default; }
 .composer-send:focus-visible { outline-color: #fff; }
 .hero-message-meta { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 8px; font-size: 10px; color: #9298a3; }
 .hero-message-meta time { font-size: 10px; }
