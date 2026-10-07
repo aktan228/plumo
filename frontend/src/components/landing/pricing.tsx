@@ -13,6 +13,7 @@ const content = {
     intro: "Начните с одного канала. Расширяйте подключение, когда вашему бизнесу понадобится больше.",
     volume: "Ваш объём", replies: "ответов ИИ / месяц", volumeHint: "Один ответ — одно исходящее сообщение Plumo", month: "Месяц", quarter: "Квартал · −10%", billingLabel: "Период оплаты", voice: "Голосовой агент", voiceHint: "Добавить звонки · стоимость по запросу", voiceSelected: "Звонки включены в запрос на расчёт", fit: "Под ваш объём", quote: "По запросу", extra: "Этот объём рассчитаем отдельно", quarterly: "при оплате за 3 месяца", total: "за квартал", recommended: "Подходящий план",
     currency: "сом", period: "/ месяц", monthly: "Помесячная оплата", soon: "Скоро", pilot: "Для первых пилотов",
+    summaryMonth: "Итого за месяц", summaryQuarter: "Итого за квартал", textCost: "Стоимость переписки", individual: "Индивидуальный расчёт", calculate: "Получить расчёт", voiceExtra: "Голосовой агент — дополнительно, по запросу", saving: "Экономия за квартал", billedOnce: "Один платёж за 3 месяца",
     action: "Обсудить подключение", customAction: "Связаться с нами", futureAction: "Обсудить будущий запуск",
     names: { start: "Старт", business: "Бизнес", custom: "Индивидуальный", demo: "Бесплатное демо" },
     descriptions: ["Для небольшого потока обращений", "Для активной работы с клиентами", "Для задач со своими условиями"],
@@ -32,6 +33,7 @@ const content = {
     intro: "Start with one channel. Expand when your business needs more.",
     volume: "Your volume", replies: "AI replies / month", volumeHint: "One reply is one outgoing Plumo message", month: "Month", quarter: "Quarter · −10%", billingLabel: "Billing period", voice: "Voice agent", voiceHint: "Add calls · quoted separately", voiceSelected: "Calls included in your quote request", fit: "Fits your volume", quote: "Let’s talk", extra: "We’ll quote this volume separately", quarterly: "when paying for 3 months", total: "per quarter", recommended: "Suggested plan",
     currency: "KGS", period: "/ month", monthly: "Monthly billing", soon: "Coming soon", pilot: "For our first pilots",
+    summaryMonth: "Monthly total", summaryQuarter: "Quarterly total", textCost: "Messaging cost", individual: "Custom quote", calculate: "Request a quote", voiceExtra: "Voice agent is additional and quoted separately", saving: "Quarterly savings", billedOnce: "One payment for 3 months",
     action: "Discuss setup", customAction: "Contact us", futureAction: "Discuss a future launch",
     names: { start: "Start", business: "Business", custom: "Custom", demo: "Free demo" },
     descriptions: ["For a smaller flow of inquiries", "For growing customer conversations", "For workflows with specific needs"],
@@ -71,6 +73,9 @@ export function Pricing({ onChoose }: { onChoose: (request: PricingRequest) => v
   const [voice, setVoice] = useState(false);
   const number = new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-GB");
   const suggested: PricingChoice = volume <= 1000 ? "start" : volume <= 3000 ? "business" : "custom";
+  const summaryBase = suggested === "start" ? 5900 : 12900;
+  const summaryMonthly = Math.round(summaryBase * (billing === "quarter" ? 0.9 : 1));
+  const summaryTotal = summaryMonthly * (billing === "quarter" ? 3 : 1);
   const choose = (choice: PricingChoice) => onChoose({ choice, volume, billing, voice });
   const plans = ["start", "business", "custom"] as const;
 
@@ -91,6 +96,15 @@ export function Pricing({ onChoose }: { onChoose: (request: PricingRequest) => v
         <input id="pricing-volume" type="range" min={1000} max={10000} step={500} value={volume} onChange={event => setVolume(Number(event.target.value))} aria-valuetext={`${number.format(volume)} ${c.replies}`} className="mx-0 mb-0 mt-4 h-6 w-full cursor-pointer accent-plumo-blue" />
         <div aria-hidden="true" className="mt-1 flex justify-between text-[10px] text-plumo-muted"><span>{number.format(1000)}</span><span>{number.format(10000)}</span></div>
         <button type="button" role="switch" aria-checked={voice} onClick={() => setVoice(value => !value)} className="mt-5 flex w-full cursor-pointer items-center justify-between gap-4 rounded-[20px] border border-solid border-plumo-line bg-white px-5 py-4 text-left font-[inherit] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-plumo-blue"><span><span className="block text-[13px] text-plumo-ink">{c.voice}</span><span className="mt-1 block text-[11px] text-plumo-muted">{voice ? c.voiceSelected : c.voiceHint}</span></span><span aria-hidden="true" className={`flex h-6 w-10 shrink-0 items-center rounded-full p-1 transition-colors ${voice ? "bg-plumo-blue" : "bg-[#e7e8eb]"}`}><span className={`size-4 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none ${voice ? "translate-x-4" : "translate-x-0"}`} /></span></button>
+      </div>
+      <div className="flex flex-col justify-between gap-6 border-0 border-t border-solid border-plumo-line pt-7 md:col-span-2 md:flex-row md:items-center">
+        <div role="status" aria-live="polite" aria-atomic="true">
+          <p className="m-0 text-[12px] text-plumo-muted">{voice ? c.textCost : billing === "quarter" ? c.summaryQuarter : c.summaryMonth} <span className="mx-2 text-plumo-line">/</span> {c.names[suggested]}{suggested === "business" ? ` · ${c.soon}` : ""}</p>
+          <p className="mb-0 mt-3 text-[clamp(26px,3vw,38px)] font-medium leading-tight tracking-[-0.04em] tabular-nums">{suggested === "custom" ? c.individual : <>{number.format(summaryTotal)} <span className="text-[16px] font-normal tracking-normal">{c.currency}</span></>}</p>
+          {suggested === "custom" ? <p className="mb-0 mt-2 text-[12px] text-plumo-muted">{c.extra}</p> : billing === "quarter" && <p className="mb-0 mt-2 text-[12px] leading-relaxed text-plumo-muted">{c.billedOnce} · {number.format(summaryMonthly)} {c.currency} {c.period}<br /><span className="text-plumo-blue">{c.saving}: {number.format(summaryBase * 3 - summaryTotal)} {c.currency}</span></p>}
+          {voice && <p className="mb-0 mt-2 text-[12px] leading-relaxed text-plumo-muted">{c.voiceExtra}</p>}
+        </div>
+        <a href="#pilot" onClick={() => choose(suggested)} className="login-link button-pill self-start !px-6 !py-3 !text-[13px] !font-medium md:shrink-0 md:self-center">{suggested === "custom" || voice ? c.calculate : c.action}</a>
       </div>
     </div>
     <p className="mb-5 mt-0 text-[12px] text-plumo-muted">{c.recommended}: <span className="text-plumo-ink">{c.names[suggested]}</span></p>
