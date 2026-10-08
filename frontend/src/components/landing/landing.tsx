@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n";
 import "./landing.css";
 import { Hero } from "./hero";
@@ -46,12 +47,12 @@ const copy = {
 };
 
 export function Landing() {
+  const router = useRouter();
   const { locale } = useLanguage();
   const c = copy[locale];
   const [mailReady, setMailReady] = useState(false);
   const [pricingChoice, setPricingChoice] = useState<PricingRequest | null>(null);
   const [demoOpen, setDemoOpen] = useState(false);
-  const [destination, setDestination] = useState<"demo" | null>(null);
   const [demoStep, setDemoStep] = useState<"choice" | "expert">("choice");
   const [demoPath, setDemoPath] = useState<"expert" | "self" | null>(null);
 
@@ -68,20 +69,11 @@ export function Landing() {
       setDemoStep("expert");
     } else {
       setDemoOpen(false);
-      setDestination("demo");
+      const params = pricingChoice ? new URLSearchParams({ plan: pricingChoice.choice, volume: String(pricingChoice.volume), billing: pricingChoice.billing, voice: String(pricingChoice.voice) }) : null;
+      router.push(`/create/wizard${params ? `?${params}` : ""}`);
     }
   }
 
-  useEffect(() => {
-    if (!destination) return;
-    const frame = requestAnimationFrame(() => {
-      const target = document.getElementById(destination);
-      target?.focus({ preventScroll: true });
-      target?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
-      setDestination(null);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [destination]);
   function prepareMail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);

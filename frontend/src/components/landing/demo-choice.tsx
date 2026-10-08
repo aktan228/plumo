@@ -12,16 +12,16 @@ const copy = {
     formTitle: "Демо с сотрудником", formIntro: "Расскажите о бизнесе и задаче — обсудим подходящий сценарий.", back: "← К выбору способа",
     expert: "Демо с сотрудником", expertText: "Расскажите о своём бизнесе. Вместе разберём задачу и выберем сценарий для первого пилота.",
     expertTags: ["Под ваш бизнес", "Бесплатно"],
-    self: "Посмотреть демо самому", selfText: "Посмотрите, как Plumo ведёт диалог и собирает заявку для менеджера, на готовом примере.",
-    selfTags: ["Без регистрации", "Сценарный пример"], account: "Уже есть аккаунт?", login: "Войти",
+    self: "Настроить демо самому", selfText: "Добавьте материалы о бизнесе, настройте агента и проверьте сценарий в тестовом чате.",
+    selfTags: ["Без регистрации", "6 шагов"], account: "Уже есть аккаунт?", login: "Войти",
   },
   en: {
     title: "Where shall we start?", intro: "Get to know Plumo in the way that suits you.", close: "Close demo options",
     formTitle: "Demo with our team", formIntro: "Tell us about your business and needs — we’ll discuss a suitable workflow.", back: "← Back to options",
     expert: "Demo with our team", expertText: "Tell us about your business. We’ll discuss your needs and choose a workflow for your first pilot.",
     expertTags: ["Your business", "Free"],
-    self: "Explore on your own", selfText: "See how Plumo handles a conversation and prepares a request for your manager in a ready-made example.",
-    selfTags: ["No sign-up", "Scripted example"], account: "Already have an account?", login: "Sign in",
+    self: "Set up your own demo", selfText: "Add your business materials, customize your agent and try the workflow in a test chat.",
+    selfTags: ["No sign-up", "6 steps"], account: "Already have an account?", login: "Sign in",
   },
 };
 
@@ -31,12 +31,13 @@ function ChoiceIcon({ person }: { person?: boolean }) {
   </svg>;
 }
 
-export function DemoChoice({ onClose, onSelect, step, onBack, expertForm }: {
+export function DemoChoice({ onClose, onSelect, step, onBack, expertForm, backLabel }: {
   onClose: () => void;
   onSelect: (path: "expert" | "self") => void;
   step: "choice" | "expert";
   onBack: () => void;
   expertForm: ReactNode;
+  backLabel?: string;
 }) {
   const { locale } = useLanguage();
   const c = copy[locale];
@@ -75,7 +76,7 @@ export function DemoChoice({ onClose, onSelect, step, onBack, expertForm }: {
     className="fixed inset-0 m-auto max-h-[calc(100dvh-32px)] w-[calc(100%-32px)] max-w-[560px] overflow-y-auto overscroll-contain rounded-[28px] border-0 bg-white p-0 text-plumo-ink shadow-2xl backdrop:bg-plumo-ink/45 backdrop:backdrop-blur-sm">
     <motion.div initial={reduced ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="relative p-6 sm:p-8">
       <button type="button" autoFocus onClick={onClose} aria-label={c.close} className="absolute right-4 top-4 flex size-10 cursor-pointer items-center justify-center rounded-full border border-solid border-plumo-line bg-white text-plumo-muted transition-colors hover:bg-plumo-line/40 hover:text-plumo-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue sm:right-5 sm:top-5"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
-      {step === "expert" && <button type="button" onClick={onBack} className="mb-5 cursor-pointer border-0 bg-transparent p-0 font-[inherit] text-[13px] text-plumo-muted hover:text-plumo-ink">{c.back}</button>}
+      {step === "expert" && <button type="button" onClick={onBack} className="mb-5 cursor-pointer border-0 bg-transparent p-0 font-[inherit] text-[13px] text-plumo-muted hover:text-plumo-ink">{backLabel || c.back}</button>}
       <h2 id="demo-choice-title" className="m-0 pr-10 text-[28px] font-medium leading-tight tracking-tight sm:text-[32px]">{step === "expert" ? c.formTitle : c.title}</h2>
       <p id="demo-choice-description" className="mb-6 mt-3 max-w-[380px] text-[16px] leading-relaxed text-plumo-muted">{step === "expert" ? c.formIntro : c.intro}</p>
       {step === "expert" ? expertForm : <>
