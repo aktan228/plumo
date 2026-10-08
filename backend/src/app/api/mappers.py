@@ -54,6 +54,8 @@ def agent_out(response: AgentResponse) -> AgentResponseOut:
         language=response.language,
         correlation_id=response.correlation_id,
         handoff_id=response.handoff_id,
+        send_reply=response.send_reply,
+        duplicate=response.duplicate,
     )
 
 

@@ -30,3 +30,17 @@ def test_telephony_is_off_until_configured(monkeypatch) -> None:
     with TestClient(create_app(Settings())) as client:
         response = client.post("/api/v1/telephony/elevenlabs/initiation", json={})
         assert response.status_code == 503
+
+
+def test_supabase_urls_are_accepted_as_copied() -> None:
+    from app.infrastructure.database.session import engine_options, normalize_database_url
+
+    pooled = normalize_database_url("postgresql://postgres.abc:p%40ss@aws-0-eu-central-1.pooler.supabase.com:6543/postgres")
+    assert pooled.startswith("postgresql+asyncpg://")
+    args, null_pool = engine_options(pooled)
+    assert null_pool is True
+    assert args["ssl"] == "require"
+    assert args["statement_cache_size"] == 0
+
+    local_args, local_null = engine_options("postgresql+asyncpg://plumo:plumo@localhost:5432/plumo")
+    assert local_args == {} and local_null is False

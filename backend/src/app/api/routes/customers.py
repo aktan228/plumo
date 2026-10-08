@@ -1,13 +1,15 @@
 """Customer card and dialog history."""
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import Services, get_services
 from app.api.mappers import conversation_out, customer_out, message_out, summary_out
-from app.api.schemas import ConversationDetailOut, CustomerOut, HistoryOut
+from app.api.schemas import ConversationDetailOut, CustomerOut, HistoryOut, ManagerMessageIn, MessageOut
+from app.domain.enums import MessageRole
 from app.domain.errors import ConversationNotFound, CustomerNotFound
+from app.domain.models import Message, utcnow
 from app.infrastructure.database.repositories import SummaryRepository
 
 router = APIRouter(tags=["customers"])
@@ -57,3 +59,34 @@ async def get_conversation(
         conversation=conversation_out(conversation),
         messages=[message_out(item) for item in messages],
     )
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages",
+    response_model=MessageOut,
+    summary="Сообщение менеджера в диалог (агент молчит, пока передача ACCEPTED)",
+)
+async def post_manager_message(
+    conversation_id: UUID, body: ManagerMessageIn, services: Services = Depends(get_services)
+) -> MessageOut:
+    """Store what the manager sent, so history and the next agent turn see it.
+
+    Delivery to WhatsApp/Telegram stays with the channel adapter: it sends
+    `text` to the customer and calls this endpoint to record it.
+    """
+
+    conversation = await services.conversations.get(conversation_id)
+    if conversation is None:
+        raise ConversationNotFound(f"conversation {conversation_id} was not found")
+    now = utcnow()
+    message = Message(
+        id=uuid4(),
+        conversation_id=conversation.id,
+        customer_id=conversation.customer_id,
+        role=MessageRole.manager,
+        text=body.text.strip(),
+        timestamp=now,
+        metadata={"author": body.author} if body.author else {},
+        created_at=now,
+    )
+    return message_out(await services.messages.add(message))

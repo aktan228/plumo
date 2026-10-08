@@ -304,6 +304,10 @@ class AgentResponse:
     language: str
     correlation_id: str | None = None
     handoff_id: UUID | None = None
+    # False: do not send anything to the customer (a manager owns the dialog).
+    send_reply: bool = True
+    # True: the channel re-delivered a message already answered.
+    duplicate: bool = False
 
 
 @dataclass(slots=True)

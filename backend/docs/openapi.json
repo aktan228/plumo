@@ -359,6 +359,60 @@
         }
       }
     },
+    "/api/v1/conversations/{conversation_id}/messages": {
+      "post": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Сообщение менеджера в диалог (агент молчит, пока передача ACCEPTED)",
+        "description": "Store what the manager sent, so history and the next agent turn see it.\n\nDelivery to WhatsApp/Telegram stays with the channel adapter: it sends\n`text` to the customer and calls this endpoint to record it.",
+        "operationId": "post_manager_message_api_v1_conversations__conversation_id__messages_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerMessageIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/handoffs": {
       "get": {
         "tags": [
@@ -896,6 +950,18 @@
               }
             ],
             "title": "Handoff Id"
+          },
+          "send_reply": {
+            "type": "boolean",
+            "title": "Send Reply",
+            "description": "False: ничего не отправлять клиенту, диалог ведёт менеджер.",
+            "default": true
+          },
+          "duplicate": {
+            "type": "boolean",
+            "title": "Duplicate",
+            "description": "True: канал прислал то же сообщение повторно, ответ взят из истории.",
+            "default": false
           }
         },
         "type": "object",
@@ -1463,6 +1529,39 @@
           "category"
         ],
         "title": "KnowledgeSourceOut"
+      },
+      "ManagerMessageIn": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Text",
+            "examples": [
+              "Добрый день! Это Азамат, менеджер. Квартира на Чуй свободна, когда удобно посмотреть?"
+            ]
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author",
+            "examples": [
+              "Азамат"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "ManagerMessageIn"
       },
       "MeetingIn": {
         "properties": {

@@ -29,7 +29,7 @@ from app.domain.events import (
     MESSAGE_PROCESSED,
     MESSAGE_RECEIVED,
 )
-from app.domain.ports import Router
+from app.domain.ports import HumanHandoffProvider, Router
 from app.infrastructure.ai.factory import AIProviderFactory
 from app.infrastructure.ai.openrouter_llm import OpenRouterLLMProvider
 from app.infrastructure.channels.mock_adapters import mock_channels
@@ -49,6 +49,7 @@ from app.infrastructure.database.repositories import (
 from app.infrastructure.database.session import create_engine, create_session_factory
 from app.infrastructure.events.bus import InMemoryEventBus, log_event
 from app.infrastructure.handoff.mock_provider import MockHandoffProvider
+from app.infrastructure.handoff.telegram_provider import TelegramHandoffProvider
 
 
 @dataclass
@@ -58,7 +59,7 @@ class Runtime:
     session_factory: async_sessionmaker[AsyncSession]
     providers: AIProviderFactory
     router: Router
-    handoff_provider: MockHandoffProvider
+    handoff_provider: HumanHandoffProvider
     channels: dict
     events: InMemoryEventBus
     validator: ResponseValidator
@@ -129,6 +130,7 @@ def build_agent(session: AsyncSession, runtime: Runtime) -> AgentService:
         confidence_threshold=runtime.settings.small_model_confidence_threshold,
         default_language=runtime.settings.default_language,
         default_business_id=runtime.settings.default_business_id or None,
+        handoffs=handoffs,
     )
 
 
@@ -176,7 +178,11 @@ def _router(settings: Settings) -> Router:
     )
 
 
-def _handoff_provider(settings: Settings) -> MockHandoffProvider:
+def _handoff_provider(settings: Settings) -> HumanHandoffProvider:
+    # Telegram is not an AI provider: it works in AI_MODE=mock too, so a demo
+    # on the mock model still pings the real manager chat.
+    if settings.handoff_provider == "telegram":
+        return TelegramHandoffProvider()
     if settings.mock_mode or settings.handoff_provider == "mock":
         return MockHandoffProvider()
     raise ProviderUnavailable(
@@ -187,22 +193,45 @@ def _handoff_provider(settings: Settings) -> MockHandoffProvider:
 def _register_llm_providers(providers: AIProviderFactory, settings: Settings) -> None:
     if settings.mock_mode:
         return
-    names = {settings.small_model_provider, settings.big_model_provider}
-    if not any(name.startswith("openrouter") for name in names):
-        return
-    small = OpenRouterLLMProvider(
-        "openrouter_small",
-        settings.openrouter_small_model,
-        base_url=settings.openrouter_base_url,
-    )
-    big = OpenRouterLLMProvider(
-        "openrouter_big",
-        settings.openrouter_big_model,
-        base_url=settings.openrouter_base_url,
-    )
-    providers.register_llm("openrouter_small", small)
-    providers.register_llm("openrouter_big", big)
-    providers.register_llm("openrouter", big)
+    # Only the vendors named in SMALL/BIG_MODEL_PROVIDER are built: each one
+    # needs its own key, and a missing unused key must not break startup.
+    wanted = {settings.small_model_provider, settings.big_model_provider}
+    for name in sorted(wanted):
+        provider = _llm_provider(name, settings)
+        if provider is not None:
+            providers.register_llm(name, provider)
+
+
+def _llm_provider(name: str, settings: Settings) -> OpenRouterLLMProvider | None:
+    family, _, tier = name.rpartition("_")
+    if tier not in ("small", "big"):
+        family, tier = name, "big"
+    if family == "openrouter":
+        model = settings.openrouter_small_model if tier == "small" else settings.openrouter_big_model
+        return OpenRouterLLMProvider(name, model, base_url=settings.openrouter_base_url)
+    if family == "gemini":
+        # Google AI Studio directly: no gateway fee. Thinking is off, it only
+        # adds latency and tokens to a short sales reply.
+        model = settings.gemini_small_model if tier == "small" else settings.gemini_big_model
+        return OpenRouterLLMProvider(
+            name,
+            model,
+            api_key_env="GEMINI_API_KEY",
+            base_url=settings.gemini_base_url,
+            vendor="Gemini",
+            extra_body={"reasoning_effort": "none"} if "2.5-flash" in model else None,
+        )
+    if family == "openai_compat":
+        # Any OpenAI-compatible API: DeepSeek, OpenAI, Groq, a local LiteLLM.
+        model = settings.llm_small_model if tier == "small" else settings.llm_big_model
+        return OpenRouterLLMProvider(
+            name,
+            model,
+            api_key_env="LLM_API_KEY",
+            base_url=settings.llm_base_url,
+            vendor="LLM",
+        )
+    return None
 
 
 def _channels(settings: Settings) -> dict:

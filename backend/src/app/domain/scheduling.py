@@ -10,6 +10,16 @@ from app.domain.text_signals import normalize_text
 BUSINESS_TZ = timezone(timedelta(hours=6), "Asia/Bishkek")
 
 _DATE = re.compile(r"(20\d{2})-(\d{2})-(\d{2})")
+# Monday = 0. Russian stems and Kyrgyz day names.
+_WEEKDAYS = (
+    (("понедельник", "дүйшөмбү", "дуйшомбу"), 0),
+    (("вторник", "шейшемби"), 1),
+    (("сред", "шаршемби"), 2),
+    (("четверг", "бейшемби"), 3),
+    (("пятниц", "жума күнү", "жумада"), 4),
+    (("суббот", "ишемби"), 5),
+    (("воскресень", "жекшемби"), 6),
+)
 _TIME = re.compile(r"\b(\d{1,2}):(\d{2})\b")
 
 
@@ -58,5 +68,15 @@ def parse_slot(text: str, payload: dict | None, now: datetime) -> datetime:
         day = (local_now + timedelta(days=2)).date()
     elif "сегодня" in probe or "бүгүн" in probe or "бугун" in probe:
         day = local_now.date()
+    elif (weekday := _weekday(probe)) is not None:
+        ahead = (weekday - local_now.weekday()) % 7 or 7
+        day = (local_now + timedelta(days=ahead)).date()
     return datetime(day.year, day.month, day.day, hour, minute, tzinfo=BUSINESS_TZ)
 
+
+
+def _weekday(text: str) -> int | None:
+    for names, index in _WEEKDAYS:
+        if any(name in text for name in names):
+            return index
+    return None

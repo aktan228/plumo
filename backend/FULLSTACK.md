@@ -4,16 +4,37 @@
 
 ## 1. Запуск
 
+Нужен Python 3.12+. Есть три способа получить базу, остальное одинаково.
+
 ```powershell
 git clone <repo>; cd plumo
-copy .env.example .env          # заполнить, см. таблицу ниже
-docker compose up -d --build    # Postgres + API, миграции применятся сами
-docker compose run --rm api python -m app.seed   # демо-бизнес и база знаний
+copy .env.example .env
+python -m venv .venv; .\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
 ```
 
-Проверка: http://localhost:8000/health → `{"status":"ok"}`, Swagger: http://localhost:8000/docs.
+**База — один из вариантов:**
 
-Без Docker: Python 3.12, `pip install -e ".[dev]"`, `alembic upgrade head`, `uvicorn app.main:app --reload`.
+| Вариант | Команда | Когда |
+| --- | --- | --- |
+| Локально без Docker (Windows) | `.\scripts\local-db.ps1 start` | по умолчанию. Скачает Postgres 16 в `.tools/` один раз |
+| Docker | `docker compose up -d db` | если Docker уже стоит |
+| Supabase | в `.env`: `DATABASE_URL=<строка "Transaction pooler" из Supabase как есть>` | общая база для команды без сервера |
+
+```powershell
+python -m app.seed                 # миграции + демо-бизнес и база знаний
+uvicorn app.main:app --reload      # http://localhost:8000/docs
+```
+
+Проверка: http://localhost:8000/health → `{"status":"ok"}`.
+
+Проверить ядро целиком:
+
+```powershell
+pytest                                   # 69 тестов, нужна база
+$env:AI_MODE="mock"; python -m app.marathon   # 28 диалогов, склейка клиентов, нагрузка (на чистой базе)
+python -m app.eval_live                  # живая модель: 10 реплик, тон, цена, задержка
+```
 
 ## 2. Переменные окружения
 
@@ -23,8 +44,11 @@ docker compose run --rm api python -m app.seed   # демо-бизнес и ба
 | `PLUMO_API_KEY` | ключ для `/api/v1/*`, заголовок `X-API-Key`. **На сервере обязателен** | длинная случайная строка |
 | `CORS_ORIGINS` | адреса фронта через запятую | `https://app.plumo.kg,http://localhost:3000` |
 | `AI_MODE` | `mock` — без внешних вызовов, `production` — живая модель | `production` |
-| `SMALL_MODEL_PROVIDER` / `BIG_MODEL_PROVIDER` | имена моделей в фабрике | `openrouter_small` / `openrouter_big` |
-| `OPENROUTER_API_KEY` | ключ OpenRouter | `sk-or-v1-…` |
+| `SMALL_MODEL_PROVIDER` / `BIG_MODEL_PROVIDER` | семейство моделей, см. [docs/MODELS.md](docs/MODELS.md) | `gemini_small` / `gemini_big` |
+| `GEMINI_API_KEY` | ключ Google AI Studio | `AIza…` |
+| `OPENROUTER_API_KEY` | ключ OpenRouter, если модели через него | `sk-or-v1-…` |
+| `HANDOFF_PROVIDER` | `telegram` — карточка менеджеру в Telegram | `telegram` |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_MANAGER_CHAT_ID` | бот и чат менеджеров | `123:ABC…` / `-100…` |
 | `ELEVENLABS_LLM_TOKEN` | секрет, с которым ElevenLabs ходит к нам | случайная строка |
 | `ELEVENLABS_WEBHOOK_SECRET` | HMAC post-call вебхука, берётся в ElevenLabs | `wsec_…` |
 | `VOICE_USD_PER_MINUTE` | цена минуты по тарифу ElevenLabs, для метрик | `0.08` |
@@ -44,7 +68,8 @@ docker compose run --rm api python -m app.seed   # демо-бизнес и ба
 | GET | `/api/v1/customers/{id}/history` | Вся история по всем каналам |
 | GET | `/api/v1/conversations/{id}` | Один диалог |
 | GET | `/api/v1/handoffs?status=PENDING` | Очередь «передать человеку» |
-| POST | `/api/v1/handoffs/{id}/accept` · `/resolve` | Менеджер взял / закрыл |
+| POST | `/api/v1/handoffs/{id}/accept` · `/resolve` | Менеджер взял диалог (агент замолкает) / вернул агенту |
+| POST | `/api/v1/conversations/{id}/messages` | Записать сообщение менеджера в историю |
 | GET · POST | `/api/v1/knowledge` | База знаний бизнеса |
 | POST | `/api/v1/meetings` | Встреча вручную |
 | GET | `/api/v1/metrics` | Цифры для еженедельного отчёта клиенту |
@@ -64,11 +89,20 @@ curl -X POST https://api.example.com/api/v1/messages \
 
 В ответе важно:
 
+- `send_reply` — **если `false`, ничего не отправлять**: диалог ведёт менеджер;
 - `response_text` — что отправить клиенту;
+- `duplicate` — провайдер прислал тот же `message_id` повторно. Ответ взят из истории, модель не вызывалась. Отправлять повторно не нужно, если первый ответ уже ушёл;
 - `handoff_required` + `handoff_reason` — показать в кабинете и уведомить менеджера;
 - `customer_id`, `conversation_id` — ссылки для кабинета;
 - `actions` — встреча, запрос телефона;
 - заголовок `X-Correlation-Id` — по нему запрос находится в логах.
+
+### Менеджер забирает диалог
+
+1. Агент создал передачу → карточка в Telegram и в `GET /handoffs?status=PENDING`.
+2. Менеджер жмёт «Взять» в кабинете → `POST /handoffs/{id}/accept`. С этого момента агент на новые сообщения клиента отвечает `send_reply: false`, но пишет их в историю.
+3. Менеджер пишет клиенту из кабинета: адаптер канала отправляет текст в WhatsApp/Telegram и записывает его через `POST /conversations/{id}/messages`.
+4. Закончил → `POST /handoffs/{id}/resolve`, агент снова отвечает сам и видит в истории, что говорил менеджер.
 
 ### Ошибки
 

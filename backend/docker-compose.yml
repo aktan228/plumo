@@ -27,7 +27,7 @@ services:
       STT_PROVIDER: mock
       TTS_PROVIDER: mock
       LANGUAGE_DETECTOR: mock
-      HANDOFF_PROVIDER: mock
+      HANDOFF_PROVIDER: ${HANDOFF_PROVIDER:-mock}
       ROUTER: rules
       DEFAULT_LANGUAGE: ru
       LOG_LEVEL: INFO

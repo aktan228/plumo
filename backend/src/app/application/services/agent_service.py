@@ -36,6 +36,7 @@ from app.domain.ports import (
     BusinessStore,
     ConversationStore,
     EventBus,
+    HandoffStore,
     KnowledgeRetriever,
     LanguageDetector,
     LLMProvider,
@@ -76,6 +77,7 @@ class AgentService:
         confidence_threshold: float = 0.7,
         default_language: str = "ru",
         default_business_id: str | None = None,
+        handoffs: HandoffStore | None = None,
     ) -> None:
         self.resolver = resolver
         self.memory = memory
@@ -94,6 +96,7 @@ class AgentService:
         self.confidence_threshold = confidence_threshold
         self.default_language = default_language
         self.default_business_id = default_business_id
+        self.handoffs = handoffs
 
     async def process_message(self, message: InboundMessage) -> AgentResponse:
         started = time.perf_counter()
@@ -110,6 +113,11 @@ class AgentService:
 
         business = await self._business(message.business_id)
         conversation = await self._conversation(customer.id, message.channel)
+        if message.message_id:
+            seen = await self.messages.find_by_external_id(conversation.id, message.message_id)
+            if seen is not None:
+                # Webhook retry: answer with the stored reply, do not run or bill twice.
+                return await self._replay(seen, customer.id, language, correlation_id, started)
         incoming = await self._store_user_message(message, customer.id, conversation.id)
         await self.events.publish(
             DomainEvent(
@@ -122,6 +130,10 @@ class AgentService:
                 },
             )
         )
+
+        if self.handoffs is not None and await self.handoffs.find_accepted(conversation.id):
+            # A manager took this dialog. The message is in history; the agent stays quiet.
+            return _paused_response(customer.id, conversation.id, language, correlation_id, started)
 
         summary = await self.memory.get_summary(customer.id)
         history = await self.messages.list_for_customer(customer.id, limit=20)
@@ -395,6 +407,30 @@ class AgentService:
             return hint
         return self.default_language
 
+    async def _replay(self, seen: Message, customer_id: UUID, language: str, correlation_id: str, started: float) -> AgentResponse:
+        reply = await self.messages.reply_after(seen)
+        meta = reply.metadata if reply else {}
+        return AgentResponse(
+            response_text=reply.text if reply else "",
+            customer_id=customer_id,
+            conversation_id=seen.conversation_id,
+            model_used=str(meta.get("model") or "none"),
+            route=str(meta.get("route") or "duplicate"),
+            route_reason="duplicate_message",
+            confidence=1.0,
+            actions=[],
+            handoff_required=bool(meta.get("handoff")),
+            handoff_reason=None,
+            knowledge_sources=[],
+            usage=Usage(0, 0, 0.0, int((time.perf_counter() - started) * 1000)),
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            logs=["duplicate_message"],
+            language=language,
+            correlation_id=correlation_id,
+            send_reply=reply is not None,
+            duplicate=True,
+        )
+
     async def resolve_business(self, explicit: UUID | None = None):
         """Business for a turn: explicit id, configured default, or the only one."""
 
@@ -471,6 +507,29 @@ def _as_assistant_preview(conversation: Conversation, customer_id: UUID, text: s
         timestamp=now,
         metadata={},
         created_at=now,
+    )
+
+
+def _paused_response(customer_id: UUID, conversation_id: UUID, language: str, correlation_id: str, started: float) -> AgentResponse:
+    latency_ms = int((time.perf_counter() - started) * 1000)
+    return AgentResponse(
+        response_text="",
+        customer_id=customer_id,
+        conversation_id=conversation_id,
+        model_used="none",
+        route="human",
+        route_reason="manager_active",
+        confidence=1.0,
+        actions=[],
+        handoff_required=True,
+        handoff_reason="manager_active",
+        knowledge_sources=[],
+        usage=Usage(0, 0, 0.0, latency_ms),
+        latency_ms=latency_ms,
+        logs=["manager_active"],
+        language=language,
+        correlation_id=correlation_id,
+        send_reply=False,
     )
 
 

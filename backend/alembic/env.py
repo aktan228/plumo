@@ -4,25 +4,26 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import get_settings
 from app.infrastructure.database.base import Base
 from app.infrastructure.database import models  # noqa: F401
+from app.infrastructure.database.session import create_engine, normalize_database_url
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Not written into the ini config: configparser treats "%" in a URL-encoded
+# Supabase password as interpolation and fails.
+DATABASE_URL = normalize_database_url(get_settings().database_url)
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=get_settings().database_url,
+        url=DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -39,13 +40,7 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    section = config.get_section(config.config_ini_section, {})
-    section["sqlalchemy.url"] = get_settings().database_url
-    connectable = async_engine_from_config(
-        section,
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connectable = create_engine(DATABASE_URL, null_pool=True)
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()

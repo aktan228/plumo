@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     openrouter_small_model: str = "google/gemini-2.5-flash"
     openrouter_big_model: str = "google/gemini-2.5-flash"
     openrouter_base_url: str = "https://openrouter.ai/api/v1/chat/completions"
+    # Google AI Studio, OpenAI-compatible endpoint. Key: GEMINI_API_KEY.
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    gemini_small_model: str = "gemini-2.5-flash-lite"
+    gemini_big_model: str = "gemini-2.5-flash"
+    # Any other OpenAI-compatible vendor. Key: LLM_API_KEY.
+    llm_base_url: str = "https://api.deepseek.com/chat/completions"
+    llm_small_model: str = "deepseek-chat"
+    llm_big_model: str = "deepseek-chat"
     # Voice platform behind the phone number. Its secrets are read from
     # ELEVENLABS_LLM_TOKEN and ELEVENLABS_WEBHOOK_SECRET, not stored here.
     voice_platform: str = "elevenlabs"

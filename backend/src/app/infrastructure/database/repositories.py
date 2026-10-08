@@ -294,6 +294,35 @@ class MessageRepository:
         rows.reverse()
         return [_message(row) for row in rows]
 
+    async def find_by_external_id(self, conversation_id: UUID, external_id: str) -> Message | None:
+        stmt = (
+            select(MessageRow)
+            .where(
+                MessageRow.conversation_id == conversation_id,
+                MessageRow.role == "user",
+                MessageRow.metadata_json["external_message_id"].astext == external_id,
+            )
+            .limit(1)
+        )
+        row = await self.session.scalar(stmt)
+        return _message(row) if row else None
+
+    async def reply_after(self, message: Message) -> Message | None:
+        """The assistant turn written right after `message`, if any."""
+
+        stmt = (
+            select(MessageRow)
+            .where(
+                MessageRow.conversation_id == message.conversation_id,
+                MessageRow.role == "assistant",
+                MessageRow.created_at >= message.created_at,
+            )
+            .order_by(MessageRow.created_at.asc())
+            .limit(1)
+        )
+        row = await self.session.scalar(stmt)
+        return _message(row) if row else None
+
 
 class KnowledgeRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -417,6 +446,18 @@ class HandoffRepository:
             HandoffRequestRow.conversation_id == conversation_id,
             HandoffRequestRow.reason == reason,
             HandoffRequestRow.status.in_(("PENDING", "ACCEPTED")),
+        )
+        row = await self.session.scalar(stmt)
+        return _handoff(row) if row else None
+
+    async def find_accepted(self, conversation_id: UUID) -> HandoffRequest | None:
+        stmt = (
+            select(HandoffRequestRow)
+            .where(
+                HandoffRequestRow.conversation_id == conversation_id,
+                HandoffRequestRow.status == "ACCEPTED",
+            )
+            .limit(1)
         )
         row = await self.session.scalar(stmt)
         return _handoff(row) if row else None

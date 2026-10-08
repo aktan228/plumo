@@ -2,7 +2,7 @@
 
 Plumo — ядро AI-менеджера по продажам. Один клиент, одна карточка, одна история, даже если он пишет из WhatsApp, Instagram, Telegram и потом звонит.
 
-Подключить бэк к кабинету, каналам или серверу: [FULLSTACK.md](FULLSTACK.md). Коротко для лида: [LEAD.md](LEAD.md). Живая модель или канал: [INTEGRATION.md](INTEGRATION.md). Звонки: [VOICE.md](VOICE.md). Как агент разговаривает: [docs/CONVERSATION.md](docs/CONVERSATION.md).
+Подключить бэк к кабинету, каналам или серверу: [FULLSTACK.md](FULLSTACK.md). Коротко для лида: [LEAD.md](LEAD.md). Живая модель или канал: [INTEGRATION.md](INTEGRATION.md). Звонки: [VOICE.md](VOICE.md). Какую модель брать: [docs/MODELS.md](docs/MODELS.md). Как агент разговаривает: [docs/CONVERSATION.md](docs/CONVERSATION.md).
 
 Сейчас текстовая модель подключается через OpenRouter. При `AI_MODE=production` ядро вызывает Gemini 2.5 Flash. Телефонные звонки идут через ElevenLabs Agents, Plumo подключён к нему как Custom LLM: [VOICE.md](VOICE.md). Порты STT/TTS для голосовых сообщений в чатах пока mock. Каналы WhatsApp/Telegram ещё не живые.
 
@@ -45,10 +45,10 @@ src/app/container.py      единственное место сборки за�
 
 ## Как запустить
 
-Нужны Docker, Python 3.12 и PowerShell из корня репозитория.
+Нужны Python 3.12+ и PowerShell из корня репозитория. Базу можно поднять без Docker: `.\scripts\local-db.ps1 start`, или указать Supabase в `DATABASE_URL` (подробнее в [FULLSTACK.md](FULLSTACK.md)).
 
 ```powershell
-docker compose up -d db
+docker compose up -d db   # или .\scripts\local-db.ps1 start
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"

@@ -26,6 +26,9 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
         app.state.runtime = runtime or build_runtime(settings)
         yield
         await app.state.runtime.providers.aclose()
+        close = getattr(app.state.runtime.handoff_provider, "aclose", None)
+        if close is not None:
+            await close()
         if app.state.runtime.owns_engine:
             await app.state.runtime.engine.dispose()
 

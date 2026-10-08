@@ -21,6 +21,7 @@ class Language(StrEnum):
 class MessageRole(StrEnum):
     user = "user"
     assistant = "assistant"
+    manager = "manager"
     system = "system"
 
 

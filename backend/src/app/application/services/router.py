@@ -61,7 +61,10 @@ class RuleBasedRouter:
 
     @staticmethod
     def _ambiguous_catalog(signals, hits) -> bool:
-        return bool(signals.factual and len(hits) >= 2 and not signals.numbers and not signals.installment)
+        if not (signals.factual and len(hits) >= 2 and not signals.numbers and not signals.installment):
+            return False
+        # "Квартира на Чуй ещё продаётся?" names one listing: not a comparison.
+        return hits[0].score < hits[1].score + 2
 
     @staticmethod
     def _simple_hit(signals, hits) -> bool:
@@ -69,4 +72,6 @@ class RuleBasedRouter:
             return False
         if len(hits) == 1:
             return True
-        return bool(signals.numbers and hits[0].score >= hits[1].score + 3)
+        if signals.numbers:
+            return hits[0].score >= hits[1].score + 3
+        return hits[0].score >= hits[1].score + 2

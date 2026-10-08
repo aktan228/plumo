@@ -210,3 +210,56 @@ def test_budget_for_three_is_a_recommend():
     assert signals.recommend is True
     assert signals.money is True
     assert signals.human_request is False
+
+
+# --- regressions found by the live eval (app.eval_live) --------------------
+
+
+class _Store:
+    def __init__(self, items):
+        self.items = items
+
+    async def list_active(self, business_id):
+        return self.items
+
+
+async def test_cheaper_returns_catalog_by_price_without_sold_or_rent():
+    items = [
+        _item("2-комнатная квартира, цена 85000 USD. Статус: доступна.", title="Квартира на Чуй"),
+        _item("Студия, цена 39000 USD. Статус: доступна.", title="Студия на Ахунбаева"),
+        _item("2-комнатная, цена 79000 USD. Статус: продана, не предлагать.", title="Советская"),
+        _item("Аренда 450 USD в месяц.", title="Аренда на Токтогула"),
+    ]
+    hits = await SimpleKnowledgeRetriever(_Store(items)).retrieve(uuid4(), "а можно дешевле что-нибудь?")
+    assert [hit.item.title for hit in hits] == ["Студия на Ахунбаева", "Квартира на Чуй"]
+
+
+async def test_kyrgyz_suffix_still_finds_the_listing():
+    items = [
+        _item("Студия, район Ахунбаева, цена 39000 USD.", title="Студия на Ахунбаева"),
+        _item("4-комнатная, микрорайон Джал, цена 165000 USD.", title="Четырёхкомнатная на Джале"),
+    ]
+    hits = await SimpleKnowledgeRetriever(_Store(items)).retrieve(uuid4(), "Салам, Джалдагы квартиранын баасы канча?")
+    assert hits[0].item.title == "Четырёхкомнатная на Джале"
+
+
+def test_weekday_meeting_lands_on_that_weekday():
+    from app.domain.scheduling import BUSINESS_TZ, parse_slot
+
+    now = datetime(2026, 10, 8, 6, 0, tzinfo=UTC)  # Thursday in Bishkek
+    slot = parse_slot("давайте посмотрим в субботу в 11:00", {}, now)
+    assert (slot.weekday(), slot.day, slot.hour) == (5, 10, 11)
+    assert slot.tzinfo == BUSINESS_TZ
+
+
+def test_lets_view_is_a_meeting():
+    assert analyze_message("давайте посмотрим однушку у Филармонии").meeting
+    assert analyze_message("запишите меня на субботу").meeting
+
+
+def test_cut_off_json_never_reaches_the_customer():
+    from app.infrastructure.ai.openrouter_llm import parse_generation_json
+
+    parsed = parse_generation_json('{\n  "text": "Жакшы, ойлонуп көрүңүз. Сизге')
+    assert parsed["text"] == "Жакшы, ойлонуп көрүңүз."
+    assert parse_generation_json('{"text": "Сизге')["text"] == ""

@@ -111,7 +111,9 @@ async def agent(session, runtime):
 
 
 @pytest.fixture
-async def client(engine: AsyncEngine, settings: Settings):
+async def client(engine: AsyncEngine, settings: Settings, monkeypatch):
+    # A developer .env with PLUMO_API_KEY must not turn the contract tests into 401s.
+    monkeypatch.delenv("PLUMO_API_KEY", raising=False)
     factory = create_session_factory(engine)
     async with factory() as db_session:
         for table in reversed(Base.metadata.sorted_tables):

@@ -249,3 +249,37 @@ def test_bad_model_datetime_does_not_crash() -> None:
 def test_json_reply_without_text_is_not_sent_raw() -> None:
     parsed = parse_generation_json('{"text": "", "handoff_required": true, "confidence": 0.2}')
     assert parsed["text"] == ""
+
+
+# --- Telegram handoff ------------------------------------------------------
+
+
+async def test_telegram_card_and_failure_does_not_raise() -> None:
+    import httpx
+
+    from app.domain.models import HandoffRequest
+    from app.infrastructure.handoff.telegram_provider import TelegramHandoffProvider, render
+
+    now = datetime.now(UTC)
+    handoff = HandoffRequest(
+        uuid4(), uuid4(), uuid4(), "no_knowledge", "normal", "Спрашивал про рассрочку",
+        [{"role": "user", "text": "А рассрочка <есть>?"}, {"role": "assistant", "text": "Уточню у менеджера"}],
+        "PENDING", now, now,
+    )
+    card = render(handoff, "https://app.plumo.kg")
+    assert "Вопрос вне базы" in card
+    assert "&lt;есть&gt;" in card
+    assert f"/conversations/{handoff.conversation_id}" in card
+
+    sent = []
+
+    def ok(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"ok": True})
+
+    provider = TelegramHandoffProvider(token="t", chat_id="42", transport=httpx.MockTransport(ok))
+    await provider.notify(handoff)
+    assert sent[0]["chat_id"] == "42"
+
+    broken = TelegramHandoffProvider(token="t", chat_id="42", transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+    await broken.notify(handoff)  # logged, not raised

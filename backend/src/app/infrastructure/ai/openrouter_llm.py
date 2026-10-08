@@ -1,4 +1,8 @@
-"""OpenRouter LLM adapter. AgentService never imports this module."""
+"""OpenAI-compatible chat adapter: OpenRouter, Gemini direct, DeepSeek, OpenAI.
+
+AgentService never imports this module. A vendor is a base URL, a key and a
+model id; the request and the JSON reply contract are the same for all of them.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +25,9 @@ from app.domain.models import (
     Message,
     RouteDecision,
     SummaryDraft,
+    utcnow,
 )
+from app.domain.scheduling import BUSINESS_TZ
 from app.infrastructure.ai.mock_llm import MockLLMProvider
 
 logger = logging.getLogger("plumo.openrouter")
@@ -29,10 +35,24 @@ logger = logging.getLogger("plumo.openrouter")
 _ALLOWED_ACTIONS = {item.value for item in ActionType}
 _JSON_FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
 _DEFAULT_URL = "https://openrouter.ai/api/v1/chat/completions"
+_SPEAKER = {"user": "Клиент", "assistant": "Вы", "manager": "Менеджер (живой человек)"}
+
+
+# USD per 1M tokens (input, output) for vendors that do not return a cost.
+# OpenRouter returns `usage.cost` itself. Check prices before a pilot.
+PRICES: dict[str, tuple[float, float]] = {
+    "gemini-2.5-flash-lite": (0.10, 0.40),
+    "gemini-2.5-flash": (0.30, 2.50),
+    "gemini-3.1-flash-lite": (0.25, 1.50),
+    "gemini-3-flash": (0.50, 3.00),
+    "gpt-5-nano": (0.05, 0.40),
+    "gpt-5-mini": (0.25, 2.00),
+    "deepseek-chat": (0.28, 0.42),
+}
 
 
 class OpenRouterLLMProvider:
-    """Chat completions through OpenRouter. Model id is a configuration string."""
+    """Chat completions over any OpenAI-compatible endpoint. Defaults to OpenRouter."""
 
     def __init__(
         self,
@@ -40,22 +60,32 @@ class OpenRouterLLMProvider:
         model: str,
         *,
         api_key: str | None = None,
+        api_key_env: str = "OPENROUTER_API_KEY",
         base_url: str | None = None,
+        vendor: str = "OpenRouter",
+        extra_body: dict[str, Any] | None = None,
+        max_tokens: int = 600,
         timeout_s: float = 45.0,
         referer: str = "https://github.com/aktan228/plumo",
         title: str = "Plumo",
     ) -> None:
         self.name = name
         self.model = model
-        self.api_key = (api_key if api_key is not None else os.getenv("OPENROUTER_API_KEY", "")).strip()
-        self.base_url = (base_url or os.getenv("OPENROUTER_BASE_URL") or _DEFAULT_URL).rstrip("/")
+        self.vendor = vendor
+        self.api_key = (api_key if api_key is not None else os.getenv(api_key_env, "")).strip()
+        default_url = os.getenv("OPENROUTER_BASE_URL") if vendor == "OpenRouter" else None
+        self.base_url = (base_url or default_url or _DEFAULT_URL).rstrip("/")
+        self.extra_body = dict(extra_body or {})
+        # Caps a chatty reply and keeps OpenRouter from reserving credit for
+        # its default (huge) output limit, which fails with 402 on low balance.
+        self.max_tokens = max_tokens
         self.timeout_s = timeout_s
         self.referer = referer
         self.title = title
         self._local = MockLLMProvider("local_memory", "small")
         self._client: httpx.AsyncClient | None = None
         if not self.api_key:
-            raise ProviderUnavailable("OPENROUTER_API_KEY is empty")
+            raise ProviderUnavailable(f"{api_key_env} is empty")
 
     async def complete(self, user_text: str) -> dict:
         """One-shot probe. Not used by AgentService."""
@@ -123,6 +153,11 @@ class OpenRouterLLMProvider:
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
+            "max_tokens": self.max_tokens,
+            # Every Plumo prompt asks for one JSON object; JSON mode makes the
+            # free and small models stop wrapping it in prose.
+            "response_format": {"type": "json_object"},
+            **self.extra_body,
         }
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -133,19 +168,19 @@ class OpenRouterLLMProvider:
         try:
             response = await self._http().post(self.base_url, headers=headers, json=body)
         except httpx.HTTPError as exc:
-            logger.warning("openrouter network error")
-            raise ProviderUnavailable("OpenRouter is unreachable") from exc
+            logger.warning("llm network error", extra={"vendor": self.vendor})
+            raise ProviderUnavailable(f"{self.vendor} is unreachable") from exc
         if response.status_code >= 400:
-            logger.warning("openrouter http %s", response.status_code)
-            raise ProviderUnavailable(_public_error(response.status_code, response.text))
+            logger.warning("llm http %s", response.status_code, extra={"vendor": self.vendor})
+            raise ProviderUnavailable(_public_error(self.vendor, response.status_code))
         try:
             data = response.json()
         except json.JSONDecodeError as exc:
-            raise ProviderUnavailable("OpenRouter returned a non-JSON body") from exc
+            raise ProviderUnavailable(f"{self.vendor} returned a non-JSON body") from exc
         text = _choice_text(data)
         if not text:
-            raise ProviderUnavailable("OpenRouter returned an empty reply")
-        return {"text": text, "usage": _usage(data)}
+            raise ProviderUnavailable(f"{self.vendor} returned an empty reply")
+        return {"text": text, "usage": _usage(data, self.model)}
 
 
     def _http(self) -> httpx.AsyncClient:
@@ -164,7 +199,11 @@ class OpenRouterLLMProvider:
 def parse_generation_json(raw: str) -> dict[str, Any]:
     parsed = parse_json_object(raw)
     if parsed is None:
-        return {"text": raw.strip(), "actions": [], "handoff_required": False, "confidence": 0.7}
+        stripped = raw.strip()
+        if stripped.startswith("{") or '"text"' in stripped:
+            # Cut-off JSON: keep whole sentences of "text", never show braces.
+            return {"text": salvage_text(stripped), "actions": [], "handoff_required": False, "confidence": 0.5}
+        return {"text": stripped, "actions": [], "handoff_required": False, "confidence": 0.7}
     # A JSON reply without text must stay empty: the core then uses a grounded
     # fallback. Echoing `raw` here would send the JSON itself to the customer.
     text = str(parsed.get("text") or parsed.get("response_text") or "").strip()
@@ -175,6 +214,26 @@ def parse_generation_json(raw: str) -> dict[str, Any]:
         "handoff_reason": parsed.get("handoff_reason"),
         "confidence": parsed.get("confidence"),
     }
+
+
+def salvage_text(raw: str) -> str:
+    """Complete sentences from an unterminated `"text": "..."`, or empty."""
+
+    match = re.search(r'"text"\s*:\s*"((?:[^"\\]|\\.)*)', raw)
+    if not match:
+        return ""
+    try:
+        text = json.loads(f'"{match.group(1)}"')
+    except json.JSONDecodeError:
+        text = match.group(1)
+    end = max(text.rfind("."), text.rfind("!"), text.rfind("?"))
+    return text[: end + 1].strip() if end >= 0 else ""
+
+
+def _now_line() -> str:
+    now = utcnow().astimezone(BUSINESS_TZ)
+    days = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")
+    return f"{days[now.weekday()]}, {now:%Y-%m-%d %H:%M}"
 
 
 def parse_json_object(raw: str) -> dict[str, Any] | None:
@@ -210,7 +269,7 @@ def _system_prompt(context: AgentContext) -> str:
     if context.customer.phone:
         known.append("телефон уже есть, не спрашивай")
     history = "\n".join(
-        f"{'Клиент' if item.role == 'user' else 'Вы'}: {item.text}" for item in context.recent_messages
+        f"{_SPEAKER.get(item.role, 'Вы')}: {item.text}" for item in context.recent_messages
     ) or "(это первое сообщение — поздоровайся коротко)"
     return (
         f"{context.agent_instructions}\n\n"
@@ -224,6 +283,7 @@ def _system_prompt(context: AgentContext) -> str:
         "Если просят совет, вариант дешевле или на сколько человек — выбери подходящие объекты отсюда и назови цену. "
         "Если подходящие объекты есть, не отправляй к менеджеру.\n\n"
         "# Клиент\n"
+        f"Сейчас: {_now_line()} (Бишкек). Дни недели считай от этой даты.\n"
         f"Язык: {context.language}\n"
         f"Что помним: {summary}\n"
         f"Уже знаем: {', '.join(known + facts) or '-'}\n\n"
@@ -273,13 +333,14 @@ def _choice_text(data: dict[str, Any]) -> str:
     return ""
 
 
-def _usage(data: dict[str, Any]) -> dict[str, Any]:
+def _usage(data: dict[str, Any], model: str = "") -> dict[str, Any]:
     usage = data.get("usage") or {}
     input_tokens = int(usage.get("prompt_tokens") or 0)
     output_tokens = int(usage.get("completion_tokens") or 0)
     cost = usage.get("cost")
     if cost is None:
-        cost = (input_tokens * 0.15 + output_tokens * 0.60) / 1_000_000
+        price_in, price_out = price_for(model)
+        cost = (input_tokens * price_in + output_tokens * price_out) / 1_000_000
     return {
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
@@ -302,11 +363,21 @@ def _optional_str(value: Any) -> str | None:
     return text or None
 
 
-def _public_error(status: int, body: str) -> str:
+def price_for(model: str) -> tuple[float, float]:
+    """Longest matching price key wins: "gemini-2.5-flash-lite" before "gemini-2.5-flash"."""
+
+    bare = model.rsplit("/", 1)[-1]
+    for key in sorted(PRICES, key=len, reverse=True):
+        if bare.startswith(key):
+            return PRICES[key]
+    return (0.30, 2.50)
+
+
+def _public_error(vendor: str, status: int) -> str:
     if status in (401, 403):
-        return "OpenRouter rejected the API key"
+        return f"{vendor} rejected the API key"
     if status == 402:
-        return "OpenRouter has no remaining credits"
+        return f"{vendor} has no remaining credits"
     if status == 429:
-        return "OpenRouter rate limit"
-    return f"OpenRouter HTTP {status}"
+        return f"{vendor} rate limit"
+    return f"{vendor} HTTP {status}"

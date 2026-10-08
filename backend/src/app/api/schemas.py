@@ -115,6 +115,19 @@ class AgentResponseOut(BaseModel):
     language: str
     correlation_id: str | None = None
     handoff_id: UUID | None = None
+    send_reply: bool = Field(
+        default=True,
+        description="False: ничего не отправлять клиенту, диалог ведёт менеджер.",
+    )
+    duplicate: bool = Field(
+        default=False,
+        description="True: канал прислал то же сообщение повторно, ответ взят из истории.",
+    )
+
+
+class ManagerMessageIn(BaseModel):
+    text: str = Field(min_length=1, max_length=4000, examples=["Добрый день! Это Азамат, менеджер. Квартира на Чуй свободна, когда удобно посмотреть?"])
+    author: str | None = Field(default=None, max_length=100, examples=["Азамат"])
 
 
 class TranscriptOut(BaseModel):
