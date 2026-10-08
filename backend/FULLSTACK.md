@@ -4,36 +4,50 @@
 
 ## 1. Запуск
 
-Нужен Python 3.12+. Есть три способа получить базу, остальное одинаково.
+Нужен Python 3.12+ ([python.org](https://www.python.org/downloads/), галочка «Add to PATH»). Все команды из корня проекта.
+
+### Windows: одна команда
 
 ```powershell
-git clone <repo>; cd plumo
-copy .env.example .env
-python -m venv .venv; .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+cd C:\путь\к\Plumo
+.\dev.cmd setup     # первый раз: .venv, зависимости, .env
+.\dev.cmd up        # база + миграции + демо-данные + API → http://127.0.0.1:8000/docs
 ```
 
-**База — один из вариантов:**
+`dev.cmd` сам берёт Python из `.venv`, активировать окружение не нужно, и политику выполнения PowerShell менять не нужно. Остальные команды: `.\dev.cmd db | db-stop | seed | run | demo | test | eval`.
 
-| Вариант | Команда | Когда |
+Частые ошибки:
+
+| Ошибка | Причина | Что делать |
 | --- | --- | --- |
-| Локально без Docker (Windows) | `.\scripts\local-db.ps1 start` | по умолчанию. Скачает Postgres 16 в `.tools/` один раз |
+| `Имя ".\scripts\..." не распознано` | команда запущена не из папки проекта | `cd` в корень Plumo |
+| `выполнение сценариев отключено` | PowerShell блокирует `.ps1` | `.\dev.cmd ...`, он обходит это сам |
+| `python` печатает «Python» и молчит | заглушка Microsoft Store вместо Python | установить Python с python.org или запускать через `.\dev.cmd` |
+| `uvicorn не распознано` | `.venv` не активировано | `.\dev.cmd run` |
+| `Connection refused :5432` | база не запущена | `.\dev.cmd db` |
+
+### База: варианты
+
+| Вариант | Как | Когда |
+| --- | --- | --- |
+| Локально без Docker (Windows) | `.\dev.cmd db` | по умолчанию. Скачает Postgres 16 в `.tools/` один раз |
 | Docker | `docker compose up -d db` | если Docker уже стоит |
 | Supabase | в `.env`: `DATABASE_URL=<строка "Transaction pooler" из Supabase как есть>` | общая база для команды без сервера |
 
-```powershell
-python -m app.seed                 # миграции + демо-бизнес и база знаний
-uvicorn app.main:app --reload      # http://localhost:8000/docs
+### macOS / Linux
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
+cp .env.example .env
+docker compose up -d db        # или Supabase в DATABASE_URL
+python -m app.seed && uvicorn app.main:app --reload
 ```
 
-Проверка: http://localhost:8000/health → `{"status":"ok"}`.
-
-Проверить ядро целиком:
+### Проверить ядро целиком
 
 ```powershell
-pytest                                   # 69 тестов, нужна база
-$env:AI_MODE="mock"; python -m app.marathon   # 28 диалогов, склейка клиентов, нагрузка (на чистой базе)
-python -m app.eval_live                  # живая модель: 10 реплик, тон, цена, задержка
+.\dev.cmd test                       # 69 тестов, нужна база
+.\dev.cmd eval                       # живая модель: 10 реплик, тон, цена, задержка
 ```
 
 ## 2. Переменные окружения

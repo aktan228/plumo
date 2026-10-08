@@ -45,6 +45,15 @@ src/app/container.py      единственное место сборки за�
 
 ## Как запустить
 
+Windows, из корня проекта:
+
+```powershell
+.\dev.cmd setup   # один раз
+.\dev.cmd up      # база + демо-данные + API → http://127.0.0.1:8000/docs
+```
+
+Подробнее и про ошибки PowerShell: [FULLSTACK.md](FULLSTACK.md). Ручной вариант ниже.
+
 Нужны Python 3.12+ и PowerShell из корня репозитория. Базу можно поднять без Docker: `.\scripts\local-db.ps1 start`, или указать Supabase в `DATABASE_URL` (подробнее в [FULLSTACK.md](FULLSTACK.md)).
 
 ```powershell
