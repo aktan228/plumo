@@ -29,6 +29,7 @@ from app.domain.models import (
     SummaryDraft,
     Transcript,
     UsageLog,
+    VoiceCall,
 )
 
 
@@ -193,3 +194,9 @@ class LogStore(Protocol):
 
 class MetricsStore(Protocol):
     async def collect(self) -> MetricsSnapshot: ...
+
+
+class VoiceCallStore(Protocol):
+    async def get_by_provider_id(self, provider: str, provider_call_id: str) -> VoiceCall | None: ...
+
+    async def save(self, call: VoiceCall) -> VoiceCall: ...

@@ -56,7 +56,7 @@ RU_MARKERS = frozenset(
     }
 )
 
-GREETING = ("здравствуйте", "привет", "добрый день", "добрый вечер", "салам", "hello", "hi")
+GREETING = ("здравствуйте", "привет", "приветствую", "добрый день", "добрый вечер", "салам", "hello", "hi")
 FAREWELL = ("до свидания", "пока", "всего доброго", "жакшы калыныз")
 CLEAR_CONFIRM = frozenset({"да", "нет", "ок", "хорошо", "ооба", "жок"})
 UNCLEAR_CONFIRM = frozenset({"ну", "угу", "ага", "хм", "эм"})
@@ -70,7 +70,17 @@ HUMAN = (
     "соедините",
     "адам",
 )
-MEETING = ("встреч", "встретиться", "посмотреть квартиру", "записать", "жолугу", "покажите объект")
+MEETING = (
+    "встреч",
+    "встретиться",
+    "посмотреть квартир",
+    "покажите квартир",
+    "показать квартир",
+    "покажите объект",
+    "просмотр",
+    "записать",
+    "жолугу",
+)
 INSTALLMENT = ("рассроч", "ипотек", "кредит")
 MONEY = ("дорого", "скидк", "торг", "дешевле", "бюджет")
 COMPARISON = ("сравн", "чем отличается", "какая лучше", "или ту", "разниц")
@@ -83,6 +93,27 @@ AVAILABILITY = ("продае", "доступ", "в наличии", "еще п�
 PRICE = ("цена", "стоит", "сколько", "баа")
 HOT = ("беру", "покупаю", "оформляем", "готов купить", "задаток", "брониру")
 PROPERTY = ("квартир", "комнат", "этаж", "объект", "метраж")
+CATALOG = (
+    "товар",
+    "ассортимент",
+    "вариант",
+    "что есть",
+    "какие есть",
+    "что прода",
+    "что предлага",
+)
+RECOMMEND = (
+    "посовет",
+    "что взять",
+    "что выбрать",
+    "для двоих",
+    "для двух",
+    "для троих",
+    "для трех",
+    "для трёх",
+    "для 3",
+    "на семью",
+)
 
 PHONE_RE = re.compile(
     r"(?:\+\d[\d\-\s()]{8,18}\d)|(?:(?<!\d)(?:996|0)\d[\d\-\s()]{7,16}\d)"
@@ -102,6 +133,18 @@ def normalize_phone(raw: str) -> str | None:
     if len(digits) < 10 or len(digits) > 15:
         return None
     return f"+{digits}"
+
+
+def phone_from_id(external_id: str) -> str | None:
+    """Phone from a channel id that is a phone number and nothing else.
+
+    `normalize_phone` drops every non-digit, so "call:CA1234567890" would
+    become a phone. Channel ids must look like a number before they are one.
+    """
+
+    if not re.fullmatch(r"\+?[\d\s\-()]{9,22}", external_id.strip()):
+        return None
+    return normalize_phone(external_id)
 
 
 def find_phones(text: str) -> list[str]:
@@ -129,6 +172,13 @@ def contains_any(text: str, needles: tuple[str, ...] | frozenset[str]) -> bool:
     return any(needle in hay for needle in needles)
 
 
+def contains_word(text: str, words: tuple[str, ...] | frozenset[str]) -> bool:
+    """Whole-word match. Needed for short words: "пока" must not fire on "покажите"."""
+
+    hay = normalize_text(text)
+    return any(re.search(rf"(?<!\w){re.escape(word)}(?!\w)", hay) for word in words)
+
+
 @dataclass(frozen=True, slots=True)
 class MessageSignals:
     language: str
@@ -150,6 +200,8 @@ class MessageSignals:
     price: bool
     hot_lead: bool
     property_details: bool
+    catalog: bool
+    recommend: bool
     numbers: tuple[str, ...]
 
     @property
@@ -164,6 +216,8 @@ class MessageSignals:
                 self.price,
                 self.property_details,
                 self.comparison,
+                self.catalog,
+                self.recommend,
                 bool(self.numbers),
             )
         )
@@ -177,6 +231,7 @@ class MessageSignals:
                 self.comparison,
                 self.objection,
                 self.emotional,
+                self.recommend,
                 self.language == "mixed",
             )
         )
@@ -201,8 +256,8 @@ def analyze_message(text: str) -> MessageSignals:
     token = normalized.strip(" !?.")
     return MessageSignals(
         language=detect_language(text),
-        greeting=contains_any(normalized, GREETING),
-        farewell=contains_any(normalized, FAREWELL),
+        greeting=contains_word(normalized, GREETING),
+        farewell=contains_word(normalized, FAREWELL),
         clear_confirmation=token in CLEAR_CONFIRM,
         unclear_confirmation=token in UNCLEAR_CONFIRM,
         human_request=contains_any(normalized, HUMAN),
@@ -219,5 +274,7 @@ def analyze_message(text: str) -> MessageSignals:
         price=contains_any(normalized, PRICE),
         hot_lead=contains_any(normalized, HOT),
         property_details=contains_any(normalized, PROPERTY),
+        catalog=contains_any(normalized, CATALOG),
+        recommend=contains_any(normalized, RECOMMEND),
         numbers=tuple(compact_numbers(text)),
     )

@@ -3,11 +3,13 @@
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.api.routes import messages, operations, customers, voice
+from app.api.deps import require_api_key
+from app.api.routes import customers, messages, operations, telephony, voice
 from app.config import Settings, get_settings
 from app.container import Runtime, build_runtime
 from app.correlation import correlation_id, request_id
@@ -23,6 +25,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
         setup_logging(settings.log_level)
         app.state.runtime = runtime or build_runtime(settings)
         yield
+        await app.state.runtime.providers.aclose()
         if app.state.runtime.owns_engine:
             await app.state.runtime.engine.dispose()
 
@@ -37,6 +40,15 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
         ),
         lifespan=lifespan,
     )
+
+    if settings.cors_origin_list:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origin_list,
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["X-Correlation-Id", "X-Request-Id"],
+        )
 
     @app.middleware("http")
     async def bind_correlation(request: Request, call_next):
@@ -80,10 +92,12 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    app.include_router(messages.router, prefix="/api/v1")
-    app.include_router(voice.router, prefix="/api/v1")
-    app.include_router(customers.router, prefix="/api/v1")
-    app.include_router(operations.router, prefix="/api/v1")
+    protected = [Depends(require_api_key)]
+    app.include_router(messages.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(voice.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(customers.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(operations.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(telephony.router, prefix="/api/v1")
     return app
 
 

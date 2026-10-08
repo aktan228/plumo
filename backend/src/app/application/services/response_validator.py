@@ -50,8 +50,8 @@ class ResponseValidator:
             return bool((context.business.contacts or {}).get("address")) or "адрес" in allowed_norm
         if signals.contacts:
             return bool(context.business.contacts)
-        if signals.comparison:
-            return len(context.knowledge) >= 2
+        if signals.comparison or signals.catalog or signals.recommend:
+            return len(context.knowledge) >= 1
         if signals.price or signals.availability or signals.property_details:
             return len(context.knowledge) > 0
         if signals.numbers:
@@ -64,6 +64,8 @@ def _topic(signals) -> str:
         return "installment"
     if signals.comparison:
         return "comparison"
+    if signals.catalog or signals.recommend:
+        return "property"
     if signals.price:
         return "price"
     if signals.availability:

@@ -43,12 +43,12 @@ class MockLLMProvider:
         signals = analyze_message(context.current_message)
         prompt = context.current_message
         if self.tier == "small" and signals.unclear_confirmation:
-            return self._out("Уточните, пожалуйста, вопрос.", 0.4, prompt=prompt)
+            return self._out("Давайте уточню: вам про квартиру, цену или просмотр?", 0.4, prompt=prompt)
         if self.tier == "small" and any(getattr(signals, name) for name in _HARD):
-            return self._out("Уточните, пожалуйста, вопрос.", 0.36, prompt=prompt)
+            return self._out("Давайте уточню: вам про квартиру, цену или просмотр?", 0.36, prompt=prompt)
         if signals.unclear_confirmation:
             return self._out(
-                "Уточните, пожалуйста, что именно вы хотите узнать: объект, цену или встречу?",
+                "Не совсем поняла. Подсказать по квартирам, ценам или записать на просмотр?",
                 0.84,
                 prompt=prompt,
             )
@@ -72,12 +72,12 @@ class MockLLMProvider:
             return self._out(_render_many(context, signals), 0.86, prompt=prompt)
         if signals.objection:
             return self._out(
-                "Понимаю вас. Могу передать диалог менеджеру, если хотите обсудить условия.",
+                "Понимаю. Можем подобрать вариант подешевле — какой бюджет вам комфортен?",
                 0.8,
                 prompt=prompt,
             )
         if signals.emotional:
-            return self._out("Мне жаль, что так вышло. Передам диалог менеджеру.", 0.88, prompt=prompt)
+            return self._out("Простите, что так получилось. Сейчас подключу менеджера, он разберётся.", 0.88, prompt=prompt)
         listing = _best_listing(context, signals)
         if listing is not None and (signals.availability or signals.price or signals.property_details or signals.numbers):
             return self._out(_render_listing(listing, signals), 0.93, prompt=prompt)
@@ -90,13 +90,13 @@ class MockLLMProvider:
         if signals.greeting and not signals.factual:
             return self._out(_greeting(context.language), 0.98, prompt=prompt)
         if signals.farewell:
-            return self._out("До свидания. Если появится вопрос, напишите.", 0.97, prompt=prompt)
+            return self._out("До свидания! Будут вопросы — пишите в любое время.", 0.97, prompt=prompt)
         if signals.clear_confirmation:
             return self._out("Хорошо.", 0.96, prompt=prompt)
         if self.tier == "small":
-            return self._out("Уточните, пожалуйста, вопрос.", 0.42, prompt=prompt)
+            return self._out("Давайте уточню: вам про квартиру, цену или просмотр?", 0.42, prompt=prompt)
         return self._out(
-            "Уточните, пожалуйста, что именно вы хотите узнать: объект, цену или встречу?",
+            "Не совсем поняла. Подсказать по квартирам, ценам или записать на просмотр?",
             0.8,
             prompt=prompt,
         )
@@ -155,8 +155,7 @@ class MockLLMProvider:
 
     def _meeting(self, context: AgentContext, prompt: str) -> LLMGeneration:
         slot = parse_slot(context.current_message, {}, utcnow())
-        stamp = slot.strftime("%Y-%m-%d %H:%M")
-        text = f"Могу предложить встречу {stamp}. Если время неудобно, напишите другое."
+        text = f"Давайте {_spoken_day(slot)} в {slot.strftime('%H:%M')}? Если неудобно — скажите, подберём другое время."
         action = Action(
             ActionType.schedule_meeting,
             {
@@ -195,10 +194,20 @@ class MockLanguageDetector:
         return detect_language(text)
 
 
+_MONTHS = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
+
+
+def _spoken_day(slot) -> str:
+    return f"{slot.day} {_MONTHS[slot.month - 1]}"
+
+
 def _greeting(language: str) -> str:
     if language == "ky":
-        return "Салам! Кандай жардам бере алам?"
-    return "Здравствуйте! Чем могу помочь?"
+        return "Салам! Кандай квартира издеп жатасыз?"
+    return "Здравствуйте! Подскажу по квартирам — что вы ищете?"
 
 
 def _corpus_has(context: AgentContext, *needles: str) -> bool:
@@ -238,9 +247,9 @@ def _render_listing(hit, signals) -> str:
     if price is not None:
         amount = int(re.sub(r"\s+", "", price.group(1)))
         pretty = f"{amount:,}".replace(",", " ")
-        lead += f"Да, объект за {pretty} USD ещё доступен."
+        lead += f"Да, квартира за {pretty} USD ещё доступна."
     elif "доступ" in normalized or signals.availability:
-        lead += "Да, объект ещё доступен."
+        lead += "Да, она ещё доступна."
     else:
         lead += f"{hit.item.title}."
     details: list[str] = []
@@ -252,11 +261,11 @@ def _render_listing(hit, signals) -> str:
         details.append(f"{floor.group(1)} этаж")
     if details:
         lead += " " + ", ".join(details) + "."
-    lead += " Подскажите, пожалуйста, вам для себя или для инвестиции?"
+    lead += " Вам для себя или под инвестицию?"
     return lead
 
 
 def _render_many(context: AgentContext, signals) -> str:
     lead = "Здравствуйте! " if signals.greeting else ""
-    lines = [f"{hit.item.title}: {hit.item.content}" for hit in context.knowledge[:5]]
-    return lead + "В базе такие объекты:\n" + "\n".join(lines)
+    lines = [f"• {hit.item.title} — {hit.item.content}" for hit in context.knowledge[:3]]
+    return lead + "Смотрите, что есть:\n" + "\n".join(lines) + "\nКакой вариант ближе?"

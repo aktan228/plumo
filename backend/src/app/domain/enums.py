@@ -66,3 +66,9 @@ class ActionType(StrEnum):
 
 
 PHONE_CHANNELS = frozenset({Channel.whatsapp, Channel.voice})
+
+
+class CallStatus(StrEnum):
+    started = "started"
+    completed = "completed"
+    failed = "failed"

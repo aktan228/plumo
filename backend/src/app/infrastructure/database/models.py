@@ -174,3 +174,23 @@ class UsageLogRow(Base):
     estimated_cost: Mapped[Decimal] = mapped_column(Numeric(12, 6))
     latency_ms: Mapped[int] = mapped_column()
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class VoiceCallRow(Base):
+    __tablename__ = "voice_calls"
+    __table_args__ = (UniqueConstraint("provider", "provider_call_id", name="uq_voice_call_provider_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32))
+    provider_call_id: Mapped[str] = mapped_column(String(128))
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
+    caller: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    called: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_s: Mapped[int] = mapped_column(default=0)
+    cost: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=0)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

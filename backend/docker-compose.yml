@@ -33,6 +33,9 @@ services:
       LOG_LEVEL: INFO
       OPENROUTER_SMALL_MODEL: ${OPENROUTER_SMALL_MODEL:-google/gemini-2.5-flash}
       OPENROUTER_BIG_MODEL: ${OPENROUTER_BIG_MODEL:-google/gemini-2.5-flash}
+      VOICE_PLATFORM: ${VOICE_PLATFORM:-elevenlabs}
+      VOICE_USD_PER_MINUTE: ${VOICE_USD_PER_MINUTE:-0}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     ports:
       - "8000:8000"
     depends_on:

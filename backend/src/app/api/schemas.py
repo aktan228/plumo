@@ -265,6 +265,9 @@ class MetricsOut(BaseModel):
     mixed_percentage: float
     average_dialog_cost: float
     handoff_rate: float
+    voice_calls: int = 0
+    voice_minutes: float = 0.0
+    voice_cost_per_minute: float = 0.0
 
 
 class ChannelEventOut(BaseModel):

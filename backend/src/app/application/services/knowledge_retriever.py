@@ -8,7 +8,22 @@ from app.domain.ports import KnowledgeStore
 from app.domain.text_signals import compact_numbers, normalize_text
 
 _TOKEN = re.compile(r"[a-zа-я0-9]+")
-_CATALOG = ("квартир", "прода", "объект", "жиль", "апарта", "каталог", "баз", "наличи", "доступ")
+_CATALOG = (
+    "квартир",
+    "прода",
+    "объект",
+    "жиль",
+    "апарта",
+    "каталог",
+    "баз",
+    "наличи",
+    "доступ",
+    "товар",
+    "ассортимент",
+    "вариант",
+    "совет",
+    "бюджет",
+)
 
 
 class SimpleKnowledgeRetriever:

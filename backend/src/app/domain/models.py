@@ -163,6 +163,7 @@ class AgentContext:
     recent_messages: list[Message]
     current_message: str
     language: str
+    channel: str = "whatsapp"
 
 
 @dataclass(slots=True)
@@ -335,6 +336,52 @@ class AudioOutput:
 
 
 @dataclass(slots=True)
+class CallTurn:
+    """One customer utterance from the voice platform."""
+
+    text: str
+    caller: str | None
+    call_id: str | None
+    called: str | None = None
+    business_id: str | None = None
+
+
+@dataclass(slots=True)
+class CallReport:
+    """What the platform reports after hang-up."""
+
+    call_id: str
+    caller: str | None
+    called: str | None
+    status: str
+    started_at: datetime
+    duration_s: int
+    provider_cost: float | None
+    transcript: list[dict[str, Any]] = field(default_factory=list)
+    raw_metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class VoiceCall:
+    """One phone call handled by the voice platform. Turns live in `messages`."""
+
+    id: UUID
+    provider: str
+    provider_call_id: str
+    customer_id: UUID | None
+    caller: str | None
+    called: str | None
+    status: str
+    started_at: datetime
+    ended_at: datetime | None
+    duration_s: int
+    cost: float
+    metadata: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(slots=True)
 class MetricsSnapshot:
     total_conversations: int
     total_messages: int
@@ -350,6 +397,9 @@ class MetricsSnapshot:
     mixed_percentage: float
     average_dialog_cost: float
     handoff_rate: float
+    voice_calls: int = 0
+    voice_minutes: float = 0.0
+    voice_cost_per_minute: float = 0.0
 
 
 @dataclass(slots=True)

@@ -73,3 +73,10 @@ class HandoffRequired(AppError):
 
     code = "handoff_required"
     http_status = 409
+
+
+class Unauthorized(AppError):
+    """A webhook or provider callback failed authentication."""
+
+    code = "unauthorized"
+    http_status = 401

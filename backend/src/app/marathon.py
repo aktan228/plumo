@@ -143,6 +143,16 @@ DIALOGUES: list[tuple[str, list[Turn]]] = [
         ],
     ),
     (
+        "products_hello",
+        [
+            Turn(
+                "привет, подскажи какие товары у вас есть",
+                external="+996700100027",
+                expect=Expect(handoff=False, forbidden=("устройств", "нейросет")),
+            )
+        ],
+    ),
+    (
         "chui_85000",
         [
             Turn(
@@ -232,7 +242,7 @@ DIALOGUES: list[tuple[str, list[Turn]]] = [
             Turn(
                 "мне нужна более дешевая квартира для двух человек",
                 external="+996700100016",
-                expect=Expect(handoff=False, forbidden=("передам диалог менеджеру",)),
+                expect=Expect(handoff=False, forbidden=("подключаю менеджера", "передаю менеджеру")),
             )
         ],
     ),

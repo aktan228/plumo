@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 from app.application.services.context_builder import ContextBuilder
 from app.application.services.customer_resolver import CustomerResolver
-from app.application.services.grounded_reply import is_unusable_reply, quote_knowledge
+from app.application.services.grounded_reply import is_unusable_reply, is_weasel_reply, quote_knowledge
 from app.application.services.handoff_service import evaluate_handoff
 from app.application.services.memory_service import MemoryService, read_unclear_count, write_unclear_count
 from app.application.services.response_validator import ResponseValidator
@@ -135,6 +135,7 @@ class AgentService:
             current_message=message.text,
             language=language,
             current_message_id=incoming.id,
+            channel=message.channel,
         )
         steps.append("knowledge:" + ",".join(hit.item.title for hit in knowledge))
 
@@ -145,20 +146,32 @@ class AgentService:
 
         signals = analyze_message(message.text)
         assessment = self.validator.assess(message.text, context)
+        # Rotates fixed lines inside one dialog so the agent does not repeat itself.
+        seed = f"{conversation.id}:{len(history)}"
         if signals.human_request:
-            response_text = human_phrase(language)
+            response_text = human_phrase(language, message.channel, seed)
         elif assessment.factual and not assessment.answerable and (
             not context.knowledge or assessment.topic == "installment"
         ):
-            response_text = unknown_phrase(assessment.topic, language)
+            response_text = unknown_phrase(assessment.topic, language, seed)
         else:
             response_text = generation.text
-        if is_unusable_reply(response_text):
-            if assessment.factual and context.knowledge:
+        wants_listings = bool(
+            context.knowledge
+            and (
+                assessment.factual
+                or signals.money
+                or signals.catalog
+                or signals.recommend
+            )
+            and assessment.topic != "installment"
+        )
+        if is_unusable_reply(response_text) or (wants_listings and is_weasel_reply(response_text)):
+            if wants_listings:
                 response_text = quote_knowledge(context)
                 steps.append("grounded_fallback")
             elif not assessment.factual:
-                response_text = role_phrase(language)
+                response_text = role_phrase(language, seed)
                 steps.append("role_fallback")
 
         actions = [item for item in generation.actions if item.type != ActionType.handoff]
@@ -173,16 +186,17 @@ class AgentService:
 
         extra = json.dumps([item.payload for item in actions], ensure_ascii=False, default=str)
         validation = self.validator.validate(response_text, context, extra=extra)
-        if not validation.safe and context.knowledge and assessment.factual:
+        if not validation.safe and wants_listings:
             response_text = quote_knowledge(context)
             validation = self.validator.validate(response_text, context, extra=extra)
             steps.append("grounded_fallback")
         if not validation.safe:
             if assessment.factual:
-                response_text = unknown_phrase(assessment.topic, language)
+                response_text = unknown_phrase(assessment.topic, language, seed)
             else:
-                response_text = role_phrase(language)
+                response_text = role_phrase(language, seed)
             steps.append(f"validator:{validation.reason}")
+            validation = self.validator.validate(response_text, context, extra=extra)
 
         unclear = read_unclear_count(summary.important_facts if summary else [])
         if signals.unclear_confirmation or (not assessment.factual and generation.confidence < 0.55):
@@ -380,6 +394,11 @@ class AgentService:
         if hint in ("ru", "ky", "mixed"):
             return hint
         return self.default_language
+
+    async def resolve_business(self, explicit: UUID | None = None):
+        """Business for a turn: explicit id, configured default, or the only one."""
+
+        return await self._business(explicit)
 
     async def _business(self, explicit: UUID | None):
         if explicit is not None:

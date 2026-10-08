@@ -24,6 +24,7 @@ from app.infrastructure.database.models import (  # noqa: F401
     MeetingRow,
     MessageRow,
     UsageLogRow,
+    VoiceCallRow,
 )
 from app.infrastructure.database.session import create_engine, create_session_factory
 from app.main import create_app

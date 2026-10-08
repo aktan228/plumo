@@ -2,9 +2,9 @@
 
 Plumo — ядро AI-менеджера по продажам. Один клиент, одна карточка, одна история, даже если он пишет из WhatsApp, Instagram, Telegram и потом звонит.
 
-Коротко для лида и бэка: [LEAD.md](LEAD.md). Как подключить живую модель или канал: [INTEGRATION.md](INTEGRATION.md).
+Подключить бэк к кабинету, каналам или серверу: [FULLSTACK.md](FULLSTACK.md). Коротко для лида: [LEAD.md](LEAD.md). Живая модель или канал: [INTEGRATION.md](INTEGRATION.md). Звонки: [VOICE.md](VOICE.md). Как агент разговаривает: [docs/CONVERSATION.md](docs/CONVERSATION.md).
 
-Сейчас текстовая модель подключается через OpenRouter. При `AI_MODE=production` ядро вызывает Gemini 2.5 Flash. Распознавание речи и озвучка пока mock. Каналы WhatsApp/Telegram ещё не живые.
+Сейчас текстовая модель подключается через OpenRouter. При `AI_MODE=production` ядро вызывает Gemini 2.5 Flash. Телефонные звонки идут через ElevenLabs Agents, Plumo подключён к нему как Custom LLM: [VOICE.md](VOICE.md). Порты STT/TTS для голосовых сообщений в чатах пока mock. Каналы WhatsApp/Telegram ещё не живые.
 
 ## Архитектура
 
@@ -92,7 +92,7 @@ postgresql+asyncpg://plumo:plumo@localhost:5432/plumo
 
 ## Миграции
 
-Схема в `alembic/versions/001_initial.py`.
+Схема в `alembic/versions/001_initial.py`, звонки — `002_voice_calls.py`.
 
 ```powershell
 alembic upgrade head
@@ -160,7 +160,10 @@ Plumo > У меня нет информации о рассрочке. Я пер
 | GET | `/api/v1/knowledge` | база знаний |
 | POST | `/api/v1/knowledge` | добавить факт |
 | POST | `/api/v1/meetings` | создать встречу |
-| GET | `/api/v1/metrics` | сводка |
+| GET | `/api/v1/metrics` | сводка, включая минуты и стоимость звонков |
+| POST | `/api/v1/telephony/elevenlabs/v1/chat/completions` | реплика звонящего (Custom LLM, SSE) |
+| POST | `/api/v1/telephony/elevenlabs/initiation` | приветствие входящего звонка |
+| POST | `/api/v1/telephony/elevenlabs/post-call` | итог звонка (HMAC) |
 
 Пример, с которым канал может начать интеграцию, не дожидаясь своего адаптера:
 
@@ -176,7 +179,9 @@ Plumo > У меня нет информации о рассрочке. Я пер
 
 Каждый ответ несёт заголовки `X-Correlation-Id` и `X-Request-Id`. Тот же id пишется в лог и в `interaction_logs`, так что один запрос можно пройти от API до роутера, модели и базы.
 
-Ошибки приходят JSON-ом: `error`, `message`, `correlation_id`. Пустой текст — 422 `invalid_message`. Нет клиента — 404. Незарегистрированный провайдер в production — 503.
+Если задан `PLUMO_API_KEY`, все `/api/v1/*` кроме телефонии требуют заголовок `X-API-Key`.
+
+Ошибки приходят JSON-ом: `error`, `message`, `correlation_id`. Нет ключа — 401. Пустой текст — 422 `invalid_message`. Нет клиента — 404. Незарегистрированный провайдер в production — 503.
 
 Известные mock audio id: `mock_audio_apt`, `mock_audio_installment`, `mock_audio_hello`, `mock_audio_meeting`, `mock_audio_manager`.
 

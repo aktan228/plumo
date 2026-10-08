@@ -58,7 +58,10 @@ class MemoryService:
             customer.status = "active"
         if draft.need and draft.need != customer.need:
             customer.need = draft.need
-        customer.language = language or customer.language
+        # update_language already folded this turn into the card (ru + ky -> mixed).
+        # Overwriting with the turn language here would undo that every message.
+        if customer.language in ("", "unknown") and language:
+            customer.language = language
         customer.updated_at = now
         await self.customers.save(customer)
         record = CustomerSummary(

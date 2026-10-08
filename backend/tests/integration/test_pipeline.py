@@ -3,6 +3,7 @@
 from app.application.services.knowledge_retriever import SimpleKnowledgeRetriever
 from app.container import build_voice
 from app.domain.models import InboundMessage
+from app.domain.scheduling import BUSINESS_TZ
 from app.infrastructure.database.models import InteractionLogRow, UsageLogRow
 from app.infrastructure.database.repositories import (
     ConversationRepository,
@@ -95,7 +96,7 @@ async def test_complex_question_uses_big_model(agent):
     assert response.model_used == "mock_big"
     assert response.handoff_required is True
     assert response.handoff_reason == "no_knowledge"
-    assert "нет информации о рассрочке" in response.response_text
+    assert "рассрочк" in response.response_text.lower() and "уточню" in response.response_text
     assert response.usage.estimated_cost == 0.01
 
 
@@ -125,7 +126,7 @@ async def test_meeting_request_creates_action(agent, session):
     meetings = await MeetingRepository(session).list_for_customer(response.customer_id)
     assert len(meetings) == 1
     assert meetings[0].status == "PROPOSED"
-    assert meetings[0].scheduled_at.hour == 15
+    assert meetings[0].scheduled_at.astimezone(BUSINESS_TZ).hour == 15
 
 
 async def test_summary_is_updated(agent, session):

@@ -20,6 +20,7 @@ from app.domain.models import (
     Message,
     MetricsSnapshot,
     UsageLog,
+    VoiceCall,
     utcnow,
 )
 from app.infrastructure.database.models import (
@@ -34,6 +35,7 @@ from app.infrastructure.database.models import (
     MeetingRow,
     MessageRow,
     UsageLogRow,
+    VoiceCallRow,
 )
 
 
@@ -302,9 +304,13 @@ class KnowledgeRepository:
         return _knowledge(row) if row else None
 
     async def list_active(self, business_id: UUID) -> list[KnowledgeItem]:
-        stmt = select(KnowledgeItemRow).where(
-            KnowledgeItemRow.business_id == business_id,
-            KnowledgeItemRow.active.is_(True),
+        stmt = (
+            select(KnowledgeItemRow)
+            .where(
+                KnowledgeItemRow.business_id == business_id,
+                KnowledgeItemRow.active.is_(True),
+            )
+            .order_by(KnowledgeItemRow.title.asc())
         )
         rows = (await self.session.scalars(stmt)).all()
         return [_knowledge(row) for row in rows]
@@ -454,6 +460,39 @@ class LogRepository:
         return entry
 
 
+class VoiceCallRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_provider_id(self, provider: str, provider_call_id: str) -> VoiceCall | None:
+        stmt = select(VoiceCallRow).where(
+            VoiceCallRow.provider == provider,
+            VoiceCallRow.provider_call_id == provider_call_id,
+        )
+        row = await self.session.scalar(stmt)
+        return _voice_call(row) if row else None
+
+    async def save(self, call: VoiceCall) -> VoiceCall:
+        row = await self.session.get(VoiceCallRow, call.id)
+        if row is None:
+            row = VoiceCallRow(id=call.id, created_at=call.created_at)
+            self.session.add(row)
+        row.provider = call.provider
+        row.provider_call_id = call.provider_call_id
+        row.customer_id = call.customer_id
+        row.caller = _clip(call.caller, 32)
+        row.called = _clip(call.called, 32)
+        row.status = call.status
+        row.started_at = call.started_at
+        row.ended_at = call.ended_at
+        row.duration_s = call.duration_s
+        row.cost = Decimal(str(call.cost))
+        row.metadata_json = dict(call.metadata)
+        row.updated_at = call.updated_at
+        await self.session.flush()
+        return call
+
+
 class MetricsRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -466,6 +505,8 @@ class MetricsRepository:
         handled = await self._handled_without_human()
         conv_with_handoff = await self._distinct(HandoffRequestRow.conversation_id)
         total_logs, by_language, by_route, avg_latency, avg_first, avg_cost = await self._log_stats()
+        calls, call_seconds, call_cost = await self._voice_stats()
+        minutes = call_seconds / 60
         return MetricsSnapshot(
             total_conversations=conversations,
             total_messages=messages,
@@ -481,7 +522,24 @@ class MetricsRepository:
             mixed_percentage=_percent(by_language.get("mixed", 0), total_logs),
             average_dialog_cost=avg_cost,
             handoff_rate=(conv_with_handoff / conversations) if conversations else 0.0,
+            voice_calls=calls,
+            voice_minutes=round(minutes, 2),
+            voice_cost_per_minute=round(call_cost / minutes, 6) if minutes else 0.0,
         )
+
+    async def _voice_stats(self) -> tuple[int, float, float]:
+        """Completed calls only: an unfinished call has no duration or cost yet."""
+
+        row = (
+            await self.session.execute(
+                select(
+                    func.count(),
+                    func.coalesce(func.sum(VoiceCallRow.duration_s), 0),
+                    func.coalesce(func.sum(VoiceCallRow.cost), 0),
+                ).where(VoiceCallRow.status == "completed")
+            )
+        ).one()
+        return int(row[0]), float(row[1]), float(row[2])
 
     async def _count(self, model) -> int:
         value = await self.session.scalar(select(func.count()).select_from(model))
@@ -550,6 +608,12 @@ class MetricsRepository:
             float(avg_first or 0),
             float(avg_cost or 0),
         )
+
+
+def _clip(value: str | None, size: int) -> str | None:
+    """Fit a String(size) column. WhatsApp message ids and model names can exceed 64 chars."""
+
+    return value if value is None or len(value) <= size else value[:size]
 
 
 def _new_id() -> UUID:
@@ -780,21 +844,21 @@ def _meeting_row(meeting: Meeting) -> MeetingRow:
 def _interaction_row(entry: InteractionLog) -> InteractionLogRow:
     return InteractionLogRow(
         id=entry.id,
-        request_id=entry.request_id,
-        correlation_id=entry.correlation_id,
+        request_id=_clip(entry.request_id, 64),
+        correlation_id=_clip(entry.correlation_id, 64),
         customer_id=entry.customer_id,
         conversation_id=entry.conversation_id,
         channel=entry.channel,
         language=entry.language,
         input_text=entry.input_text,
         route=entry.route,
-        route_reason=entry.route_reason,
-        model=entry.model,
+        route_reason=_clip(entry.route_reason, 64),
+        model=_clip(entry.model, 64),
         confidence=entry.confidence,
         knowledge_sources=list(entry.knowledge_sources),
         response_text=entry.response_text,
         handoff=entry.handoff,
-        handoff_reason=entry.handoff_reason,
+        handoff_reason=_clip(entry.handoff_reason, 64),
         actions=list(entry.actions),
         latency_ms=entry.latency_ms,
         estimated_cost=Decimal(str(entry.estimated_cost)),
@@ -806,11 +870,30 @@ def _usage_row(entry: UsageLog) -> UsageLogRow:
     return UsageLogRow(
         id=entry.id,
         interaction_log_id=entry.interaction_log_id,
-        request_id=entry.request_id,
-        model=entry.model,
+        request_id=_clip(entry.request_id, 64),
+        model=_clip(entry.model, 64),
         input_tokens=entry.input_tokens,
         output_tokens=entry.output_tokens,
         estimated_cost=Decimal(str(entry.estimated_cost)),
         latency_ms=entry.latency_ms,
         created_at=entry.created_at,
+    )
+
+
+def _voice_call(row: VoiceCallRow) -> VoiceCall:
+    return VoiceCall(
+        id=row.id,
+        provider=row.provider,
+        provider_call_id=row.provider_call_id,
+        customer_id=row.customer_id,
+        caller=row.caller,
+        called=row.called,
+        status=row.status,
+        started_at=row.started_at,
+        ended_at=row.ended_at,
+        duration_s=int(row.duration_s or 0),
+        cost=float(row.cost or 0),
+        metadata=dict(row.metadata_json or {}),
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )

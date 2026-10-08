@@ -7,7 +7,7 @@ from app.domain.errors import CustomerNotFound, InvalidMessage
 from app.domain.events import CUSTOMER_CREATED, CUSTOMER_MERGED, DomainEvent
 from app.domain.models import Customer, InboundMessage, utcnow
 from app.domain.ports import CustomerStore, EventBus
-from app.domain.text_signals import find_phones, normalize_phone
+from app.domain.text_signals import find_phones, phone_from_id
 
 
 class CustomerResolver:
@@ -34,7 +34,7 @@ class CustomerResolver:
             customer = await self._follow(message.customer_id)
             return await self._link_or_merge(customer, message.channel, external_id)
 
-        phone = normalize_phone(external_id) if message.channel in PHONE_CHANNELS else None
+        phone = phone_from_id(external_id) if message.channel in PHONE_CHANNELS else None
         if phone:
             by_phone = await self.customers.get_by_phone(phone)
             if by_phone is not None:

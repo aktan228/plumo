@@ -53,6 +53,7 @@ class OpenRouterLLMProvider:
         self.referer = referer
         self.title = title
         self._local = MockLLMProvider("local_memory", "small")
+        self._client: httpx.AsyncClient | None = None
         if not self.api_key:
             raise ProviderUnavailable("OPENROUTER_API_KEY is empty")
 
@@ -76,7 +77,7 @@ class OpenRouterLLMProvider:
                 {"role": "system", "content": _system_prompt(context)},
                 {"role": "user", "content": _user_prompt(context, route)},
             ],
-            temperature=0.2,
+            temperature=0.5,
         )
         parsed = parse_generation_json(payload["text"])
         usage = payload["usage"]
@@ -130,8 +131,7 @@ class OpenRouterLLMProvider:
             "X-Title": self.title,
         }
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_s) as client:
-                response = await client.post(self.base_url, headers=headers, json=body)
+            response = await self._http().post(self.base_url, headers=headers, json=body)
         except httpx.HTTPError as exc:
             logger.warning("openrouter network error")
             raise ProviderUnavailable("OpenRouter is unreachable") from exc
@@ -148,13 +148,26 @@ class OpenRouterLLMProvider:
         return {"text": text, "usage": _usage(data)}
 
 
+    def _http(self) -> httpx.AsyncClient:
+        """One pooled client per provider. A fresh TLS handshake per turn costs voice latency."""
+
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self.timeout_s)
+        return self._client
+
+    async def aclose(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
+
 def parse_generation_json(raw: str) -> dict[str, Any]:
     parsed = parse_json_object(raw)
     if parsed is None:
         return {"text": raw.strip(), "actions": [], "handoff_required": False, "confidence": 0.7}
+    # A JSON reply without text must stay empty: the core then uses a grounded
+    # fallback. Echoing `raw` here would send the JSON itself to the customer.
     text = str(parsed.get("text") or parsed.get("response_text") or "").strip()
-    if not text:
-        text = raw.strip()
     return {
         "text": text,
         "actions": parsed.get("actions") or [],
@@ -187,33 +200,48 @@ def _system_prompt(context: AgentContext) -> str:
     knowledge_lines = [
         f"- {hit.item.title} [{hit.item.category}]: {hit.item.content}" for hit in context.knowledge
     ]
-    knowledge = "\n".join(knowledge_lines) if knowledge_lines else "(пусто)"
-    contacts = json.dumps(context.business.contacts, ensure_ascii=False)
-    summary = context.summary.summary if context.summary else "-"
-    facts = ", ".join(context.summary.important_facts) if context.summary else "-"
-    history = "\n".join(f"{item.role}: {item.text}" for item in context.recent_messages) or "-"
+    knowledge = "\n".join(knowledge_lines) if knowledge_lines else "(ничего подходящего)"
+    contacts = {key: value for key, value in (context.business.contacts or {}).items() if key != "assistant_name"}
+    summary = context.summary.summary if context.summary else "новый клиент, раньше не общались"
+    facts = [fact for fact in (context.summary.important_facts if context.summary else []) if not fact.startswith("unclear_count:")]
+    known = []
+    if context.customer.need:
+        known.append(f"цель: {context.customer.need}")
+    if context.customer.phone:
+        known.append("телефон уже есть, не спрашивай")
+    history = "\n".join(
+        f"{'Клиент' if item.role == 'user' else 'Вы'}: {item.text}" for item in context.recent_messages
+    ) or "(это первое сообщение — поздоровайся коротко)"
     return (
         f"{context.agent_instructions}\n\n"
-        f"Язык клиента: {context.language}\n"
-        f"Бизнес: {context.business.name}\n"
+        "# Данные агентства\n"
         f"Описание: {context.business.description}\n"
         f"Часы: {context.business.working_hours}\n"
-        f"Контакты: {contacts}\n"
-        f"Правила: {context.business.rules}\n"
-        f"База знаний:\n{knowledge}\n"
-        f"Резюме клиента: {summary}\n"
-        f"Факты: {facts}\n"
-        f"Последние сообщения:\n{history}\n"
-        "Говори как живой менеджер: понимай смысл вопроса, даже если слова не совпали с базой. "
-        "Ответ только JSON: "
-        '{"text":"...","actions":[],"handoff_required":false,"handoff_reason":null,"confidence":0.8}. '
-        "actions.type: schedule_meeting, request_phone, handoff, update_customer. "
-        "Если факта нет в базе знаний, text — отказ без выдуманных цифр и handoff_required true."
+        f"Контакты: {json.dumps(contacts, ensure_ascii=False)}\n"
+        f"Правила бизнеса: {context.business.rules}\n"
+        f"Объекты и факты:\n{knowledge}\n"
+        "Объекты со статусом «продана» или «не предлагать» не предлагай.\n"
+        "Если просят совет, вариант дешевле или на сколько человек — выбери подходящие объекты отсюда и назови цену. "
+        "Если подходящие объекты есть, не отправляй к менеджеру.\n\n"
+        "# Клиент\n"
+        f"Язык: {context.language}\n"
+        f"Что помним: {summary}\n"
+        f"Уже знаем: {', '.join(known + facts) or '-'}\n\n"
+        f"# Переписка\n{history}\n\n"
+        "# Формат ответа\n"
+        "Только JSON без пояснений: "
+        '{"text":"...","actions":[],"handoff_required":false,"handoff_reason":null,"confidence":0.8}\n'
+        "text — ровно то, что прочитает или услышит клиент.\n"
+        "actions.type: schedule_meeting (payload: date YYYY-MM-DD, time HH:MM), request_phone, handoff, update_customer.\n"
+        "confidence — насколько ответ опирается на данные: ниже 0.6, если сомневаешься."
     )
 
 
 def _user_prompt(context: AgentContext, route: RouteDecision) -> str:
-    return f"route={route.model} reason={route.reason}\ncurrent_message={context.current_message}"
+    # Only the customer's words. Routing internals are not the model's business
+    # and make replies sound like a ticket system.
+    del route
+    return context.current_message
 
 
 def _actions(raw: Any) -> list[Action]:

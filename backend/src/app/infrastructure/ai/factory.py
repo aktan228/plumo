@@ -63,6 +63,15 @@ class AIProviderFactory:
     def register_language(self, name: str, detector) -> None:
         self._language[name] = detector
 
+    async def aclose(self) -> None:
+        """Release pooled HTTP clients of live providers."""
+
+        providers = [*self._llm.values(), *self._stt.values(), *self._tts.values()]
+        for provider in {id(item): item for item in providers}.values():
+            close = getattr(provider, "aclose", None)
+            if close is not None:
+                await close()
+
     @staticmethod
     def _pick(registry: dict, name: str, kind: str):
         provider = registry.get(name)

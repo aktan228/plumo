@@ -1,7 +1,7 @@
 """Assemble the only context a model is allowed to see."""
 
 from app.domain.models import AgentContext, Business, Customer, CustomerSummary, KnowledgeHit, Message
-from app.domain.phrases import AGENT_INSTRUCTIONS
+from app.domain.phrases import DEFAULT_ASSISTANT_NAME, agent_instructions
 
 RECENT_LIMIT = 8
 
@@ -20,6 +20,7 @@ class ContextBuilder:
         current_message: str,
         language: str,
         current_message_id=None,
+        channel: str = "whatsapp",
     ) -> AgentContext:
         recent = list(recent_messages)
         if current_message_id is not None:
@@ -27,7 +28,11 @@ class ContextBuilder:
         elif recent and recent[-1].role == "user" and recent[-1].text == current_message:
             recent = recent[:-1]
         return AgentContext(
-            agent_instructions=AGENT_INSTRUCTIONS,
+            agent_instructions=agent_instructions(
+                business.name,
+                assistant_name(business),
+                channel,
+            ),
             business=business,
             knowledge=knowledge,
             customer=customer,
@@ -35,4 +40,12 @@ class ContextBuilder:
             recent_messages=recent[-RECENT_LIMIT:],
             current_message=current_message,
             language=language,
+            channel=channel,
         )
+
+
+def assistant_name(business: Business) -> str:
+    """Persona name per business, set in contacts.assistant_name. Default is shared."""
+
+    name = (business.contacts or {}).get("assistant_name")
+    return str(name).strip() if isinstance(name, str) and name.strip() else DEFAULT_ASSISTANT_NAME

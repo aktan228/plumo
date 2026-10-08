@@ -165,4 +165,7 @@ def metrics_out(snapshot: MetricsSnapshot) -> MetricsOut:
         mixed_percentage=snapshot.mixed_percentage,
         average_dialog_cost=snapshot.average_dialog_cost,
         handoff_rate=snapshot.handoff_rate,
+        voice_calls=snapshot.voice_calls,
+        voice_minutes=snapshot.voice_minutes,
+        voice_cost_per_minute=snapshot.voice_cost_per_minute,
     )

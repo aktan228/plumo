@@ -8,7 +8,13 @@ from app.application.services.knowledge_retriever import SimpleKnowledgeRetrieve
 from app.application.services.response_validator import ResponseValidator
 from app.application.services.router import RuleBasedRouter
 from app.domain.models import AgentContext, Business, Customer, KnowledgeHit, KnowledgeItem
-from app.domain.phrases import UNKNOWN_INSTALLMENT_RU
+from app.domain.phrases import (
+    HUMAN_CHAT_RU,
+    ROLE_PHRASE_RU,
+    UNKNOWN_FACT_KY,
+    UNKNOWN_FACT_RU,
+    UNKNOWN_INSTALLMENT_RU,
+)
 from app.domain.text_signals import analyze_message, detect_language, find_phones, normalize_phone
 from app.infrastructure.ai.mock_llm import MockLanguageDetector
 
@@ -72,10 +78,23 @@ def _context(text: str, items: list[KnowledgeItem] | None = None) -> AgentContex
     )
 
 
+async def test_greeting_only_routes_small():
+    decision = await RuleBasedRouter().select_model(_context("Здравствуйте"))
+    assert decision.model == "small"
+    assert decision.reason == "greeting"
+
+
+async def test_products_with_hello_are_not_a_pure_greeting():
+    item = _item("2-комнатная квартира, 58 м², 5 этаж, цена 85000 USD. Статус: доступна.")
+    other = _item("1-комнатная квартира, 41 м², цена 62000 USD. Статус: доступна.", "Однушка")
+    context = _context("привет, подскажи какие товары у вас есть", [item, other])
+    decision = await RuleBasedRouter().select_model(context)
+    assert decision.reason != "greeting"
+
+
 async def test_simple_question_routes_small():
     item = _item("2-комнатная квартира, 58 м², 5 этаж, цена 85000 USD. Статус: доступна.")
     other = _item("3-комнатная квартира, 76 м², 8 этаж, цена 110000 USD. Статус: доступна.", "Квартира на Киевской")
-    # Scores in the helper are insertion order, so give the matching item the higher score the retriever would.
     context = _context("Еще продается квартира за 85000?", [other, item])
     context.knowledge = [KnowledgeHit(item, 6), KnowledgeHit(other, 1)]
     decision = await RuleBasedRouter().select_model(context)
@@ -114,10 +133,22 @@ async def test_validator_allows_known_price():
     assert result.safe is True
 
 
-async def test_unknown_installment_phrase_is_not_a_claim():
+async def test_every_fallback_variant_passes_the_validator():
     context = _context("А рассрочка есть?")
-    result = ResponseValidator().validate(UNKNOWN_INSTALLMENT_RU, context)
-    assert result.safe is True
+    lines = [*UNKNOWN_INSTALLMENT_RU, *UNKNOWN_FACT_RU, *UNKNOWN_FACT_KY, *ROLE_PHRASE_RU, *HUMAN_CHAT_RU]
+    for line in lines:
+        assert ResponseValidator().validate(line, context).safe is True, line
+
+
+async def test_quote_knowledge_hides_internal_notes_and_sounds_human():
+    sold = _item("2-комнатная, 55 м², цена 79000 USD. Статус: продана, не предлагать.", title="Советская")
+    live = _item("2-комнатная квартира, 58 м², цена 85000 USD. Статус: доступна.")
+    text = quote_knowledge(_context("какие есть квартиры?", [sold, live]))
+    assert "Советская" not in text
+    assert "Статус" not in text
+    assert "В базе" not in text
+    assert "85000" in text
+    assert ResponseValidator().validate(text, _context("какие есть квартиры?", [sold, live])).safe
 
 
 async def test_language_detection():
@@ -164,3 +195,18 @@ def test_short_russian_ack_is_usable():
 def test_two_people_is_not_a_human_request():
     assert analyze_message("мне нужна более дешевая квартира для двух человек").human_request is False
     assert analyze_message("позовите менеджера").human_request is True
+
+
+def test_products_greeting_is_a_catalog_question():
+    signals = analyze_message("привет, подскажи какие товары у вас есть")
+    assert signals.greeting is True
+    assert signals.catalog is True
+    assert signals.factual is True
+    assert signals.human_request is False
+
+
+def test_budget_for_three_is_a_recommend():
+    signals = analyze_message("а что ты посоветуешь для 3 человек с ограниченым бюджетом")
+    assert signals.recommend is True
+    assert signals.money is True
+    assert signals.human_request is False

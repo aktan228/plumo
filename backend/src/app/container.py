@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.application.services.action_executor import MockActionExecutor
 from app.application.services.agent_service import AgentService
+from app.application.services.call_service import CallService
 from app.application.services.context_builder import ContextBuilder
 from app.application.services.customer_resolver import CustomerResolver
 from app.application.services.handoff_service import HandoffService
@@ -43,6 +44,7 @@ from app.infrastructure.database.repositories import (
     MessageRepository,
     MetricsRepository,
     SummaryRepository,
+    VoiceCallRepository,
 )
 from app.infrastructure.database.session import create_engine, create_session_factory
 from app.infrastructure.events.bus import InMemoryEventBus, log_event
@@ -132,6 +134,17 @@ def build_agent(session: AsyncSession, runtime: Runtime) -> AgentService:
 
 def build_voice(session: AsyncSession, runtime: Runtime) -> VoiceService:
     return VoiceService(runtime.providers.stt(), runtime.providers.tts(), build_agent(session, runtime))
+
+
+def build_calls(session: AsyncSession, runtime: Runtime, agent: AgentService | None = None) -> CallService:
+    return CallService(
+        agent=agent or build_agent(session, runtime),
+        customers=CustomerRepository(session),
+        messages=MessageRepository(session),
+        calls=VoiceCallRepository(session),
+        provider=runtime.settings.voice_platform,
+        usd_per_minute=runtime.settings.voice_usd_per_minute,
+    )
 
 
 def build_channel_handler(session: AsyncSession, runtime: Runtime) -> HandleChannelEvent:
