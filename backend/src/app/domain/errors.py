@@ -61,6 +61,16 @@ class ProviderUnavailable(AppError):
     http_status = 503
 
 
+class ProviderTransientError(ProviderUnavailable):
+    """The model answered nothing usable this time: empty reply, 429, 5xx, timeout.
+
+    The pipeline retries and degrades to a safe line. A wrong key or an empty
+    balance stays ProviderUnavailable and fails loudly.
+    """
+
+    code = "provider_transient_error"
+
+
 class UnsafeResponse(AppError):
     """Raised only by strict callers. The message pipeline converts this into a handoff."""
 

@@ -13,7 +13,7 @@ from app.application.services.memory_service import MemoryService, read_unclear_
 from app.application.services.response_validator import ResponseValidator
 from app.correlation import get_correlation_id, get_request_id
 from app.domain.enums import PHONE_CHANNELS, ActionType, Channel, MessageRole
-from app.domain.errors import BusinessNotFound, CustomerNotFound, InvalidMessage
+from app.domain.errors import BusinessNotFound, CustomerNotFound, InvalidMessage, ProviderTransientError
 from app.domain.events import MESSAGE_PROCESSED, MESSAGE_RECEIVED, DomainEvent
 from app.domain.models import (
     Action,
@@ -30,7 +30,8 @@ from app.domain.models import (
     UsageLog,
     utcnow,
 )
-from app.domain.phrases import human_phrase, role_phrase, unknown_phrase
+from app.domain.phrases import fallback_phrase, human_phrase, unknown_phrase
+from app.domain.scheduling import has_slot
 from app.domain.ports import (
     ActionExecutor,
     BusinessStore,
@@ -39,7 +40,6 @@ from app.domain.ports import (
     HandoffStore,
     KnowledgeRetriever,
     LanguageDetector,
-    LLMProvider,
     LogStore,
     MessageStore,
     Router,
@@ -160,6 +160,8 @@ class AgentService:
         assessment = self.validator.assess(message.text, context)
         # Rotates fixed lines inside one dialog so the agent does not repeat itself.
         seed = f"{conversation.id}:{len(history)}"
+        slot_named = signals.meeting and has_slot(message.text)
+        intent = _intent(signals, slot_named)
         if signals.human_request:
             response_text = human_phrase(language, message.channel, seed)
         elif assessment.factual and not assessment.answerable and (
@@ -183,11 +185,18 @@ class AgentService:
                 response_text = quote_knowledge(context)
                 steps.append("grounded_fallback")
             elif not assessment.factual:
-                response_text = role_phrase(language, seed)
-                steps.append("role_fallback")
+                response_text = fallback_phrase(intent, language, seed)
+                steps.append(f"fallback:{intent}")
 
-        actions = [item for item in generation.actions if item.type != ActionType.handoff]
-        if signals.meeting and not any(item.type == ActionType.schedule_meeting for item in actions):
+        # A meeting row needs a slot the customer actually named. "Запишите нас"
+        # alone becomes a question about the day plus a handoff, not 15:00 tomorrow.
+        actions = [
+            item
+            for item in generation.actions
+            if item.type != ActionType.handoff
+            and (item.type != ActionType.schedule_meeting or slot_named or _payload_has_slot(item.payload))
+        ]
+        if slot_named and not any(item.type == ActionType.schedule_meeting for item in actions):
             actions.append(Action(ActionType.schedule_meeting, {"text": message.text}))
         if customer.phone is None and message.channel not in PHONE_CHANNELS:
             if signals.meeting or (assessment.answerable and assessment.factual):
@@ -206,7 +215,7 @@ class AgentService:
             if assessment.factual:
                 response_text = unknown_phrase(assessment.topic, language, seed)
             else:
-                response_text = role_phrase(language, seed)
+                response_text = fallback_phrase(intent, language, seed)
             steps.append(f"validator:{validation.reason}")
             validation = self.validator.validate(response_text, context, extra=extra)
 
@@ -369,15 +378,27 @@ class AgentService:
         route: RouteDecision,
         generations: list[LLMGeneration],
     ) -> tuple[LLMGeneration, RouteDecision]:
-        provider: LLMProvider = self.llm_for_tier(str(route.model))
-        generation = await provider.generate_response(context, route)
-        generations.append(generation)
+        generation = await self._call(str(route.model), context, route, generations)
         if str(route.model) == "small" and generation.confidence < self.confidence_threshold:
             route = RouteDecision("big", "low_confidence_fallback", generation.confidence)
-            provider = self.llm_for_tier("big")
-            generation = await provider.generate_response(context, route)
-            generations.append(generation)
+            generation = await self._call("big", context, route, generations)
+        if is_unusable_reply(generation.text):
+            # Free and small models sometimes answer "User Safety: safe" or
+            # nothing. One retry is cheaper than a canned line mid-sale.
+            route = RouteDecision("big", "unusable_retry", generation.confidence)
+            generation = await self._call("big", context, route, generations)
         return generation, route
+
+    async def _call(self, tier: str, context, route: RouteDecision, generations: list[LLMGeneration]) -> LLMGeneration:
+        """One model call. A transient failure becomes an empty draft, not a 503."""
+
+        try:
+            generation = await self.llm_for_tier(tier).generate_response(context, route)
+        except ProviderTransientError as exc:
+            logger.warning("model_transient_error", extra={"tier": tier, "error": exc.message})
+            return LLMGeneration("", [], False, None, 0.0, f"{tier}:unavailable", 0, 0, 0.0)
+        generations.append(generation)
+        return generation
 
     def _prepare(self, message: InboundMessage) -> InboundMessage:
         try:
@@ -531,6 +552,18 @@ def _paused_response(customer_id: UUID, conversation_id: UUID, language: str, co
         correlation_id=correlation_id,
         send_reply=False,
     )
+
+
+def _intent(signals, slot_named: bool) -> str:
+    if signals.meeting:
+        return "meeting_set" if slot_named else "meeting_ask"
+    if signals.greeting and not signals.factual:
+        return "greeting"
+    return "other"
+
+
+def _payload_has_slot(payload: dict) -> bool:
+    return any(str(payload.get(key) or "").strip() for key in ("datetime", "date", "time"))
 
 
 def _handoff_id(results) -> UUID | None:

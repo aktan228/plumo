@@ -36,6 +36,9 @@ def is_unusable_reply(text: str) -> bool:
         return True
     if len(blob) < 8 and re.search(r"[а-яё]", lowered) is None:
         return True
+    # "У нас есть два варианта:" with nothing after it: the model got cut off.
+    if blob.endswith((":", "—", "-", ",")):
+        return True
     return False
 
 

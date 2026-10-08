@@ -42,6 +42,25 @@ HUMAN_CHAT_RU = (
 HUMAN_VOICE_RU = (
     "Конечно, передаю менеджеру — он перезвонит вам в ближайшее время.",
 )
+MEETING_ASK_RU = (
+    "Хорошо, давайте запишу вас на просмотр. Какой день и время вам удобны?",
+    "С радостью покажем! Когда вам удобно подъехать — в какой день и во сколько?",
+)
+MEETING_ASK_KY = (
+    "Макул, көрүүгө жазып коёюн. Кайсы күнү, саат канчада ыңгайлуу?",
+)
+MEETING_SET_RU = (
+    "Отлично, записала. Менеджер подтвердит время просмотра и свяжется с вами.",
+)
+MEETING_SET_KY = (
+    "Жакшы, жазып алдым. Менеджер убакытты тактап, сиз менен байланышат.",
+)
+GREETING_RU = (
+    "Здравствуйте! Подскажу по квартирам — что вы ищете?",
+)
+GREETING_KY = (
+    "Саламатсызбы! Кандай квартира издеп жатасыз?",
+)
 HUMAN_KY = (
     "Макул, менеджерге берем — ал сиз менен жакында байланышат.",
 )
@@ -125,6 +144,23 @@ def unknown_phrase(topic: str | None, language: str, seed: str = "") -> str:
     if topic == "installment":
         return _pick(UNKNOWN_INSTALLMENT_RU, seed)
     return _pick(UNKNOWN_FACT_RU, seed)
+
+
+def fallback_phrase(intent: str, language: str, seed: str = "") -> str:
+    """Safe line when the model draft is unusable, chosen by what the customer wants.
+
+    intent: meeting_ask (wants a viewing, no slot yet), meeting_set (slot named),
+    greeting, or anything else (off-topic redirect).
+    """
+
+    ky = language == "ky"
+    if intent == "meeting_ask":
+        return _pick(MEETING_ASK_KY if ky else MEETING_ASK_RU, seed)
+    if intent == "meeting_set":
+        return _pick(MEETING_SET_KY if ky else MEETING_SET_RU, seed)
+    if intent == "greeting":
+        return _pick(GREETING_KY if ky else GREETING_RU, seed)
+    return role_phrase(language, seed)
 
 
 def role_phrase(language: str, seed: str = "") -> str:

@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 
 from app.domain.enums import ActionType
-from app.domain.errors import ProviderUnavailable
+from app.domain.errors import ProviderTransientError, ProviderUnavailable
 from app.domain.models import (
     Action,
     AgentContext,
@@ -169,17 +169,18 @@ class OpenRouterLLMProvider:
             response = await self._http().post(self.base_url, headers=headers, json=body)
         except httpx.HTTPError as exc:
             logger.warning("llm network error", extra={"vendor": self.vendor})
-            raise ProviderUnavailable(f"{self.vendor} is unreachable") from exc
+            raise ProviderTransientError(f"{self.vendor} is unreachable") from exc
         if response.status_code >= 400:
             logger.warning("llm http %s", response.status_code, extra={"vendor": self.vendor})
-            raise ProviderUnavailable(_public_error(self.vendor, response.status_code))
+            error = ProviderTransientError if response.status_code == 429 or response.status_code >= 500 else ProviderUnavailable
+            raise error(_public_error(self.vendor, response.status_code))
         try:
             data = response.json()
         except json.JSONDecodeError as exc:
-            raise ProviderUnavailable(f"{self.vendor} returned a non-JSON body") from exc
+            raise ProviderTransientError(f"{self.vendor} returned a non-JSON body") from exc
         text = _choice_text(data)
         if not text:
-            raise ProviderUnavailable(f"{self.vendor} returned an empty reply")
+            raise ProviderTransientError(f"{self.vendor} returned an empty reply")
         return {"text": text, "usage": _usage(data, self.model)}
 
 
@@ -279,7 +280,8 @@ def _system_prompt(context: AgentContext) -> str:
         f"Контакты: {json.dumps(contacts, ensure_ascii=False)}\n"
         f"Правила бизнеса: {context.business.rules}\n"
         f"Объекты и факты:\n{knowledge}\n"
-        "Объекты со статусом «продана» или «не предлагать» не предлагай.\n"
+        "Объекты со статусом «продана» или «не предлагать» не предлагай. "
+        "Служебные пометки вроде «Статус: …» клиенту не цитируй.\n"
         "Если просят совет, вариант дешевле или на сколько человек — выбери подходящие объекты отсюда и назови цену. "
         "Если подходящие объекты есть, не отправляй к менеджеру.\n\n"
         "# Клиент\n"

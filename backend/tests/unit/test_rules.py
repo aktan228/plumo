@@ -263,3 +263,17 @@ def test_cut_off_json_never_reaches_the_customer():
     parsed = parse_generation_json('{\n  "text": "Жакшы, ойлонуп көрүңүз. Сизге')
     assert parsed["text"] == "Жакшы, ойлонуп көрүңүз."
     assert parse_generation_json('{"text": "Сизге')["text"] == ""
+
+
+def test_has_slot_needs_a_day_or_time():
+    from app.domain.scheduling import has_slot
+
+    assert not has_slot("да давайте, запишите нас на показ")
+    assert has_slot("запишите на субботу")
+    assert has_slot("давайте завтра")
+    assert has_slot("в 11:00 удобно")
+
+
+def test_reply_cut_before_the_list_is_unusable():
+    assert is_unusable_reply("Понимаю. У нас есть два более доступных варианта:")
+    assert not is_unusable_reply("Есть студия за 39000 USD. Посмотрим?")

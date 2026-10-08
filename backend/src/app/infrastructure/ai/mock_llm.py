@@ -15,7 +15,7 @@ from app.domain.models import (
     utcnow,
 )
 from app.domain.phrases import human_phrase, unknown_phrase
-from app.domain.scheduling import parse_slot
+from app.domain.scheduling import has_slot, parse_slot
 from app.domain.text_signals import (
     analyze_message,
     compact_numbers,
@@ -154,6 +154,8 @@ class MockLLMProvider:
         )
 
     def _meeting(self, context: AgentContext, prompt: str) -> LLMGeneration:
+        if not has_slot(context.current_message):
+            return self._out("Хорошо, давайте запишу вас на просмотр. Какой день и время вам удобны?", 0.9, prompt=prompt)
         slot = parse_slot(context.current_message, {}, utcnow())
         text = f"Давайте {_spoken_day(slot)} в {slot.strftime('%H:%M')}? Если неудобно — скажите, подберём другое время."
         action = Action(

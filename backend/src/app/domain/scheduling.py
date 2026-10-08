@@ -80,3 +80,16 @@ def _weekday(text: str) -> int | None:
         if any(name in text for name in names):
             return index
     return None
+
+
+def has_slot(text: str) -> bool:
+    """True when the customer named a day or a time, not just "запишите меня"."""
+
+    probe = normalize_text(text)
+    if _TIME.search(probe) or _DATE.search(probe):
+        return True
+    if re.search(r"\bв\s+\d{1,2}\b", probe):  # "в 11", "в 3 часа"
+        return True
+    if any(word in probe for word in ("завтра", "сегодня", "бүгүн", "бугун", "эртең", "эртен")):
+        return True
+    return _weekday(probe) is not None

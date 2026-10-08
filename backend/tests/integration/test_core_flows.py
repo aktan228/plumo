@@ -113,3 +113,67 @@ async def test_chat_then_phone_call_is_one_customer(client, monkeypatch):
     metrics = (await client.get("/api/v1/metrics")).json()
     assert metrics["voice_calls"] == 1
     assert metrics["voice_minutes"] == 1.5
+
+
+async def test_book_viewing_without_slot_asks_day_and_hands_off(client):
+    reply = await _send(client, "да давайте, запишите нас на показ", phone="+996555777004")
+    assert reply["handoff_reason"] == "ready_for_meeting"
+    assert not any(item["type"] == "schedule_meeting" for item in reply["actions"])
+    assert "день" in reply["response_text"]
+    assert "С этим не подскажу" not in reply["response_text"]
+
+    booked = await _send(client, "в субботу в 11:00", phone="+996555777004")
+    assert booked["response_text"]
+
+
+async def test_junk_model_reply_is_retried_then_falls_back_by_intent(agent):
+    from app.domain.models import InboundMessage, LLMGeneration
+
+    class Junk:
+        name = "junk"
+        calls = 0
+
+        async def generate_response(self, context, route):
+            Junk.calls += 1
+            return LLMGeneration("User Safety: safe", [], False, None, 0.9, "junk", 1, 1, 0.0)
+
+        async def extract_customer_data(self, text):
+            from app.domain.models import ExtractedCustomerData
+            return ExtractedCustomerData()
+
+        async def summarize(self, messages, previous):
+            from app.domain.models import SummaryDraft
+            return SummaryDraft("-", None, [], None)
+
+    agent.llm_for_tier = lambda tier: Junk()
+    response = await agent.process_message(
+        InboundMessage(channel="telegram", external_user_id="tg-junk-1", text="да давайте, запишите нас на показ")
+    )
+    assert Junk.calls == 2  # one retry, not more
+    assert "fallback:meeting_ask" in response.logs
+    assert "день" in response.response_text
+    assert "User Safety" not in response.response_text
+
+
+async def test_model_outage_degrades_to_a_safe_line_not_a_503(agent):
+    from app.domain.errors import ProviderTransientError
+    from app.domain.models import ExtractedCustomerData, InboundMessage, SummaryDraft
+
+    class Down:
+        name = "down"
+
+        async def generate_response(self, context, route):
+            raise ProviderTransientError("OpenRouter returned an empty reply")
+
+        async def extract_customer_data(self, text):
+            return ExtractedCustomerData()
+
+        async def summarize(self, messages, previous):
+            return SummaryDraft("-", None, [], None)
+
+    agent.llm_for_tier = lambda tier: Down()
+    response = await agent.process_message(
+        InboundMessage(channel="telegram", external_user_id="tg-down-1", text="привет")
+    )
+    assert response.response_text
+    assert "fallback:greeting" in response.logs
