@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useLanguage } from "@/lib/i18n";
 import "./landing.css";
 import { Hero } from "./hero";
@@ -12,6 +12,8 @@ import { Statistics } from "./statistics";
 import { PilotCTA } from "./pilot-cta";
 import { FAQ } from "./faq";
 import { Pricing, pricingRequestLabel, type PricingRequest } from "./pricing";
+import { DemoChoice } from "./demo-choice";
+import { DemoContactForm } from "./demo-contact-form";
 
 const copy = {
   ru: {
@@ -47,31 +49,65 @@ export function Landing() {
   const { locale } = useLanguage();
   const c = copy[locale];
   const [mailReady, setMailReady] = useState(false);
-  const [pilotExpanded, setPilotExpanded] = useState(false);
   const [pricingChoice, setPricingChoice] = useState<PricingRequest | null>(null);
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [destination, setDestination] = useState<"demo" | null>(null);
+  const [demoStep, setDemoStep] = useState<"choice" | "expert">("choice");
+  const [demoPath, setDemoPath] = useState<"expert" | "self" | null>(null);
+
+  function openDemo(request: PricingRequest | null = null, step: "choice" | "expert" = "choice") {
+    setPricingChoice(request);
+    setDemoStep(step);
+    setMailReady(false);
+    setDemoOpen(true);
+  }
+
+  function followPath(path: "expert" | "self") {
+    setDemoPath(path);
+    if (path === "expert") {
+      setDemoStep("expert");
+    } else {
+      setDemoOpen(false);
+      setDestination("demo");
+    }
+  }
+
+  useEffect(() => {
+    if (!destination) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(destination);
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+      setDestination(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [destination]);
   function prepareMail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const body = `${c.name}: ${data.get("name")}\n${c.business}: ${data.get("company")}\n${c.email}: ${data.get("email")}\n\n${data.get("message")}`;
+    const pathLabel = demoPath ? (locale === "ru" ? (demoPath === "self" ? "После самостоятельного демо" : "Демо с сотрудником") : (demoPath === "self" ? "After the self-guided demo" : "Demo with the team")) : "";
+    const body = `${pathLabel ? `${pathLabel}\n\n` : ""}${c.name}: ${data.get("name")}\n${c.business}: ${data.get("company")}\n${c.email}: ${data.get("email")}\n\n${data.get("message")}`;
     window.location.href = `mailto:contact@plumo.app?subject=${encodeURIComponent(c.subject)}&body=${encodeURIComponent(pricingChoice ? `${locale === "ru" ? "Тариф / запрос" : "Plan / inquiry"}: ${pricingRequestLabel(locale, pricingChoice)}\n\n${body}` : body)}`;
     setMailReady(true);
   }
   return <main id="main" className="landing">
-    <Hero />
+    <Hero onDemo={() => openDemo()} />
     <CustomerSituations />
 
     <VoiceCallDemo />
 
-    <DialogueToLead />
+    <DialogueToLead onDiscuss={() => { setDemoPath("self"); openDemo(pricingChoice, "expert"); }} />
 
-    <SetupPipeline />
+    <SetupPipeline onDemo={() => openDemo()} />
 
     <Statistics />
 
-    <Pricing onChoose={request => { setPricingChoice(request); setPilotExpanded(true); }} />
+    <Pricing onChoose={request => openDemo(request)} onDemo={openDemo} />
 
     <FAQ items={c.faqs} />
 
-    <PilotCTA expanded={pilotExpanded} onToggle={() => setPilotExpanded(value => !value)} onSubmit={prepareMail} selection={pricingChoice} mailReady={mailReady} formCopy={c} />
+    <PilotCTA onDemo={() => openDemo(pricingChoice)} />
+    {demoOpen && <DemoChoice onClose={() => setDemoOpen(false)} onSelect={followPath} step={demoStep} onBack={() => setDemoStep("choice")}
+      expertForm={<DemoContactForm onSubmit={prepareMail} selection={pricingChoice} mailReady={mailReady} formCopy={c} />} />}
   </main>;
 }

@@ -63,13 +63,13 @@ function Field({ label, value, ready, waiting, reduced, children }: { label: str
   </div>;
 }
 
-export function DialogueToLead() {
+export function DialogueToLead({ onDiscuss }: { onDiscuss: () => void }) {
   const { locale } = useLanguage();
   // Remount on a language change so the conversation and its extracted fields stay in sync.
-  return <DialogueToLeadExample key={locale} locale={locale} />;
+  return <DialogueToLeadExample key={locale} locale={locale} onDiscuss={onDiscuss} />;
 }
 
-function DialogueToLeadExample({ locale }: { locale: "ru" | "en" }) {
+function DialogueToLeadExample({ locale, onDiscuss }: { locale: "ru" | "en"; onDiscuss: () => void }) {
   const c = content[locale];
   const reduced = Boolean(useReducedMotion());
   const section = useRef<HTMLElement>(null);
@@ -110,7 +110,7 @@ function DialogueToLeadExample({ locale }: { locale: "ru" | "en" }) {
     transcript.current.scrollTop = tick === 0 && !historyOpen && !reduced ? 0 : transcript.current.scrollHeight;
   }, [tick, historyOpen, reduced]);
 
-  return <section ref={section} id="demo" aria-labelledby="lead-story-title" className="mx-auto max-w-[1440px] px-6 py-20 text-plumo-ink md:px-8 md:py-28 lg:px-16">
+  return <section ref={section} id="demo" tabIndex={-1} aria-labelledby="lead-story-title" className="mx-auto max-w-[1440px] px-6 py-20 text-plumo-ink outline-none md:px-8 md:py-28 lg:px-16">
     <div className="mx-auto max-w-[840px] text-center">
       <h2 id="lead-story-title" className="!text-[clamp(36px,4.8vw,64px)] !font-bold !leading-[1.04]">{c.title}<br /><span className="text-plumo-blue">{c.accent}</span></h2>
       <p className="mx-auto mb-0 mt-6 max-w-[560px] text-[17px] leading-relaxed text-plumo-muted">{c.description}</p>
@@ -177,5 +177,9 @@ function DialogueToLeadExample({ locale }: { locale: "ru" | "en" }) {
       </AnimatePresence>
     </div>
     <p className="mb-0 mt-6 text-center text-[11px] leading-relaxed text-plumo-muted">{c.note}</p>
+    <div className="mt-8 flex flex-col items-center gap-4 text-center">
+      <p className="m-0 text-[16px] text-plumo-muted">{locale === "ru" ? "Как это может работать в вашем бизнесе?" : "How could this work for your business?"}</p>
+      <button type="button" onClick={onDiscuss} className="cursor-pointer rounded-full border-0 bg-plumo-ink px-6 py-4 font-[inherit] text-[14px] font-medium text-white transition-opacity hover:opacity-85">{locale === "ru" ? "Обсудить с сотрудником" : "Discuss with our team"}</button>
+    </div>
   </section>;
 }

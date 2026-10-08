@@ -42,7 +42,7 @@ function Tick() {
   return <svg aria-hidden="true" className="shrink-0 text-[#8da5ff]" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="m4 10 4 4 8-9" /></svg>;
 }
 
-export function SetupPipeline() {
+export function SetupPipeline({ onDemo }: { onDemo: () => void }) {
   const { locale } = useLanguage();
   const c = content[locale];
   const [active, setActive] = useState(0);
@@ -69,7 +69,7 @@ export function SetupPipeline() {
           <p className="mb-0 mt-6 max-w-[400px] text-[15px] leading-[1.8] text-plumo-muted">{c.descriptions[active]}</p>
         </motion.div></AnimatePresence>
         <p className="mb-6 mt-6 border-0 border-t border-solid border-plumo-line pt-5 text-[13px] leading-relaxed">{c.results[active]}</p>
-        {active < 3 ? <button type="button" onClick={() => setActive(value => Math.min(3, value + 1))} className="button-text mt-auto cursor-pointer self-start font-[inherit]"><span>{c.next}</span><span className="button-text-symbol" aria-hidden="true"><span className="symbol-arrow">→</span><span className="symbol-plus">+</span></span></button> : <a href="#pilot" className="button-text mt-auto self-start"><span>{c.start}</span><span className="button-text-symbol" aria-hidden="true"><span className="symbol-arrow">→</span><span className="symbol-plus">+</span></span></a>}
+        {active < 3 ? <button type="button" onClick={() => setActive(value => Math.min(3, value + 1))} className="button-text mt-auto cursor-pointer self-start font-[inherit]"><span>{c.next}</span><span className="button-text-symbol" aria-hidden="true"><span className="symbol-arrow">→</span><span className="symbol-plus">+</span></span></button> : <button type="button" aria-haspopup="dialog" onClick={onDemo} className="button-text mt-auto cursor-pointer self-start font-[inherit]"><span>{c.start}</span><span className="button-text-symbol" aria-hidden="true"><span className="symbol-arrow">→</span><span className="symbol-plus">+</span></span></button>}
       </div>
 
       <div className="m-3 mt-0 min-w-0 overflow-hidden rounded-[24px] bg-[#101113] text-white md:m-5 lg:ml-0">

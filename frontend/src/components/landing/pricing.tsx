@@ -64,7 +64,7 @@ function Check() {
   return <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0"><path d="m5 12 4 4L19 6" /></svg>;
 }
 
-export function Pricing({ onChoose }: { onChoose: (request: PricingRequest) => void }) {
+export function Pricing({ onChoose, onDemo }: { onChoose: (request: PricingRequest) => void; onDemo: (request: PricingRequest) => void }) {
   const { locale } = useLanguage();
   const c = content[locale];
   const reduced = useReducedMotion();
@@ -104,7 +104,7 @@ export function Pricing({ onChoose }: { onChoose: (request: PricingRequest) => v
           {suggested === "custom" ? <p className="mb-0 mt-2 text-[12px] text-plumo-muted">{c.extra}</p> : billing === "quarter" && <p className="mb-0 mt-2 text-[12px] leading-relaxed text-plumo-muted">{c.billedOnce} · {number.format(summaryMonthly)} {c.currency} {c.period}<br /><span className="text-plumo-blue">{c.saving}: {number.format(summaryBase * 3 - summaryTotal)} {c.currency}</span></p>}
           {voice && <p className="mb-0 mt-2 text-[12px] leading-relaxed text-plumo-muted">{c.voiceExtra}</p>}
         </div>
-        <a href="#pilot" onClick={() => choose(suggested)} className="login-link button-pill self-start !px-6 !py-3 !text-[13px] !font-medium md:shrink-0 md:self-center">{suggested === "custom" || voice ? c.calculate : c.action}</a>
+        <button type="button" aria-haspopup="dialog" onClick={() => choose(suggested)} className="login-link button-pill cursor-pointer self-start font-[inherit] !px-6 !py-3 !text-[13px] !font-medium md:shrink-0 md:self-center">{suggested === "custom" || voice ? c.calculate : c.action}</button>
       </div>
     </div>
     <p className="mb-5 mt-0 text-[12px] text-plumo-muted">{c.recommended}: <span className="text-plumo-ink">{c.names[suggested]}</span></p>
@@ -123,7 +123,7 @@ export function Pricing({ onChoose }: { onChoose: (request: PricingRequest) => v
             {plan !== "custom" && <span className={`mt-3 text-[12px] ${featured ? "text-white/80" : "text-plumo-muted"}`}>{needsQuote ? c.extra : billing === "quarter" ? `${c.period} · ${c.quarterly}` : c.period}</span>}
             {!needsQuote && billing === "quarter" && <span className={`mt-2 text-[11px] ${featured ? "text-white/80" : "text-plumo-muted"}`}>{number.format(price * 3)} {c.currency} {c.total}</span>}
           </div>
-          <a href="#pilot" onClick={() => choose(plan)} className="login-link button-pill !flex !min-h-[52px] !w-full !justify-center !px-4 !py-3 !text-center !text-[13px] !font-medium">{featured ? c.futureAction : plan === "custom" ? c.customAction : c.action}</a>
+          <button type="button" aria-haspopup="dialog" onClick={() => choose(plan)} className="login-link button-pill cursor-pointer font-[inherit] !flex !min-h-[52px] !w-full !justify-center !px-4 !py-3 !text-center !text-[13px] !font-medium">{featured ? c.futureAction : plan === "custom" ? c.customAction : c.action}</button>
           <div className={`mt-8 border-0 border-t border-solid pt-6 ${featured ? "border-white/25" : "border-plumo-line"}`}>
             <p className="mb-5 mt-0 text-[15px] font-semibold">{c.limits[index]}</p>
             <ul className="m-0 flex list-none flex-col gap-4 p-0">{c.features[index].map(feature => <li key={feature} className="flex items-start gap-3 text-[13px] leading-[1.6]"><Check /><span>{feature}</span></li>)}</ul>
@@ -134,7 +134,7 @@ export function Pricing({ onChoose }: { onChoose: (request: PricingRequest) => v
     </div>
     <div className="mt-6 flex flex-col items-start justify-between gap-5 rounded-[24px] bg-plumo-soft px-6 py-7 md:flex-row md:items-center md:px-8">
       <div><h3 className="m-0 text-[20px] font-medium tracking-[-0.035em]">{c.demoTitle}</h3><p className="mb-0 mt-2 text-[14px] leading-relaxed text-plumo-muted">{c.demoText}</p></div>
-      <a href="#pilot" onClick={() => choose("demo")} className="button-text shrink-0"><span>{c.demoAction}</span><span className="button-text-symbol" aria-hidden="true"><span className="symbol-arrow">→</span><span className="symbol-plus">+</span></span></a>
+      <button type="button" onClick={() => onDemo({ choice: "demo", volume, billing, voice })} aria-haspopup="dialog" className="button-text shrink-0 cursor-pointer font-[inherit]"><span>{c.demoAction}</span><span className="button-text-symbol" aria-hidden="true"><span className="symbol-arrow">→</span><span className="symbol-plus">+</span></span></button>
     </div>
     <p className="mb-0 mt-5 max-w-[940px] text-[11px] leading-[1.7] text-plumo-muted">{c.terms}</p>
   </section>;
