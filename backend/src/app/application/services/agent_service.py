@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -54,7 +55,7 @@ from app.domain.ports import (
     Router,
 )
 from app.domain.spoken_numbers import spoken_to_digits
-from app.domain.text_signals import analyze_message, phone_from_id
+from app.domain.text_signals import analyze_message, find_phones, phone_from_id
 from app.scrub import scrub_mapping, scrub_text
 
 logger = logging.getLogger("plumo.agent")
@@ -205,11 +206,17 @@ class AgentService:
         lap("model_ms")
 
         signals = analyze_message(message.text)
+        if not signals.meeting and has_slot(message.text) and _asked_for_slot(history):
+            # "В субботу в 15:00" answers our "какой день вам удобен?": same meeting request.
+            signals = replace(signals, meeting=True)
+            steps.append("meeting_slot_answer")
         assessment = self.validator.assess(message.text, context)
         # Rotates fixed lines inside one dialog so the agent does not repeat itself.
         seed = f"{conversation.id}:{len(history)}"
         slot_named = signals.meeting and has_slot(message.text)
-        intent = _intent(signals, slot_named, mid_dialog=bool(context.recent_messages))
+        intent = _intent(
+            signals, slot_named, mid_dialog=bool(context.recent_messages), phone_given=bool(find_phones(message.text))
+        )
         if signals.human_request:
             response_text = human_phrase(language, message.channel, seed)
         elif assessment.factual and not assessment.answerable and (
@@ -675,7 +682,22 @@ def _paused_response(customer_id: UUID, conversation_id: UUID, language: str, co
 FIXED_REPLY_REASONS = frozenset({"human_request", "greeting", "farewell"})
 
 
-def _intent(signals, slot_named: bool, mid_dialog: bool = False) -> str:
+_SLOT_QUESTIONS = ("какой день", "в какое время", "во сколько", "когда вам удобно", "когда удобно", "кайсы күнү", "саат канчада")
+
+
+def _asked_for_slot(history: list[Message]) -> bool:
+    """True when the agent's last line asked the customer for a day or time."""
+
+    for item in reversed(history):
+        if item.role == MessageRole.assistant:
+            lowered = item.text.lower()
+            return any(marker in lowered for marker in _SLOT_QUESTIONS)
+    return False
+
+
+def _intent(signals, slot_named: bool, mid_dialog: bool = False, phone_given: bool = False) -> str:
+    if phone_given and not signals.factual:
+        return "contact"
     if signals.meeting:
         return "meeting_set" if slot_named else "meeting_ask"
     if signals.farewell and not signals.factual:

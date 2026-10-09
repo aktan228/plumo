@@ -82,9 +82,9 @@ def agent_payload(
     }
     if tts:
         conversation["tts"] = tts
-    # Model replies take 3-5 s. After 1.5 s of silence the agent says a filler line
-    # while the real answer is still being validated.
-    conversation["turn"] = {"soft_timeout_config": {"timeout_seconds": 1.5, "message": "Так, секунду, смотрю…"}}
+    # A normal reply takes 1.5-2.5 s, so the filler must wait longer or it fires on
+    # every turn (it did at 1.5 s). It covers only a slow model or a provider retry.
+    conversation["turn"] = {"soft_timeout_config": {"timeout_seconds": 3.5, "message": "Секундочку…"}}
     return {
         "name": name,
         "conversation_config": conversation,

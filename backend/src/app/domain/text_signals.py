@@ -279,5 +279,5 @@ def analyze_message(text: str) -> MessageSignals:
         property_details=contains_any(normalized, PROPERTY),
         catalog=contains_any(normalized, CATALOG),
         recommend=contains_any(normalized, RECOMMEND),
-        numbers=tuple(compact_numbers(text)),
+        numbers=tuple(compact_numbers(PHONE_RE.sub(" ", text))),
     )

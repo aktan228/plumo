@@ -4,7 +4,7 @@ import json
 import re
 
 from app.domain.models import AgentContext, QuestionAssessment, ValidationResult
-from app.domain.text_signals import analyze_message, compact_numbers, contains_any, normalize_text
+from app.domain.text_signals import analyze_message, compact_numbers, contains_any, find_phones, normalize_text
 
 _MEASURE = re.compile(r"(\d{1,4})\s*-?\s*(?:м²|м2|м\b|этаж|комнат)")
 # No calendar is connected: a booking is only a wish the manager confirms, and a
@@ -103,6 +103,14 @@ def _corpus(context: AgentContext) -> str:
         parts.append(hit.item.title)
         parts.append(hit.item.content)
         parts.append(hit.item.category)
+    # What the agent said earlier already passed this gate: a listing found two
+    # turns ago may be mentioned again even if this turn's search missed it.
+    for message in context.recent_messages:
+        if str(message.role) == "assistant":
+            parts.append(message.text)
+    # The customer's own phone is theirs, not an invented fact; repeating it back is fine.
+    if find_phones(context.current_message):
+        parts.append(context.current_message)
     return "\n".join(parts)
 
 

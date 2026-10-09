@@ -307,3 +307,19 @@ async def test_meeting_lines_never_claim_a_booking():
     context = _context("давайте в субботу")
     for line in (*MEETING_ASK_RU, *MEETING_ASK_KY, *MEETING_SET_RU, *MEETING_SET_KY):
         assert ResponseValidator().validate(line, context).safe is True, line
+
+
+async def test_contact_and_followup_lines_pass_the_validator():
+    from app.domain.phrases import CONTACT_KY, CONTACT_RU
+
+    context = _context("0999555999555")
+    for line in (*CONTACT_RU, *CONTACT_KY):
+        assert ResponseValidator().validate(line, context).safe is True, line
+
+
+async def test_customer_phone_is_not_a_factual_number():
+    from app.domain.text_signals import analyze_message
+
+    assert analyze_message("0999555999555").numbers == ()
+    assert analyze_message("мой номер +996 555 123 456").factual is False
+    assert analyze_message("сколько стоит за 85000").numbers == ("85000",)
