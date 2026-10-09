@@ -58,8 +58,8 @@ python -m app.seed && uvicorn app.main:app --reload
 | `PLUMO_API_KEY` | ключ для `/api/v1/*`, заголовок `X-API-Key`. **На сервере обязателен** | длинная случайная строка |
 | `CORS_ORIGINS` | адреса фронта через запятую | `https://app.plumo.kg,http://localhost:3000` |
 | `AI_MODE` | `mock` — без внешних вызовов, `production` — живая модель | `production` |
-| `SMALL_MODEL_PROVIDER` / `BIG_MODEL_PROVIDER` | семейство моделей, см. [docs/MODELS.md](docs/MODELS.md) | `gemini_small` / `gemini_big` |
-| `GEMINI_API_KEY` | ключ Google AI Studio | `AIza…` |
+| `SMALL_MODEL_PROVIDER` / `BIG_MODEL_PROVIDER` | семейство моделей, см. [docs/MODELS.md](docs/MODELS.md) | `none` / `openrouter_big` |
+| `OPENROUTER_BIG_MODEL` | модель | `anthropic/claude-haiku-5.5` |
 | `OPENROUTER_API_KEY` | ключ OpenRouter, если модели через него | `sk-or-v1-…` |
 | `HANDOFF_PROVIDER` | `telegram` — карточка менеджеру в Telegram | `telegram` |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_MANAGER_CHAT_ID` | бот и чат менеджеров | `123:ABC…` / `-100…` |

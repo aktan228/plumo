@@ -4,7 +4,7 @@ Plumo — ядро AI-менеджера по продажам. Один кли�
 
 Подключить бэк к кабинету, каналам или серверу: [FULLSTACK.md](FULLSTACK.md). Коротко для лида: [LEAD.md](LEAD.md). Живая модель или канал: [INTEGRATION.md](INTEGRATION.md). Звонки: [VOICE.md](VOICE.md). Какую модель брать: [docs/MODELS.md](docs/MODELS.md), сравнить модели на 55 сценариях: [docs/BENCH.md](docs/BENCH.md). Как агент разговаривает: [docs/CONVERSATION.md](docs/CONVERSATION.md). Что подключить и купить: [docs/CHECKLIST.md](docs/CHECKLIST.md).
 
-Текстовая модель — Gemini 3.8 Flash напрямую через Google AI Studio или через OpenRouter, с запасными 3.7 Flash и 3.1 Flash-Lite (2.5 Flash отключается 20.10.2026, см. [docs/MODELS.md](docs/MODELS.md)). Малой модели пока нет: её реплики отвечает большая. Телефонные звонки идут через ElevenLabs Agents, Plumo подключён к нему как Custom LLM: [VOICE.md](VOICE.md). Порты STT/TTS для голосовых сообщений в чатах пока mock. Каналы WhatsApp/Telegram ещё не живые.
+Текстовая модель — Claude Haiku 5.5 через OpenRouter, thinking выключен, запасная Haiku 4.5: в 2 раза быстрее и в 6 раз дешевле Gemini 3.8 Flash на наших замерах ([docs/MODELS.md](docs/MODELS.md)). Агента зовут Плюмо, он всегда говорит, что он ИИ; что продаёт бизнес — из `businesses.profile`, не из кода. Малой модели пока нет: её реплики отвечает большая. Телефонные звонки идут через ElevenLabs Agents, Plumo подключён к нему как Custom LLM: [VOICE.md](VOICE.md). Порты STT/TTS для голосовых сообщений в чатах пока mock. Каналы WhatsApp/Telegram ещё не живые.
 
 ## Архитектура
 
@@ -159,7 +159,7 @@ python -m app.demo
 python -m app.demo --interactive
 ```
 
-`ping_llm` бьёт в OpenRouter без базы: проверка ключа и Gemini. `demo` нужен Postgres. Без флага прогоняет два сообщения:
+`ping_llm` бьёт в OpenRouter без базы: проверка ключа и модели. `demo` нужен Postgres. Без флага прогоняет два сообщения:
 
 ```
 Client > Еще продается квартира за 85000?

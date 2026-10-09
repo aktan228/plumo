@@ -10,18 +10,18 @@ AgentService
 ```
 
 OpenRouter уже есть в репозитории: `src/app/infrastructure/ai/openrouter_llm.py`.
-Чтобы взять Gemini:
+Рабочая схема (Claude Haiku 5.5, thinking выключается сам):
 
 ```
 AI_MODE=production
 SMALL_MODEL_PROVIDER=none
 BIG_MODEL_PROVIDER=openrouter_big
 OPENROUTER_API_KEY=sk-or-v1-...
-OPENROUTER_BIG_MODEL=google/gemini-3.8-flash
-OPENROUTER_FALLBACK_MODELS=google/gemini-3.7-flash,google/gemini-3.1-flash-lite
+OPENROUTER_BIG_MODEL=anthropic/claude-haiku-5.5
+OPENROUTER_FALLBACK_MODELS=anthropic/claude-haiku-4.5
 ```
 
-Проверка ключа и модели без базы: `python -m app.ping_llm` (модель, задержка, токены, цена на настоящем промпте). Gemini 2.5 Flash отключается 20.10.2026, см. [docs/MODELS.md](docs/MODELS.md).
+Проверка ключа и модели без базы: `python -m app.ping_llm` (модель, задержка, токены, цена на настоящем промпте). Почему Haiku, а не Gemini: [docs/MODELS.md](docs/MODELS.md).
 
 Чтобы поставить другого провайдера, пишется новый класс, он регистрируется в фабрике и выбирается конфигурацией. `AgentService`, память, база знаний, роутер, API и таблицы не переписываются.
 
@@ -29,20 +29,20 @@ OPENROUTER_FALLBACK_MODELS=google/gemini-3.7-flash,google/gemini-3.1-flash-lite
 
 ## Своя малая модель (local)
 
-Целевая схема: малая модель — своя дообученная, большая — Gemini 3.8 Flash (запасные 3.7 Flash и 3.1 Flash-Lite). Пока малой нет, `SMALL_MODEL_PROVIDER=none` отдаёт её реплики большой.
+Целевая схема: малая модель — своя дообученная, большая — Claude Haiku 5.5 через OpenRouter. Пока малой нет, `SMALL_MODEL_PROVIDER=none` отдаёт её реплики большой.
 
 ```
 AI_MODE=production
 SMALL_MODEL_PROVIDER=local_small
-BIG_MODEL_PROVIDER=gemini_big
+BIG_MODEL_PROVIDER=openrouter_big
 LOCAL_LLM_BASE_URL=http://<gpu-host>:8000/v1/chat/completions   # vLLM; Ollama: :11434/v1/chat/completions
 LOCAL_SMALL_MODEL=plumo-small
-GEMINI_API_KEY=...
+OPENROUTER_API_KEY=...
 ```
 
 Сервер должен отвечать в формате OpenAI Chat Completions и поддерживать `response_format: {"type": "json_object"}` (vLLM и Ollama умеют). Ключ `LOCAL_LLM_API_KEY` необязателен. Токены считаются, стоимость пишется как 0: железо оплачивается отдельно. Если малая модель ответила с confidence ниже `SMALL_MODEL_CONFIDENCE_THRESHOLD` или мусором, ядро само повторит реплику большой моделью.
 
-Пока своей модели нет, малую ступень закрывает `gemini_small` (Flash-Lite).
+Пока своей модели нет, малую ступень закрывает большая (`SMALL_MODEL_PROVIDER=none`).
 
 ## Ответ модели
 
@@ -50,7 +50,7 @@ GEMINI_API_KEY=...
 
 ## Бюджет времени
 
-`VOICE_TURN_BUDGET_S` (7 с) и `CHAT_TURN_BUDGET_S` (25 с) ограничивают все вызовы модели одной реплики. Не уложилась — ядро отвечает подготовленной фразой или выдержкой из базы знаний, повтор большой моделью не запускается.
+`VOICE_TURN_BUDGET_S` (5 с) и `CHAT_TURN_BUDGET_S` (25 с) ограничивают все вызовы модели одной реплики. В звонке медленный запрос через `VOICE_HEDGE_AFTER_S` (3 с) получает параллельный дубль, берётся первый ответ. Не уложилась — ядро отвечает подготовленной фразой или выдержкой из базы знаний, повтор большой моделью не запускается.
 
 ## Где граница
 

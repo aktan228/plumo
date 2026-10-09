@@ -32,7 +32,7 @@ Plumo — **AI-менеджер по продажам недвижимости**
 | Handoff очередь PENDING → ACCEPTED → RESOLVED | Работает |
 | Встречи со статусом PROPOSED (без Google Calendar) | Работает |
 | REST + Swagger | Работает |
-| Gemini напрямую или через OpenRouter (3.8 Flash + запасные модели) | Подключён адаптером: ретраи, смена отключённой модели, thinking `minimal` |
+| Claude Haiku 5.5 через OpenRouter (запасная Haiku 4.5); Gemini и другие — сменой env | Подключён адаптером: ретраи, смена отключённой модели, thinking выключен |
 | STT / TTS | Mock (`audio_id` → текст / текст → `audio_id`) |
 | WhatsApp / Telegram / Instagram SDK | Mock-адаптеры формы payload |
 | Кабинет менеджера / лендинг | Вне этого репозитория |
@@ -270,8 +270,8 @@ AI_MODE=production
 SMALL_MODEL_PROVIDER=none
 BIG_MODEL_PROVIDER=openrouter_big
 OPENROUTER_API_KEY=sk-or-v1-...
-OPENROUTER_BIG_MODEL=google/gemini-3.8-flash
-OPENROUTER_FALLBACK_MODELS=google/gemini-3.7-flash,google/gemini-3.1-flash-lite
+OPENROUTER_BIG_MODEL=anthropic/claude-haiku-5.5
+OPENROUTER_FALLBACK_MODELS=anthropic/claude-haiku-4.5
 ```
 
 `AI_MODE=mock` — фабрика **игнорирует** имена и всегда отдаёт `MockLLMProvider` (скрипты по ключевым словам). Это защита от случайного боевого биллинга.
@@ -282,7 +282,7 @@ OPENROUTER_FALLBACK_MODELS=google/gemini-3.7-flash,google/gemini-3.1-flash-lite
 
 Парсер ответа: JSON, JSON в markdown-fence, или сырой текст как `text`.
 
-Если на ключе нет кредитов, Gemini отвечает **402**. Для отладки можно `OPENROUTER_*_MODEL=openrouter/free` — бесплатно, но 2–15 секунд на реплику и нестабильный JSON.
+Если на ключе нет кредитов, OpenRouter отвечает **402**. Для отладки можно `OPENROUTER_*_MODEL=openrouter/free` — бесплатно, но 2–15 секунд на реплику и нестабильный JSON.
 
 Проверка ключа без Postgres: `python -m app.ping_llm`.
 
