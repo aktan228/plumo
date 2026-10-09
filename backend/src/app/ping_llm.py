@@ -39,7 +39,7 @@ def _context(text: str) -> AgentContext:
     )
     customer = Customer(uuid4(), "+996555000111", "ru", "active", None, "whatsapp", None, now, now, business_id=business.id)
     return AgentContext(
-        agent_instructions=agent_instructions(business.name, "Айпери", "voice"),
+        agent_instructions=agent_instructions(business.name, "Тимур", "voice"),
         business=business,
         knowledge=[KnowledgeHit(item, 5.0)],
         customer=customer,

@@ -10,7 +10,7 @@ _MEASURE = re.compile(r"(\d{1,4})\s*-?\s*(?:м²|м2|м\b|этаж|комнат)
 # No calendar is connected: a booking is only a wish the manager confirms, and a
 # live transfer does not exist. Promising either misleads the customer.
 _FALSE_BOOKING = re.compile(
-    r"записал[аи]?\b|записываю|вы записаны|забронир|зарезервир|жазып алдым|броньдоо(?:ду)? (?:жасадым|кылдым)"
+    r"записал[аи]?\s+(?:вас|тебя|на\b)|записываю\s+(?:вас|тебя|на\b)|вы записаны|забронир|зарезервир|жазып алдым|броньдоо(?:ду)? (?:жасадым|кылдым)"
 )
 _FALSE_TRANSFER = re.compile(r"перевожу вас|соединяю вас|соединю вас|оставайтесь на линии|не отключайтесь")
 _INSTALLMENT_YES = re.compile(r"(есть|доступ|возмож|оформ)")

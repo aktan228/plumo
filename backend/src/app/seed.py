@@ -36,7 +36,7 @@ _CONTACTS = {
     "instagram": "@demo.realty",
     "email": "hello@demorealty.kg",
     # Persona name the agent introduces itself with. One per business.
-    "assistant_name": "Айпери",
+    "assistant_name": "Тимур",
 }
 _HOURS = "пн-сб 09:00-18:00, вс выходной"
 _RULES = (

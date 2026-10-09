@@ -323,3 +323,9 @@ async def test_customer_phone_is_not_a_factual_number():
     assert analyze_message("0999555999555").numbers == ()
     assert analyze_message("мой номер +996 555 123 456").factual is False
     assert analyze_message("сколько стоит за 85000").numbers == ("85000",)
+
+
+async def test_saving_a_phone_is_not_a_booking():
+    context = _context("0999555999555")
+    assert ResponseValidator().validate("Спасибо, записал ваш номер, менеджер свяжется.", context).safe is True
+    assert ResponseValidator().validate("Записал вас на субботу.", context).safe is False
