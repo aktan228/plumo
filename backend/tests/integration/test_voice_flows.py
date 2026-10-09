@@ -287,3 +287,21 @@ async def test_spoken_price_finds_the_listing(client, monkeypatch):
     _env(monkeypatch)
     answer = await _turn(client, "+996555888009", "call_f", "Квартира за восемьдесят пять тысяч ещё продаётся?")
     assert "85 000" in answer
+
+
+async def test_resent_turn_is_answered_once(client, engine, monkeypatch):
+    from app.infrastructure.database.models import MessageRow
+
+    _env(monkeypatch)
+    phone, call_id = f"+99655{uuid4().int % 10**7:07d}", f"conv_{uuid4().hex[:10]}"
+    first = await _turn(client, phone, call_id, "Квартира на Чуй ещё продаётся?")
+    again = await _turn(client, phone, call_id, "Квартира на Чуй ещё продаётся?")
+    longer = await _turn(client, phone, call_id, "Квартира на Чуй ещё продаётся? И сколько там метров?")
+    assert again == first
+    assert longer
+    factory = create_session_factory(engine)
+    async with factory() as session:
+        rows = (
+            await session.execute(select(MessageRow.text).where(MessageRow.external_id.like(f"{call_id}:%")))
+        ).scalars().all()
+    assert len(rows) == 2

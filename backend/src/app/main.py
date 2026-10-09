@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.deps import require_api_key
 from app.api.routes import customers, messages, operations, telephony, voice
+from app.application.services.handoff_service import drain_notifications
 from app.config import Settings, get_settings
 from app.container import Runtime, build_runtime
 from app.correlation import correlation_id, request_id
@@ -25,6 +26,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
         setup_logging(settings.log_level)
         app.state.runtime = runtime or build_runtime(settings)
         yield
+        await drain_notifications()
         await app.state.runtime.providers.aclose()
         close = getattr(app.state.runtime.handoff_provider, "aclose", None)
         if close is not None:

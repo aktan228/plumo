@@ -53,6 +53,7 @@ def parse_llm_request(body: dict[str, Any]) -> CallTurn:
 
     messages = body.get("messages") or []
     text = ""
+    user_turns = 0
     markers: dict[str, str] = {}
     for item in messages:
         if not isinstance(item, dict):
@@ -62,15 +63,24 @@ def parse_llm_request(body: dict[str, Any]) -> CallTurn:
             markers.update(_markers(content))
         elif item.get("role") == "user" and content.strip():
             text = content.strip()
+            user_turns += 1
 
     extra = body.get("elevenlabs_extra_body") or {}
     if not isinstance(extra, dict):
         extra = {}
     caller = _first(extra.get("caller_id"), markers.get("caller"), body.get("user_id"))
+    call_id = _first(extra.get("conversation_id"), markers.get("call"))
+    # The platform resends a turn after a network hiccup with the same history.
+    # A turn the caller kept talking into comes back with longer text: a new id.
+    message_id = None
+    if call_id and text:
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+        message_id = f"{call_id[:96]}:{user_turns}:{digest}"
     return CallTurn(
         text=text,
         caller=caller,
-        call_id=_first(extra.get("conversation_id"), markers.get("call")),
+        message_id=message_id,
+        call_id=call_id,
         called=_first(extra.get("called_number"), markers.get("called")),
         business_id=_first(extra.get("business_id"), markers.get("business")),
     )

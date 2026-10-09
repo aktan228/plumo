@@ -360,6 +360,8 @@ class CallTurn:
     call_id: str | None
     called: str | None = None
     business_id: str | None = None
+    # Idempotency key of the utterance: a resent request must not run or bill twice.
+    message_id: str | None = None
 
 
 @dataclass(slots=True)

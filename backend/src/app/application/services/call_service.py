@@ -88,11 +88,15 @@ class CallService:
                 external_user_id=_caller_key(turn),
                 text=turn.text,
                 business_id=business.id,
+                message_id=turn.message_id,
                 metadata={"provider": self.provider, "call_id": turn.call_id},
             )
         )
         if turn.call_id:
             await self._touch_call(turn, response.customer_id, business.id, getattr(response, "conversation_id", None))
+        if getattr(response, "duplicate", False) and not response.response_text.strip():
+            # A resend of a turn still being answered: not a manager takeover.
+            return CallReply(listening_phrase(response.language), response.language, False)
         if not getattr(response, "send_reply", True) or not response.response_text.strip():
             # A manager took the dialog but is not on this call. Silence on a
             # phone line sounds like a dropped call.

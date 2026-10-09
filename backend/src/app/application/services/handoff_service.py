@@ -1,5 +1,7 @@
 """Human handoff. Notification transport is a port; the mock only logs."""
 
+import asyncio
+import logging
 from uuid import uuid4
 
 from app.domain.enums import HandoffPriority, HandoffStatus
@@ -18,6 +20,18 @@ from app.domain.models import (
 )
 from app.domain.ports import CustomerStore, EventBus, HandoffStore, HumanHandoffProvider
 from app.domain.text_signals import MessageSignals
+
+logger = logging.getLogger("plumo.handoff")
+# Notifications in flight. The service lives one request; this set keeps the
+# tasks referenced so the loop does not garbage-collect them half-sent.
+_PENDING: set[asyncio.Task] = set()
+
+
+async def drain_notifications() -> None:
+    """Wait for notifications in flight: on shutdown and in tests."""
+
+    if _PENDING:
+        await asyncio.gather(*list(_PENDING), return_exceptions=True)
 
 _PRIORITY = {
     HandoffPriority.low: 0,
@@ -121,7 +135,11 @@ class HandoffService:
             customer.status = status
             customer.updated_at = now
             await self.customers.save(customer)
-        await self.provider.notify(handoff)
+        # Telegram can take seconds; a caller on the line must not wait for it.
+        # The provider logs its own failures, and the row above is the record.
+        task = asyncio.create_task(self._notify(handoff))
+        _PENDING.add(task)
+        task.add_done_callback(_PENDING.discard)
         await self.events.publish(
             DomainEvent(
                 HANDOFF_REQUESTED,
@@ -134,6 +152,12 @@ class HandoffService:
             )
         )
         return handoff
+
+    async def _notify(self, handoff: HandoffRequest) -> None:
+        try:
+            await self.provider.notify(handoff)
+        except Exception:
+            logger.exception("handoff_notify_failed", extra={"handoff_id": str(handoff.id)})
 
     async def list_requests(self, status: str | None, limit: int = 50) -> list[HandoffRequest]:
         return await self.handoffs.list_requests(status, limit)

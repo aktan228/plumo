@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     small_model_confidence_threshold: float = 0.7
     # Model time per turn, seconds. Past it the agent says a prepared line.
-    voice_turn_budget_s: float = 7.0
+    voice_turn_budget_s: float = 5.0
     chat_turn_budget_s: float = 25.0
     # A manager's accepted handoff silences the agent in that dialog. After this
     # many hours without the handoff being resolved the agent answers again.
