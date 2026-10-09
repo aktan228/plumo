@@ -1,13 +1,15 @@
 """SQLAlchemy repositories. They map rows to domain records and never leave the session open."""
 
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import CustomerStatus
-from app.domain.errors import CustomerNotFound, HandoffNotFound, InvalidState
+from app.domain.errors import CustomerConflict, CustomerNotFound, DuplicateMessage, HandoffNotFound, InvalidState
 from app.domain.models import (
     Business,
     Conversation,
@@ -47,19 +49,21 @@ class CustomerRepository:
         row = await self.session.get(CustomerRow, customer_id)
         return _customer(row) if row else None
 
-    async def get_by_phone(self, phone: str) -> Customer | None:
+    async def get_by_phone(self, business_id: UUID, phone: str) -> Customer | None:
         stmt = select(CustomerRow).where(
+            CustomerRow.business_id == business_id,
             CustomerRow.phone == phone,
             CustomerRow.status != CustomerStatus.merged,
         )
         row = await self.session.scalar(stmt)
         return _customer(row) if row else None
 
-    async def get_by_channel(self, channel: str, external_id: str) -> Customer | None:
+    async def get_by_channel(self, business_id: UUID, channel: str, external_id: str) -> Customer | None:
         stmt = (
             select(CustomerRow)
             .join(CustomerChannelRow, CustomerChannelRow.customer_id == CustomerRow.id)
             .where(
+                CustomerChannelRow.business_id == business_id,
                 CustomerChannelRow.channel == channel,
                 CustomerChannelRow.external_id == external_id,
             )
@@ -77,11 +81,40 @@ class CustomerRepository:
         await self.session.flush()
         return customer
 
+    async def create_with_channel(self, customer: Customer, channel: str, external_id: str) -> Customer:
+        """Card and its first channel in one savepoint.
+
+        Two copies of a new customer's first message race here. The loser gets
+        CustomerConflict and its transaction stays usable to read the winner.
+        """
+
+        now = utcnow()
+        try:
+            async with self.session.begin_nested():
+                self.session.add(_customer_row(customer))
+                await self.session.flush()
+                self.session.add(
+                    CustomerChannelRow(
+                        id=_new_id(),
+                        business_id=customer.business_id,
+                        customer_id=customer.id,
+                        channel=channel,
+                        external_id=external_id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                await self.session.flush()
+        except IntegrityError as exc:
+            raise CustomerConflict(f"customer for {channel} already exists") from exc
+        return customer
+
     async def save(self, customer: Customer) -> Customer:
         row = await self.session.get(CustomerRow, customer.id)
         if row is None:
             raise CustomerNotFound(f"customer {customer.id} was not found")
         row.phone = customer.phone
+        row.contact_phone = customer.contact_phone
         row.language = customer.language
         row.status = customer.status
         row.need = customer.need
@@ -92,7 +125,11 @@ class CustomerRepository:
         return _customer(row)
 
     async def link_channel(self, customer_id: UUID, channel: str, external_id: str) -> None:
+        owner = await self.session.get(CustomerRow, customer_id)
+        if owner is None:
+            raise CustomerNotFound(f"customer {customer_id} was not found")
         stmt = select(CustomerChannelRow).where(
+            CustomerChannelRow.business_id == owner.business_id,
             CustomerChannelRow.channel == channel,
             CustomerChannelRow.external_id == external_id,
         )
@@ -105,6 +142,7 @@ class CustomerRepository:
         self.session.add(
             CustomerChannelRow(
                 id=_new_id(),
+                business_id=owner.business_id,
                 customer_id=customer_id,
                 channel=channel,
                 external_id=external_id,
@@ -119,6 +157,8 @@ class CustomerRepository:
         target = await self._live(target_id)
         if source.id == target.id:
             return source
+        if source.business_id != target.business_id:
+            raise InvalidState("customers of different businesses cannot be merged")
 
         now = utcnow()
         await self.session.execute(
@@ -162,6 +202,8 @@ class CustomerRepository:
             target_row.phone = moved
         else:
             source_row.phone = None
+        if target_row.contact_phone is None and source_row.contact_phone:
+            target_row.contact_phone = source_row.contact_phone
         if target_row.need is None and source_row.need:
             target_row.need = source_row.need
         if target_row.language in ("", "unknown") and source_row.language not in ("", "unknown"):
@@ -264,14 +306,35 @@ class ConversationRepository:
         row.updated_at = utcnow()
         await self.session.flush()
 
+    async def end(self, conversation_id: UUID) -> None:
+        """Close a dialog. The next message on that channel opens a new one; memory is per customer."""
+
+        row = await self.session.get(ConversationRow, conversation_id)
+        if row is None or row.ended_at is not None:
+            return
+        row.ended_at = utcnow()
+        row.updated_at = row.ended_at
+        await self.session.flush()
+
 
 class MessageRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     async def add(self, message: Message) -> Message:
-        self.session.add(_message_row(message))
-        await self.session.flush()
+        row = _message_row(message)
+        if row.external_id is None:
+            self.session.add(row)
+            await self.session.flush()
+            return message
+        # A savepoint keeps the request's transaction usable when a concurrent
+        # retry of the same webhook already stored this message.
+        try:
+            async with self.session.begin_nested():
+                self.session.add(row)
+                await self.session.flush()
+        except IntegrityError as exc:
+            raise DuplicateMessage(f"message {row.external_id} is already stored") from exc
         return message
 
     async def list_for_conversation(self, conversation_id: UUID) -> list[Message]:
@@ -300,7 +363,7 @@ class MessageRepository:
             .where(
                 MessageRow.conversation_id == conversation_id,
                 MessageRow.role == "user",
-                MessageRow.metadata_json["external_message_id"].astext == external_id,
+                MessageRow.external_id == external_id,
             )
             .limit(1)
         )
@@ -363,6 +426,19 @@ class KnowledgeRepository:
         )
         row = await self.session.scalar(stmt)
         return _knowledge(row) if row else None
+
+    async def save(self, item: KnowledgeItem) -> KnowledgeItem:
+        row = await self.session.get(KnowledgeItemRow, item.id)
+        if row is None:
+            return await self.add(item)
+        row.category = item.category
+        row.title = item.title
+        row.content = item.content
+        row.metadata_json = dict(item.metadata)
+        row.active = item.active
+        row.updated_at = item.updated_at
+        await self.session.flush()
+        return item
 
 
 class BusinessRepository:
@@ -450,16 +526,16 @@ class HandoffRepository:
         row = await self.session.scalar(stmt)
         return _handoff(row) if row else None
 
-    async def find_accepted(self, conversation_id: UUID) -> HandoffRequest | None:
-        stmt = (
-            select(HandoffRequestRow)
-            .where(
-                HandoffRequestRow.conversation_id == conversation_id,
-                HandoffRequestRow.status == "ACCEPTED",
-            )
-            .limit(1)
+    async def find_accepted(self, conversation_id: UUID, since: datetime | None = None) -> HandoffRequest | None:
+        """Accepted handoff that still pauses the agent. `since` drops ones a manager forgot to resolve."""
+
+        stmt = select(HandoffRequestRow).where(
+            HandoffRequestRow.conversation_id == conversation_id,
+            HandoffRequestRow.status == "ACCEPTED",
         )
-        row = await self.session.scalar(stmt)
+        if since is not None:
+            stmt = stmt.where(HandoffRequestRow.updated_at >= since)
+        row = await self.session.scalar(stmt.limit(1))
         return _handoff(row) if row else None
 
 
@@ -520,6 +596,7 @@ class VoiceCallRepository:
             self.session.add(row)
         row.provider = call.provider
         row.provider_call_id = call.provider_call_id
+        row.business_id = call.business_id
         row.customer_id = call.customer_id
         row.caller = _clip(call.caller, 32)
         row.called = _clip(call.called, 32)
@@ -535,18 +612,24 @@ class VoiceCallRepository:
 
 
 class MetricsRepository:
+    """Pilot numbers. With `business_id` every figure is limited to that business."""
+
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+        self._customers = None
 
-    async def collect(self) -> MetricsSnapshot:
+    async def collect(self, business_id: UUID | None = None) -> MetricsSnapshot:
+        self._customers = (
+            select(CustomerRow.id).where(CustomerRow.business_id == business_id) if business_id is not None else None
+        )
         conversations = await self._count(ConversationRow)
         messages = await self._count(MessageRow)
         handed_off = await self._count(HandoffRequestRow)
         meetings = await self._count(MeetingRow)
         handled = await self._handled_without_human()
-        conv_with_handoff = await self._distinct(HandoffRequestRow.conversation_id)
+        conv_with_handoff = await self._distinct(HandoffRequestRow.conversation_id, HandoffRequestRow)
         total_logs, by_language, by_route, avg_latency, avg_first, avg_cost = await self._log_stats()
-        calls, call_seconds, call_cost = await self._voice_stats()
+        calls, call_seconds, call_cost = await self._voice_stats(business_id)
         minutes = call_seconds / 60
         return MetricsSnapshot(
             total_conversations=conversations,
@@ -568,26 +651,32 @@ class MetricsRepository:
             voice_cost_per_minute=round(call_cost / minutes, 6) if minutes else 0.0,
         )
 
-    async def _voice_stats(self) -> tuple[int, float, float]:
+    def _scoped(self, stmt, model):
+        """Limit a statement to the business's customers, through the row's customer_id."""
+
+        if self._customers is None:
+            return stmt
+        return stmt.where(model.customer_id.in_(self._customers))
+
+    async def _voice_stats(self, business_id: UUID | None) -> tuple[int, float, float]:
         """Completed calls only: an unfinished call has no duration or cost yet."""
 
-        row = (
-            await self.session.execute(
-                select(
-                    func.count(),
-                    func.coalesce(func.sum(VoiceCallRow.duration_s), 0),
-                    func.coalesce(func.sum(VoiceCallRow.cost), 0),
-                ).where(VoiceCallRow.status == "completed")
-            )
-        ).one()
+        stmt = select(
+            func.count(),
+            func.coalesce(func.sum(VoiceCallRow.duration_s), 0),
+            func.coalesce(func.sum(VoiceCallRow.cost), 0),
+        ).where(VoiceCallRow.status == "completed")
+        if business_id is not None:
+            stmt = stmt.where(VoiceCallRow.business_id == business_id)
+        row = (await self.session.execute(stmt)).one()
         return int(row[0]), float(row[1]), float(row[2])
 
     async def _count(self, model) -> int:
-        value = await self.session.scalar(select(func.count()).select_from(model))
+        value = await self.session.scalar(self._scoped(select(func.count()).select_from(model), model))
         return int(value or 0)
 
-    async def _distinct(self, column) -> int:
-        value = await self.session.scalar(select(func.count(func.distinct(column))))
+    async def _distinct(self, column, model) -> int:
+        value = await self.session.scalar(self._scoped(select(func.count(func.distinct(column))), model))
         return int(value or 0)
 
     async def _handled_without_human(self) -> int:
@@ -598,47 +687,36 @@ class MetricsRepository:
             .select_from(ConversationRow)
             .where(ConversationRow.id.in_(assistant), ConversationRow.id.notin_(handed))
         )
-        value = await self.session.scalar(stmt)
+        value = await self.session.scalar(self._scoped(stmt, ConversationRow))
         return int(value or 0)
 
     async def _log_stats(self) -> tuple[int, dict[str, int], dict[str, int], float, float, float]:
-        total = int(await self.session.scalar(select(func.count()).select_from(InteractionLogRow)) or 0)
+        log = InteractionLogRow
+        total = int(await self.session.scalar(self._scoped(select(func.count()).select_from(log), log)) or 0)
         languages = dict(
-            (
-                await self.session.execute(
-                    select(InteractionLogRow.language, func.count()).group_by(InteractionLogRow.language)
-                )
-            ).all()
+            (await self.session.execute(self._scoped(select(log.language, func.count()), log).group_by(log.language))).all()
         )
         routes = dict(
-            (
-                await self.session.execute(
-                    select(InteractionLogRow.route, func.count()).group_by(InteractionLogRow.route)
-                )
-            ).all()
+            (await self.session.execute(self._scoped(select(log.route, func.count()), log).group_by(log.route))).all()
         )
-        avg_latency = float(await self.session.scalar(select(func.avg(InteractionLogRow.latency_ms))) or 0)
-        first = (
+        avg_latency = float(await self.session.scalar(self._scoped(select(func.avg(log.latency_ms)), log)) or 0)
+        first = self._scoped(
             select(
-                InteractionLogRow.conversation_id.label("conversation_id"),
-                func.min(InteractionLogRow.created_at).label("first_at"),
-            )
-            .group_by(InteractionLogRow.conversation_id)
-            .subquery()
-        )
+                log.conversation_id.label("conversation_id"),
+                func.min(log.created_at).label("first_at"),
+            ),
+            log,
+        ).group_by(log.conversation_id).subquery()
         avg_first = await self.session.scalar(
-            select(func.avg(InteractionLogRow.latency_ms))
-            .select_from(InteractionLogRow)
+            select(func.avg(log.latency_ms))
+            .select_from(log)
             .join(
                 first,
-                (InteractionLogRow.conversation_id == first.c.conversation_id)
-                & (InteractionLogRow.created_at == first.c.first_at),
+                (log.conversation_id == first.c.conversation_id) & (log.created_at == first.c.first_at),
             )
         )
         per_dialog = (
-            select(func.sum(InteractionLogRow.estimated_cost).label("cost"))
-            .group_by(InteractionLogRow.conversation_id)
-            .subquery()
+            self._scoped(select(func.sum(log.estimated_cost).label("cost")), log).group_by(log.conversation_id).subquery()
         )
         avg_cost = await self.session.scalar(select(func.avg(per_dialog.c.cost)))
         return (
@@ -678,13 +756,17 @@ def _customer(row: CustomerRow) -> Customer:
         merged_into_id=row.merged_into_id,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        business_id=row.business_id,
+        contact_phone=row.contact_phone,
     )
 
 
 def _customer_row(customer: Customer) -> CustomerRow:
     return CustomerRow(
         id=customer.id,
+        business_id=customer.business_id,
         phone=customer.phone,
+        contact_phone=customer.contact_phone,
         language=customer.language,
         status=customer.status,
         need=customer.need,
@@ -797,8 +879,16 @@ def _message_row(message: Message) -> MessageRow:
         text=message.text,
         timestamp=message.timestamp,
         metadata_json=dict(message.metadata),
+        external_id=_external_id(message),
         created_at=message.created_at,
     )
+
+
+def _external_id(message: Message) -> str | None:
+    if message.role != "user":
+        return None
+    raw = message.metadata.get("external_message_id")
+    return str(raw)[:128] if raw else None
 
 
 def _summary(row: CustomerSummaryRow) -> CustomerSummary:
@@ -903,6 +993,9 @@ def _interaction_row(entry: InteractionLog) -> InteractionLogRow:
         actions=list(entry.actions),
         latency_ms=entry.latency_ms,
         estimated_cost=Decimal(str(entry.estimated_cost)),
+        timings=dict(entry.timings or {}),
+        stt_confidence=entry.stt_confidence,
+        business_id=entry.business_id,
         created_at=entry.created_at,
     )
 
@@ -937,4 +1030,5 @@ def _voice_call(row: VoiceCallRow) -> VoiceCall:
         metadata=dict(row.metadata_json or {}),
         created_at=row.created_at,
         updated_at=row.updated_at,
+        business_id=row.business_id,
     )

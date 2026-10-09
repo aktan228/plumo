@@ -14,18 +14,43 @@ OpenRouter уже есть в репозитории: `src/app/infrastructure/ai
 
 ```
 AI_MODE=production
-SMALL_MODEL_PROVIDER=openrouter_small
+SMALL_MODEL_PROVIDER=none
 BIG_MODEL_PROVIDER=openrouter_big
 OPENROUTER_API_KEY=sk-or-v1-...
-OPENROUTER_SMALL_MODEL=google/gemini-2.5-flash
-OPENROUTER_BIG_MODEL=google/gemini-2.5-flash
+OPENROUTER_BIG_MODEL=google/gemini-3.8-flash
+OPENROUTER_FALLBACK_MODELS=google/gemini-3.7-flash,google/gemini-3.1-flash-lite
 ```
 
-Проверка ключа без базы: `python -m app.ping_llm`.
+Проверка ключа и модели без базы: `python -m app.ping_llm` (модель, задержка, токены, цена на настоящем промпте). Gemini 2.5 Flash отключается 20.10.2026, см. [docs/MODELS.md](docs/MODELS.md).
 
 Чтобы поставить другого провайдера, пишется новый класс, он регистрируется в фабрике и выбирается конфигурацией. `AgentService`, память, база знаний, роутер, API и таблицы не переписываются.
 
 То же самое для STT, TTS, языка и, отдельно, для роутера.
+
+## Своя малая модель (local)
+
+Целевая схема: малая модель — своя дообученная, большая — Gemini 3.8 Flash (запасные 3.7 Flash и 3.1 Flash-Lite). Пока малой нет, `SMALL_MODEL_PROVIDER=none` отдаёт её реплики большой.
+
+```
+AI_MODE=production
+SMALL_MODEL_PROVIDER=local_small
+BIG_MODEL_PROVIDER=gemini_big
+LOCAL_LLM_BASE_URL=http://<gpu-host>:8000/v1/chat/completions   # vLLM; Ollama: :11434/v1/chat/completions
+LOCAL_SMALL_MODEL=plumo-small
+GEMINI_API_KEY=...
+```
+
+Сервер должен отвечать в формате OpenAI Chat Completions и поддерживать `response_format: {"type": "json_object"}` (vLLM и Ollama умеют). Ключ `LOCAL_LLM_API_KEY` необязателен. Токены считаются, стоимость пишется как 0: железо оплачивается отдельно. Если малая модель ответила с confidence ниже `SMALL_MODEL_CONFIDENCE_THRESHOLD` или мусором, ядро само повторит реплику большой моделью.
+
+Пока своей модели нет, малую ступень закрывает `gemini_small` (Flash-Lite).
+
+## Ответ модели
+
+Один вызов на реплику. Модель возвращает JSON: `text`, `actions`, `confidence`, а также `memory` (заметка о клиенте на следующий разговор) и `need`. `memory` сохраняется в резюме клиента, только если ответ прошёл валидатор без замены, иначе остаётся эвристическое резюме. Обучающая выборка для малой модели должна учить тот же формат.
+
+## Бюджет времени
+
+`VOICE_TURN_BUDGET_S` (7 с) и `CHAT_TURN_BUDGET_S` (25 с) ограничивают все вызовы модели одной реплики. Не уложилась — ядро отвечает подготовленной фразой или выдержкой из базы знаний, повтор большой моделью не запускается.
 
 ## Где граница
 

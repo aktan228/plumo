@@ -177,3 +177,61 @@ async def test_model_outage_degrades_to_a_safe_line_not_a_503(agent):
     )
     assert response.response_text
     assert "fallback:greeting" in response.logs
+
+
+async def test_hung_model_on_a_call_answers_within_budget(agent):
+    """A caller must not sit in silence for the HTTP timeout: a line comes after the voice budget."""
+
+    import asyncio
+    import time
+
+    from app.domain.models import ExtractedCustomerData, InboundMessage, SummaryDraft
+
+    class Hung:
+        name = "hung"
+        calls = 0
+
+        async def generate_response(self, context, route):
+            Hung.calls += 1
+            await asyncio.sleep(30)
+
+        async def extract_customer_data(self, text):
+            return ExtractedCustomerData()
+
+        async def summarize(self, messages, previous):
+            return SummaryDraft("-", None, [], None)
+
+    agent.voice_budget_s = 0.6
+    agent.llm_for_tier = lambda tier: Hung()
+    started = time.perf_counter()
+    response = await agent.process_message(
+        InboundMessage(channel="voice", external_user_id="+996555777009", text="Здравствуйте, какие квартиры есть?")
+    )
+    assert time.perf_counter() - started < 3
+    assert Hung.calls == 1  # no retry once the budget is spent
+    assert response.response_text.strip()
+
+
+async def test_mid_dialog_fallback_keeps_qualifying_instead_of_deflecting(agent):
+    from app.domain.errors import ProviderTransientError
+    from app.domain.models import ExtractedCustomerData, InboundMessage, SummaryDraft
+
+    class Down:
+        name = "down"
+
+        async def generate_response(self, context, route):
+            raise ProviderTransientError("timeout")
+
+        async def extract_customer_data(self, text):
+            return ExtractedCustomerData()
+
+        async def summarize(self, messages, previous):
+            return SummaryDraft("-", None, [], None)
+
+    await agent.process_message(InboundMessage(channel="telegram", external_user_id="tg-mid-1", text="Здравствуйте"))
+    agent.llm_for_tier = lambda tier: Down()
+    answer = await agent.process_message(
+        InboundMessage(channel="telegram", external_user_id="tg-mid-1", text="для себя, живём вдвоём с женой")
+    )
+    assert "fallback:continue" in answer.logs
+    assert "не подскажу" not in answer.response_text

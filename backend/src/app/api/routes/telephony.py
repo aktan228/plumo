@@ -1,10 +1,12 @@
 """Phone calls through ElevenLabs Agents.
 
-Setup in the ElevenLabs dashboard (see README, section "Телефония"):
+Setup in the ElevenLabs dashboard (see VOICE.md):
 
 - Agent → LLM → Custom LLM, server URL `https://<host>/api/v1/telephony/elevenlabs/v1`,
   API key = ELEVENLABS_LLM_TOKEN.
-- Agent system prompt: `plumo_caller={{system__caller_id}} plumo_call={{system__conversation_id}}`.
+- Agent system prompt: `plumo_caller={{system__caller_id}} plumo_call={{system__conversation_id}}
+  plumo_called={{system__called_number}}`. The dialled number picks the business
+  through its `contacts.voice_numbers`.
 - Conversation initiation webhook → `/api/v1/telephony/elevenlabs/initiation`
   with header `Authorization: Bearer <ELEVENLABS_LLM_TOKEN>`.
 - Post-call webhook → `/api/v1/telephony/elevenlabs/post-call`, HMAC secret = ELEVENLABS_WEBHOOK_SECRET.

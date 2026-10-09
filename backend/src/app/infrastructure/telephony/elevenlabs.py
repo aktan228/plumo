@@ -30,7 +30,7 @@ PROVIDER = "elevenlabs"
 
 # The agent's system prompt in the ElevenLabs dashboard must carry these
 # markers so each LLM request says who is calling:
-#   plumo_caller={{system__caller_id}} plumo_call={{system__conversation_id}}
+#   plumo_caller={{system__caller_id}} plumo_call={{system__conversation_id}} plumo_called={{system__called_number}}
 _MARKER = re.compile(r"plumo_(caller|call|called|business)=([^\s{}]+)")
 _MARKDOWN = re.compile(r"[*_`#>|]+")
 _SPACES = re.compile(r"[ \t]+")
@@ -178,6 +178,7 @@ def parse_post_call(payload: dict[str, Any]) -> CallReport | None:
     started = meta.get("start_time_unix_secs")
     started_at = datetime.fromtimestamp(int(started), UTC) if isinstance(started, (int, float)) else datetime.now(UTC)
     cost = meta.get("cost")
+    transcript = [_turn(item) for item in data.get("transcript") or [] if isinstance(item, dict)]
     return CallReport(
         call_id=call_id,
         caller=_first(phone.get("external_number"), variables.get("system__caller_id")),
@@ -186,17 +187,58 @@ def parse_post_call(payload: dict[str, Any]) -> CallReport | None:
         started_at=started_at,
         duration_s=int(meta.get("call_duration_secs") or 0),
         provider_cost=float(cost) if isinstance(cost, (int, float)) else None,
-        transcript=[
-            {"role": item.get("role"), "message": item.get("message"), "t": item.get("time_in_call_secs")}
-            for item in data.get("transcript") or []
-            if isinstance(item, dict)
-        ],
+        transcript=transcript,
         raw_metadata={
             "agent_id": data.get("agent_id"),
             "termination_reason": meta.get("termination_reason"),
             "provider_cost_credits": cost,
+            "latency": _latency_summary(transcript),
         },
     )
+
+
+def _turn(item: dict[str, Any]) -> dict[str, Any]:
+    entry = {"role": item.get("role"), "message": item.get("message"), "t": item.get("time_in_call_secs")}
+    metrics = _turn_metrics(item.get("conversation_turn_metrics"))
+    if metrics:
+        entry["metrics"] = metrics
+    if item.get("interrupted") is not None:
+        entry["interrupted"] = bool(item.get("interrupted"))
+    return entry
+
+
+def _turn_metrics(raw: Any) -> dict[str, float]:
+    """`{"convai_llm_service_ttfb": {"elapsed_time": 0.37}, ...}` → `{"llm_service_ttfb": 0.37}` in seconds.
+
+    The platform measures our Custom LLM endpoint here: time to the first
+    token and to the first sentence, as the caller experiences it.
+    """
+
+    if isinstance(raw, dict) and isinstance(raw.get("metrics"), dict):
+        raw = raw["metrics"]
+    if not isinstance(raw, dict):
+        return {}
+    metrics: dict[str, float] = {}
+    for key, value in raw.items():
+        elapsed = value.get("elapsed_time") if isinstance(value, dict) else value
+        if isinstance(elapsed, (int, float)):
+            metrics[str(key).removeprefix("convai_")] = round(float(elapsed), 3)
+    return metrics
+
+
+def _latency_summary(transcript: list[dict[str, Any]]) -> dict[str, float]:
+    """p50 and max per metric over the agent's turns, for the call row."""
+
+    values: dict[str, list[float]] = {}
+    for item in transcript:
+        for key, value in (item.get("metrics") or {}).items():
+            values.setdefault(key, []).append(value)
+    summary: dict[str, float] = {}
+    for key, series in values.items():
+        ordered = sorted(series)
+        summary[f"{key}_p50"] = ordered[len(ordered) // 2]
+        summary[f"{key}_max"] = ordered[-1]
+    return summary
 
 
 def _content_text(content: Any) -> str:

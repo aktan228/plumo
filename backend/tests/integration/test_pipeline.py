@@ -16,6 +16,7 @@ from app.infrastructure.database.repositories import (
 )
 from app.seed import seed
 from sqlalchemy import select
+from uuid import uuid4
 
 
 def _msg(text: str, channel: str = "whatsapp", external: str = "+996555900001", **kwargs) -> InboundMessage:
@@ -40,20 +41,45 @@ async def test_whatsapp_and_voice_share_phone(agent, session):
     voice = await agent.process_message(_msg("Здравствуйте", channel="voice", external="+996555900202"))
     assert whatsapp.customer_id == voice.customer_id
     customers = CustomerRepository(session)
-    assert (await customers.get_by_channel("whatsapp", "+996555900202")).id == whatsapp.customer_id
-    assert (await customers.get_by_channel("voice", "+996555900202")).id == whatsapp.customer_id
+    business = (await customers.get(whatsapp.customer_id)).business_id
+    assert (await customers.get_by_channel(business, "whatsapp", "+996555900202")).id == whatsapp.customer_id
+    assert (await customers.get_by_channel(business, "voice", "+996555900202")).id == whatsapp.customer_id
 
 
-async def test_instagram_can_link_phone_later(agent, session):
-    whatsapp = await agent.process_message(_msg("Здравствуйте", external="+996555900303"))
+async def test_typed_phone_does_not_merge_or_leak_history(agent, session):
+    """Anyone can type someone else's number. It is kept for a callback, not merged."""
+
+    whatsapp = await agent.process_message(_msg("Ищу квартиру на Чуй для семьи", external="+996555900303"))
     instagram = await agent.process_message(_msg("Здравствуйте", channel="instagram", external="ig_900303"))
     assert whatsapp.customer_id != instagram.customer_id
-    merged = await agent.process_message(
+    typed = await agent.process_message(
         _msg("мой номер +996555900303", channel="instagram", external="ig_900303")
     )
-    assert merged.customer_id == whatsapp.customer_id
+    assert typed.customer_id == instagram.customer_id
+    card = await CustomerRepository(session).get(instagram.customer_id)
+    assert card.contact_phone == "+996555900303"
+    assert card.phone is None
+    history = await MessageRepository(session).list_for_customer(instagram.customer_id)
+    assert all("Чуй для семьи" not in item.text for item in history)
     conversations = await ConversationRepository(session).list_for_customer(whatsapp.customer_id)
-    assert {item.channel for item in conversations} >= {"whatsapp", "instagram"}
+    assert {item.channel for item in conversations} == {"whatsapp"}
+
+
+async def test_same_phone_in_two_businesses_is_two_customers(agent, session):
+    from app.domain.models import Business, utcnow
+    from app.infrastructure.database.repositories import BusinessRepository
+
+    await seed(session)
+    demo = await BusinessRepository(session).get_by_name("Demo Realty")
+    now = utcnow()
+    other = await BusinessRepository(session).add(
+        Business(uuid4(), "Other Realty", "Другое агентство", "10:00-19:00", {}, "", now, now)
+    )
+    first = await agent.process_message(_msg("Ищу квартиру на Чуй", external="+996555900404", business_id=demo.id))
+    second = await agent.process_message(_msg("Здравствуйте", external="+996555900404", business_id=other.id))
+    assert first.customer_id != second.customer_id
+    history = await MessageRepository(session).list_for_customer(second.customer_id)
+    assert all("Чуй" not in item.text for item in history)
 
 
 async def test_knowledge_returns_the_matching_listing(session):
@@ -140,12 +166,11 @@ async def test_summary_is_updated(agent, session):
 
 async def test_history_survives_channels(agent, session):
     whatsapp = await agent.process_message(_msg("Здравствуйте", external="+996555901010"))
-    await agent.process_message(_msg("привет", channel="instagram", external="ig_901010"))
-    await agent.process_message(_msg("мой телефон +996555901010", channel="instagram", external="ig_901010"))
+    await agent.process_message(_msg("Еще продается квартира за 85000?", channel="voice", external="+996555901010"))
     messages = await MessageRepository(session).list_for_customer(whatsapp.customer_id)
     assert len(messages) >= 4
     conversations = await ConversationRepository(session).list_for_customer(whatsapp.customer_id)
-    assert {item.channel for item in conversations} >= {"whatsapp", "instagram"}
+    assert {item.channel for item in conversations} >= {"whatsapp", "voice"}
 
 
 async def test_voice_pipeline_uses_mock_speech(session, runtime):
@@ -173,3 +198,22 @@ async def test_every_turn_is_logged(agent, session):
     assert interaction.model == response.model_used
     assert usage is not None
     assert usage.model == "mock_small"
+
+
+async def test_knowledge_import_updates_adds_and_switches_off(session):
+    from app.import_knowledge import apply_rows, parse_rows
+    from app.infrastructure.database.repositories import BusinessRepository, KnowledgeRepository
+    from app.seed import seed
+
+    await seed(session)
+    business = await BusinessRepository(session).get_by_name("Demo Realty")
+    before = {item.title for item in await KnowledgeRepository(session).list_active(business.id)}
+    kept = sorted(before)[0]
+    rows = parse_rows(f"category,title,content\nproperty,{kept},Новый текст 1 USD\nfaq,Новая строка,Текст\n")
+    report = await apply_rows(session, business.id, rows, deactivate_missing=True)
+    assert report.updated == [kept] and report.added == ["Новая строка"]
+    assert set(report.deactivated) == before - {kept}
+    active = {item.title: item.content for item in await KnowledgeRepository(session).list_active(business.id)}
+    assert active == {kept: "Новый текст 1 USD", "Новая строка": "Текст"}
+    again = await apply_rows(session, business.id, rows, deactivate_missing=True)
+    assert again.unchanged == [kept, "Новая строка"] and not again.added and not again.updated

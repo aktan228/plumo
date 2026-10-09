@@ -5,8 +5,9 @@
 ## Этап 1 — сейчас, локально (≈ $0)
 
 - [ ] **Gemini API key** — https://aistudio.google.com/apikey → Create API key. Бесплатный лимит хватит на разработку.
-      В `.env`: `GEMINI_API_KEY=…`, `AI_MODE=production`, `SMALL_MODEL_PROVIDER=gemini_small`, `BIG_MODEL_PROVIDER=gemini_big`.
-      Проверка: `.\dev.cmd eval --provider gemini`.
+      В `.env`: `GEMINI_API_KEY=…`, `AI_MODE=production`, `SMALL_MODEL_PROVIDER=none`, `BIG_MODEL_PROVIDER=gemini_big`.
+      Проверка: `python -m app.ping_llm --repeat 3` (модель, задержка, цена), затем `.\dev.cmd eval --provider gemini`.
+      Gemini 2.5 Flash отключается 20.10.2026 — по умолчанию стоит 3.8 Flash с запасными, см. [MODELS.md](MODELS.md).
 - [ ] **Telegram-бот для менеджеров** — в Telegram @BotFather → `/newbot` → токен. Создать группу «Plumo менеджеры», добавить туда бота, написать любое сообщение, открыть `https://api.telegram.org/bot<ТОКЕН>/getUpdates` и взять `chat.id` (число с минусом).
       В `.env`: `HANDOFF_PROVIDER=telegram`, `TELEGRAM_BOT_TOKEN=…`, `TELEGRAM_MANAGER_CHAT_ID=-100…`.
 - [ ] **GitHub** — ссылка на репозиторий и доступ на запись, чтобы запушить `feature/voice-elevenlabs`.

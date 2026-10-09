@@ -10,6 +10,9 @@ rem   dev run      start the API on http://127.0.0.1:8000/docs
 rem   dev demo     chat with the agent in the terminal
 rem   dev test     run all tests
 rem   dev eval     live 10-turn dialog with the real model
+rem   dev lint     ruff: syntax errors, undefined names, unused imports
+rem   dev voice    live ElevenLabs TTS/STT check in phone quality (spends credits)
+rem   dev bench    compare models on 55 sales scenarios (spends credits, ~$1.6)
 rem   dev up       db + seed + run
 
 setlocal
@@ -30,6 +33,9 @@ if /i "%~1"=="run" goto run
 if /i "%~1"=="demo" goto demo
 if /i "%~1"=="test" goto test
 if /i "%~1"=="eval" goto eval
+if /i "%~1"=="lint" goto lint
+if /i "%~1"=="voice" goto voice
+if /i "%~1"=="bench" goto bench
 if /i "%~1"=="up" goto up
 goto help
 
@@ -72,6 +78,18 @@ exit /b %errorlevel%
 
 :test
 "%PY%" -m pytest %2 %3 %4
+exit /b %errorlevel%
+
+:lint
+"%PY%" -m ruff check src tests alembic
+exit /b %errorlevel%
+
+:bench
+"%PY%" -m app.bench %2 %3 %4 %5 %6 %7 %8 %9
+exit /b %errorlevel%
+
+:voice
+"%PY%" -m app.voice_probe %2 %3 %4 %5 %6
 exit /b %errorlevel%
 
 :eval

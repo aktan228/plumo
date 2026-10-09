@@ -277,3 +277,33 @@ def test_has_slot_needs_a_day_or_time():
 def test_reply_cut_before_the_list_is_unusable():
     assert is_unusable_reply("Понимаю. У нас есть два более доступных варианта:")
     assert not is_unusable_reply("Есть студия за 39000 USD. Посмотрим?")
+
+
+async def test_greeting_with_a_question_is_routed_by_the_question() -> None:
+    route = await RuleBasedRouter().select_model(_context("Здравствуйте, где вы находитесь?"))
+    assert route.reason == "address"
+
+
+async def test_renting_finds_the_rental_not_the_sales() -> None:
+    from app.bench.run import build_context
+    from app.bench.scenarios import SCENARIOS
+
+    scenario = next(item for item in SCENARIOS if item.id == "base_rent")
+    context = await build_context(scenario)
+    assert context.knowledge[0].item.title == "Аренда на Токтогула"
+
+
+async def test_validator_blocks_false_booking_and_false_transfer():
+    context = _context("давайте в субботу в 11:00")
+    validator = ResponseValidator()
+    for line in ("Отлично, записала вас на просмотр.", "Вы записаны на субботу.", "Перевожу вас на менеджера, оставайтесь на линии."):
+        assert validator.validate(line, context).safe is False, line
+    assert validator.validate("Передам менеджеру выбранное время, он подтвердит.", context).safe is True
+
+
+async def test_meeting_lines_never_claim_a_booking():
+    from app.domain.phrases import MEETING_ASK_KY, MEETING_ASK_RU, MEETING_SET_KY, MEETING_SET_RU
+
+    context = _context("давайте в субботу")
+    for line in (*MEETING_ASK_RU, *MEETING_ASK_KY, *MEETING_SET_RU, *MEETING_SET_KY):
+        assert ResponseValidator().validate(line, context).safe is True, line

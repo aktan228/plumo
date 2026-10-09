@@ -1,8 +1,10 @@
 """Orchestrates one inbound message. It does not implement a model."""
 
+import asyncio
 import json
 import logging
 import time
+from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from app.application.services.context_builder import ContextBuilder
@@ -12,8 +14,15 @@ from app.application.services.handoff_service import evaluate_handoff
 from app.application.services.memory_service import MemoryService, read_unclear_count, write_unclear_count
 from app.application.services.response_validator import ResponseValidator
 from app.correlation import get_correlation_id, get_request_id
-from app.domain.enums import PHONE_CHANNELS, ActionType, Channel, MessageRole
-from app.domain.errors import BusinessNotFound, CustomerNotFound, InvalidMessage, ProviderTransientError
+from app.domain.enums import PHONE_CHANNELS, ActionType, Channel, MessageRole, RouteModel
+from app.domain.errors import (
+    BusinessNotFound,
+    CustomerNotFound,
+    DuplicateMessage,
+    InvalidMessage,
+    ProviderTransientError,
+    ProviderUnavailable,
+)
 from app.domain.events import MESSAGE_PROCESSED, MESSAGE_RECEIVED, DomainEvent
 from app.domain.models import (
     Action,
@@ -44,7 +53,8 @@ from app.domain.ports import (
     MessageStore,
     Router,
 )
-from app.domain.text_signals import analyze_message
+from app.domain.spoken_numbers import spoken_to_digits
+from app.domain.text_signals import analyze_message, phone_from_id
 from app.scrub import scrub_mapping, scrub_text
 
 logger = logging.getLogger("plumo.agent")
@@ -78,6 +88,11 @@ class AgentService:
         default_language: str = "ru",
         default_business_id: str | None = None,
         handoffs: HandoffStore | None = None,
+        voice_budget_s: float = 7.0,
+        chat_budget_s: float = 25.0,
+        small_enabled: bool = True,
+        manager_pause_hours: float = 24.0,
+        stt_low_confidence: float = 0.6,
     ) -> None:
         self.resolver = resolver
         self.memory = memory
@@ -97,28 +112,53 @@ class AgentService:
         self.default_language = default_language
         self.default_business_id = default_business_id
         self.handoffs = handoffs
+        # Seconds the model calls of one turn may take. A caller hears silence
+        # while we wait, so voice gets a short budget and a canned line after it.
+        self.voice_budget_s = voice_budget_s
+        self.chat_budget_s = chat_budget_s
+        # Until the local small model exists its turns go to the big one; the
+        # router's own label stays in route_reason for training the classifier.
+        self.small_enabled = small_enabled
+        self.manager_pause_hours = manager_pause_hours
+        self.stt_low_confidence = stt_low_confidence
 
     async def process_message(self, message: InboundMessage) -> AgentResponse:
         started = time.perf_counter()
         steps: list[str] = []
+        timings: dict[str, int] = {}
+        mark = started
+
+        def lap(name: str) -> None:
+            nonlocal mark
+            now = time.perf_counter()
+            timings[name] = int((now - mark) * 1000)
+            mark = now
+
         message = self._prepare(message)
         correlation_id = message.correlation_id or get_correlation_id() or str(uuid4())
         request_id = message.request_id or get_request_id() or message.message_id or str(uuid4())
 
-        customer = await self.resolver.resolve_customer(message)
-        customer = await self.resolver.absorb_phone_from_text(customer, message.text)
+        business = await self._business(message.business_id)
+        customer = await self.resolver.resolve_customer(message, business.id)
+        customer = await self.resolver.remember_contact_phone(customer, message.text)
         language = await self._language(message)
         customer = await self.memory.update_language(customer, language)
         steps.append(f"customer:{customer.id}")
 
-        business = await self._business(message.business_id)
         conversation = await self._conversation(customer.id, message.channel)
         if message.message_id:
             seen = await self.messages.find_by_external_id(conversation.id, message.message_id)
             if seen is not None:
                 # Webhook retry: answer with the stored reply, do not run or bill twice.
                 return await self._replay(seen, customer.id, language, correlation_id, started)
-        incoming = await self._store_user_message(message, customer.id, conversation.id)
+        try:
+            incoming = await self._store_user_message(message, customer.id, conversation.id)
+        except DuplicateMessage:
+            # The same retry is being processed right now by another request.
+            seen = await self.messages.find_by_external_id(conversation.id, message.message_id or "")
+            if seen is None:
+                raise
+            return await self._replay(seen, customer.id, language, correlation_id, started)
         await self.events.publish(
             DomainEvent(
                 MESSAGE_RECEIVED,
@@ -131,7 +171,7 @@ class AgentService:
             )
         )
 
-        if self.handoffs is not None and await self.handoffs.find_accepted(conversation.id):
+        if self.handoffs is not None and await self.handoffs.find_accepted(conversation.id, since=self._pause_since()):
             # A manager took this dialog. The message is in history; the agent stays quiet.
             return _paused_response(customer.id, conversation.id, language, correlation_id, started)
 
@@ -149,19 +189,27 @@ class AgentService:
             current_message_id=incoming.id,
             channel=message.channel,
         )
+        context.stt_confidence = _stt_confidence(message.metadata)
         steps.append("knowledge:" + ",".join(hit.item.title for hit in knowledge))
+        lap("prepare_ms")
 
         route = await self.router.select_model(context)
+        if context.stt_confidence is not None and context.stt_confidence < self.stt_low_confidence:
+            # Misheard speech is the big model's job: it copes with fragments and mixed language.
+            route = RouteDecision(RouteModel.big, "uncertain_stt", route.confidence)
         generations: list[LLMGeneration] = []
-        generation, route = await self._generate(context, route, generations)
+        budget = self.voice_budget_s if message.channel == Channel.voice else self.chat_budget_s
+        generation, route = await self._generate(context, route, generations, started + budget)
+        model_failed = not generations and not generation.model_used.startswith("rules:")
         steps.append(f"route:{route.model}:{route.reason}")
+        lap("model_ms")
 
         signals = analyze_message(message.text)
         assessment = self.validator.assess(message.text, context)
         # Rotates fixed lines inside one dialog so the agent does not repeat itself.
         seed = f"{conversation.id}:{len(history)}"
         slot_named = signals.meeting and has_slot(message.text)
-        intent = _intent(signals, slot_named)
+        intent = _intent(signals, slot_named, mid_dialog=bool(context.recent_messages))
         if signals.human_request:
             response_text = human_phrase(language, message.channel, seed)
         elif assessment.factual and not assessment.answerable and (
@@ -198,7 +246,7 @@ class AgentService:
         ]
         if slot_named and not any(item.type == ActionType.schedule_meeting for item in actions):
             actions.append(Action(ActionType.schedule_meeting, {"text": message.text}))
-        if customer.phone is None and message.channel not in PHONE_CHANNELS:
+        if customer.phone is None and customer.contact_phone is None and message.channel not in PHONE_CHANNELS:
             if signals.meeting or (assessment.answerable and assessment.factual):
                 actions.append(Action(ActionType.request_phone, {}))
         extracted = await self.llm_for_tier("small").extract_customer_data(message.text)
@@ -218,6 +266,14 @@ class AgentService:
                 response_text = fallback_phrase(intent, language, seed)
             steps.append(f"validator:{validation.reason}")
             validation = self.validator.validate(response_text, context, extra=extra)
+        if not response_text.strip():
+            # Model down or out of time and no listing to quote: never send silence.
+            if assessment.factual:
+                response_text = unknown_phrase(assessment.topic, language, seed)
+            else:
+                response_text = fallback_phrase(intent, language, seed)
+            steps.append("empty_draft_fallback")
+            validation = self.validator.validate(response_text, context, extra=extra)
 
         unclear = read_unclear_count(summary.important_facts if summary else [])
         if signals.unclear_confirmation or (not assessment.factual and generation.confidence < 0.55):
@@ -225,7 +281,7 @@ class AgentService:
         elif assessment.answerable or generation.confidence >= self.confidence_threshold:
             unclear = 0
 
-        decision = evaluate_handoff(signals, assessment, generation, validation, unclear)
+        decision = evaluate_handoff(signals, assessment, generation, validation, unclear, model_failed=model_failed)
         if decision.required and decision.reason:
             actions.append(
                 Action(
@@ -248,6 +304,13 @@ class AgentService:
 
         small = self.llm_for_tier("small")
         draft = await small.summarize(history + [_as_assistant_preview(conversation, customer.id, response_text)], summary.summary if summary else None)
+        if generation.memory and response_text == generation.text and validation.safe:
+            # The model's own note is richer than the heuristic one. It is kept
+            # only when its reply went out unchanged: a draft the validator
+            # rejected may carry the same invented fact into memory.
+            draft.summary = generation.memory
+            draft.need = generation.need or draft.need
+            steps.append("memory:model")
         draft.important_facts = write_unclear_count(draft.important_facts, unclear)
         await self.memory.write_summary(customer, draft, language)
         await self.conversations.touch_summary(conversation.id, draft.summary)
@@ -271,6 +334,7 @@ class AgentService:
         )
         await self.messages.add(assistant)
 
+        lap("post_ms")
         latency_ms = int((time.perf_counter() - started) * 1000)
         sources = [
             KnowledgeSource(id=hit.item.id, title=hit.item.title, category=hit.item.category) for hit in knowledge
@@ -308,6 +372,9 @@ class AgentService:
             latency_ms=latency_ms,
             estimated_cost=cost,
             created_at=utcnow(),
+            timings=timings,
+            stt_confidence=context.stt_confidence,
+            business_id=business.id,
         )
         await self.logs.add_interaction(interaction)
         for item in generations:
@@ -377,28 +444,61 @@ class AgentService:
         context,
         route: RouteDecision,
         generations: list[LLMGeneration],
+        deadline: float,
     ) -> tuple[LLMGeneration, RouteDecision]:
-        generation = await self._call(str(route.model), context, route, generations)
+        if route.reason == "human_request" or (
+            route.reason in FIXED_REPLY_REASONS and getattr(context, "channel", None) == Channel.voice
+        ):
+            # The reply is a fixed line chosen below; a 3-5 s model call would only be thrown away.
+            return LLMGeneration("", [], False, None, 1.0, "rules:fixed_reply", 0, 0, 0.0), route
+        if str(route.model) == "small" and not self.small_enabled:
+            route = RouteDecision(RouteModel.big, f"{route.reason}:no_small"[:64], route.confidence)
+        generation = await self._call(str(route.model), context, route, generations, deadline)
         if str(route.model) == "small" and generation.confidence < self.confidence_threshold:
             route = RouteDecision("big", "low_confidence_fallback", generation.confidence)
-            generation = await self._call("big", context, route, generations)
-        if is_unusable_reply(generation.text):
+            generation = await self._call("big", context, route, generations, deadline)
+        if is_unusable_reply(generation.text) and not generation.model_used.endswith((":timeout", ":unavailable")):
             # Free and small models sometimes answer "User Safety: safe" or
             # nothing. One retry is cheaper than a canned line mid-sale.
             route = RouteDecision("big", "unusable_retry", generation.confidence)
-            generation = await self._call("big", context, route, generations)
+            generation = await self._call("big", context, route, generations, deadline)
         return generation, route
 
-    async def _call(self, tier: str, context, route: RouteDecision, generations: list[LLMGeneration]) -> LLMGeneration:
-        """One model call. A transient failure becomes an empty draft, not a 503."""
+    async def _call(
+        self,
+        tier: str,
+        context,
+        route: RouteDecision,
+        generations: list[LLMGeneration],
+        deadline: float,
+    ) -> LLMGeneration:
+        """One model call within the turn's budget. Failure or timeout is an empty draft, not a 503."""
 
+        remaining = deadline - time.perf_counter()
+        if remaining < 0.5:
+            return LLMGeneration("", [], False, None, 0.0, f"{tier}:timeout", 0, 0, 0.0)
         try:
-            generation = await self.llm_for_tier(tier).generate_response(context, route)
+            generation = await asyncio.wait_for(
+                self.llm_for_tier(tier).generate_response(context, route), timeout=remaining
+            )
+        except TimeoutError:
+            logger.warning("model_timeout", extra={"tier": tier, "budget_s": round(remaining, 2)})
+            return LLMGeneration("", [], False, None, 0.0, f"{tier}:timeout", 0, 0, 0.0)
         except ProviderTransientError as exc:
             logger.warning("model_transient_error", extra={"tier": tier, "error": exc.message})
             return LLMGeneration("", [], False, None, 0.0, f"{tier}:unavailable", 0, 0, 0.0)
+        except ProviderUnavailable as exc:
+            # Bad key, no credits, every model retired. The customer still gets
+            # a fixed line and a manager; the error level makes it visible to us.
+            logger.error("model_unavailable", extra={"tier": tier, "error": exc.message})
+            return LLMGeneration("", [], False, None, 0.0, f"{tier}:unavailable", 0, 0, 0.0)
         generations.append(generation)
         return generation
+
+    def _pause_since(self) -> datetime | None:
+        if self.manager_pause_hours <= 0:
+            return None
+        return utcnow() - timedelta(hours=self.manager_pause_hours)
 
     def _prepare(self, message: InboundMessage) -> InboundMessage:
         try:
@@ -411,6 +511,13 @@ class AgentService:
         if len(text) > 4000:
             raise InvalidMessage("text is too long")
         metadata = scrub_mapping(message.metadata)
+        if message.channel == Channel.voice:
+            # Speech recognition writes "восемьдесят пять тысяч"; retrieval and
+            # the validator match digits. The heard text stays in metadata.
+            spoken = spoken_to_digits(text)
+            if spoken != text:
+                metadata["stt_text"] = text
+                text = spoken
         if len(json.dumps(metadata, default=str)) > 8000:
             raise InvalidMessage("metadata is too large")
         message.text = text
@@ -452,9 +559,19 @@ class AgentService:
             duplicate=True,
         )
 
-    async def resolve_business(self, explicit: UUID | None = None):
-        """Business for a turn: explicit id, configured default, or the only one."""
+    async def resolve_business(self, explicit: UUID | None = None, called: str | None = None):
+        """Business for a turn: explicit id, the dialled number, configured default, or the only one.
 
+        A business lists its Plumo numbers in `contacts.voice_numbers`.
+        """
+
+        if explicit is None and called:
+            dialled = phone_from_id(called)
+            if dialled:
+                for business in await self.businesses.list_all():
+                    numbers = (business.contacts or {}).get("voice_numbers") or []
+                    if dialled in {phone_from_id(str(item)) for item in numbers}:
+                        return business
         return await self._business(explicit)
 
     async def _business(self, explicit: UUID | None):
@@ -471,9 +588,8 @@ class AgentService:
         rows = await self.businesses.list_all()
         if len(rows) == 1:
             return rows[0]
-        named = await self.businesses.get_by_name("Demo Realty")
-        if named is not None:
-            return named
+        # Several businesses and no id: guessing would put one company's
+        # customer into another's history.
         raise BusinessNotFound("business_id is required")
 
     async def _conversation(self, customer_id: UUID, channel: str) -> Conversation:
@@ -554,12 +670,30 @@ def _paused_response(customer_id: UUID, conversation_id: UUID, language: str, co
     )
 
 
-def _intent(signals, slot_named: bool) -> str:
+# Routes whose reply is always a fixed phrase (human_phrase / greeting / farewell),
+# so the model is skipped. A greeting that carries a question is routed elsewhere.
+FIXED_REPLY_REASONS = frozenset({"human_request", "greeting", "farewell"})
+
+
+def _intent(signals, slot_named: bool, mid_dialog: bool = False) -> str:
     if signals.meeting:
         return "meeting_set" if slot_named else "meeting_ask"
+    if signals.farewell and not signals.factual:
+        return "farewell"
     if signals.greeting and not signals.factual:
         return "greeting"
-    return "other"
+    return "continue" if mid_dialog else "other"
+
+
+def _stt_confidence(metadata: dict) -> float | None:
+    """Speech-recognition confidence a voice layer may attach to a turn, 0..1."""
+
+    raw = (metadata or {}).get("stt_confidence")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(1.0, value))
 
 
 def _payload_has_slot(payload: dict) -> bool:

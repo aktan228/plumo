@@ -34,6 +34,7 @@ _STATUS_BY_REASON = {
     "unsafe_response": "handed_off",
     "customer_dissatisfied": "handed_off",
     "agent_unclear_twice": "handed_off",
+    "model_unavailable": "handed_off",
 }
 
 
@@ -43,6 +44,8 @@ def evaluate_handoff(
     generation: LLMGeneration,
     validation: ValidationResult,
     unclear_count: int,
+    *,
+    model_failed: bool = False,
 ) -> HandoffDecision:
     """Pick the strongest reason to involve a human. Pure function, no I/O."""
 
@@ -61,6 +64,9 @@ def evaluate_handoff(
         options.append(("customer_dissatisfied", HandoffPriority.high))
     if unclear_count >= 2:
         options.append(("agent_unclear_twice", HandoffPriority.normal))
+    if model_failed:
+        # The customer got a fixed line instead of an answer; a human must follow up.
+        options.append(("model_unavailable", HandoffPriority.high))
     if not options:
         return HandoffDecision(required=False)
     reason, priority = max(options, key=lambda item: _PRIORITY[item[1]])
@@ -100,7 +106,7 @@ class HandoffService:
             conversation_id=conversation.id,
             reason=reason,
             priority=priority,
-            summary=summary,
+            summary=f"{_contact_line(customer, conversation.channel)}\n{summary}",
             recent_messages=[
                 {"role": item.role, "text": item.text, "timestamp": item.timestamp.isoformat()}
                 for item in recent_messages[-8:]
@@ -153,3 +159,13 @@ class HandoffService:
         if handoff is None:
             raise HandoffNotFound(f"handoff {handoff_id} was not found")
         return handoff
+
+
+def _contact_line(customer: Customer, channel: str) -> str:
+    """How the manager reaches the customer. A typed number is marked as unverified."""
+
+    if customer.phone:
+        return f"Контакт: {customer.phone} · {channel}"
+    if customer.contact_phone:
+        return f"Контакт: {customer.contact_phone} (назвал сам) · ответить в {channel}"
+    return f"Контакт: номера нет · ответить в {channel}"

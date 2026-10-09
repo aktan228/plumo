@@ -131,6 +131,11 @@ def build_agent(session: AsyncSession, runtime: Runtime) -> AgentService:
         default_language=runtime.settings.default_language,
         default_business_id=runtime.settings.default_business_id or None,
         handoffs=handoffs,
+        voice_budget_s=runtime.settings.voice_turn_budget_s,
+        chat_budget_s=runtime.settings.chat_turn_budget_s,
+        small_enabled=runtime.providers.small_enabled,
+        manager_pause_hours=runtime.settings.manager_pause_hours,
+        stt_low_confidence=runtime.settings.stt_low_confidence,
     )
 
 
@@ -144,6 +149,7 @@ def build_calls(session: AsyncSession, runtime: Runtime, agent: AgentService | N
         customers=CustomerRepository(session),
         messages=MessageRepository(session),
         calls=VoiceCallRepository(session),
+        conversations=ConversationRepository(session),
         provider=runtime.settings.voice_platform,
         usd_per_minute=runtime.settings.voice_usd_per_minute,
     )
@@ -195,20 +201,29 @@ def _register_llm_providers(providers: AIProviderFactory, settings: Settings) ->
         return
     # Only the vendors named in SMALL/BIG_MODEL_PROVIDER are built: each one
     # needs its own key, and a missing unused key must not break startup.
-    wanted = {settings.small_model_provider, settings.big_model_provider}
+    wanted = {settings.big_model_provider}
+    if settings.small_model_enabled:
+        wanted.add(settings.small_model_provider)
     for name in sorted(wanted):
         provider = _llm_provider(name, settings)
         if provider is not None:
             providers.register_llm(name, provider)
 
 
-def _llm_provider(name: str, settings: Settings) -> OpenRouterLLMProvider | None:
+def _llm_provider(name: str, settings: Settings):
     family, _, tier = name.rpartition("_")
     if tier not in ("small", "big"):
         family, tier = name, "big"
     if family == "openrouter":
         model = settings.openrouter_small_model if tier == "small" else settings.openrouter_big_model
-        return OpenRouterLLMProvider(name, model, base_url=settings.openrouter_base_url)
+        return OpenRouterLLMProvider(
+            name,
+            model,
+            base_url=settings.openrouter_base_url,
+            extra_body=_openrouter_reasoning(model, settings.llm_reasoning_effort),
+            fallback_models=_split(settings.openrouter_fallback_models),
+            max_retries=settings.llm_max_retries,
+        )
     if family == "gemini":
         # Google AI Studio directly: no gateway fee. Thinking is off, it only
         # adds latency and tokens to a short sales reply.
@@ -219,7 +234,28 @@ def _llm_provider(name: str, settings: Settings) -> OpenRouterLLMProvider | None
             api_key_env="GEMINI_API_KEY",
             base_url=settings.gemini_base_url,
             vendor="Gemini",
-            extra_body={"reasoning_effort": "none"} if "2.5-flash" in model else None,
+            extra_body=_gemini_reasoning(model, settings.llm_reasoning_effort),
+            fallback_models=_split(settings.gemini_fallback_models),
+            max_retries=settings.llm_max_retries,
+        )
+    if family == "anthropic":
+        from app.infrastructure.ai.anthropic_llm import AnthropicLLMProvider
+
+        model = settings.anthropic_small_model if tier == "small" else settings.anthropic_big_model
+        return AnthropicLLMProvider(name, model, effort=settings.anthropic_effort, max_retries=settings.llm_max_retries)
+    if family == "local":
+        # Self-hosted model (vLLM, Ollama, llama.cpp, LM Studio) behind an
+        # OpenAI-compatible endpoint. Planned home of the fine-tuned small model.
+        model = settings.local_small_model if tier == "small" else settings.local_big_model
+        return OpenRouterLLMProvider(
+            name,
+            model,
+            api_key_env="LOCAL_LLM_API_KEY",
+            base_url=settings.local_llm_base_url,
+            vendor="Local",
+            require_key=False,
+            price=(0.0, 0.0),
+            timeout_s=settings.local_llm_timeout_s,
         )
     if family == "openai_compat":
         # Any OpenAI-compatible API: DeepSeek, OpenAI, Groq, a local LiteLLM.
@@ -230,8 +266,42 @@ def _llm_provider(name: str, settings: Settings) -> OpenRouterLLMProvider | None
             api_key_env="LLM_API_KEY",
             base_url=settings.llm_base_url,
             vendor="LLM",
+            max_retries=settings.llm_max_retries,
         )
     return None
+
+
+def _gemini_reasoning(model: str, override: str) -> dict | None:
+    """Gemini OpenAI-compatible `reasoning_effort`: "none" exists only on 2.5 Flash.
+
+    Gemini 3 cannot switch thinking off; "minimal" is the cheapest level.
+    A fallback model of another generation keeps the first model's setting,
+    so fallbacks should stay within Gemini 3.
+    """
+
+    effort = override.strip()
+    if not effort:
+        if "2.5-flash" in model:
+            effort = "none"
+        elif "gemini-3" in model:
+            effort = "minimal"
+    return {"reasoning_effort": effort} if effort else None
+
+
+def _openrouter_reasoning(model: str, override: str) -> dict | None:
+    """OpenRouter unified `reasoning.effort`, mapped to Google's thinkingLevel."""
+
+    effort = override.strip()
+    if not effort and "gemini-3" in model:
+        effort = "minimal"
+    elif not effort and "claude-haiku" in model:
+        # Haiku thinks by default: 2.4-3.2 s per reply against 1.3-1.7 s with it off.
+        effort = "none"
+    return {"reasoning": {"effort": effort}} if effort else None
+
+
+def _split(raw: str) -> list[str]:
+    return [item.strip() for item in raw.split(",") if item.strip()]
 
 
 def _channels(settings: Settings) -> dict:

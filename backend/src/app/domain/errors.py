@@ -56,6 +56,18 @@ class InvalidState(AppError):
     http_status = 409
 
 
+class CustomerConflict(InvalidState):
+    """A concurrent request created the same customer first."""
+
+    code = "customer_conflict"
+
+
+class DuplicateMessage(InvalidState):
+    """The same inbound message id arrived twice at once; the first copy wins."""
+
+    code = "duplicate_message"
+
+
 class ProviderUnavailable(AppError):
     code = "provider_unavailable"
     http_status = 503

@@ -20,6 +20,7 @@ from app.container import build_agent, build_runtime
 from app.domain.models import InboundMessage
 from app.infrastructure.database.models import CustomerChannelRow, CustomerRow, MessageRow
 from app.infrastructure.database.repositories import (
+    BusinessRepository,
     ConversationRepository,
     CustomerRepository,
     MessageRepository,
@@ -401,26 +402,27 @@ async def run_identity(agent, session) -> list[str]:
     )
     if ig.customer_id == wa.customer_id:
         fail("instagram without phone should be a separate card")
-    merged = await agent.process_message(
+    typed = await agent.process_message(
         InboundMessage(
             channel="instagram",
             external_user_id="ig_merge_200003",
             text="мой номер +996700200001",
         )
     )
-    if merged.customer_id != wa.customer_id:
-        fail(f"instagram phone merge failed: {merged.customer_id} vs {wa.customer_id}")
+    # A typed number is a callback contact, not proof of identity: no merge.
+    if typed.customer_id != ig.customer_id:
+        fail(f"typed phone merged instagram into another card: {typed.customer_id}")
     ig_row = await customers.get(ig.customer_id)
-    if ig_row is None or ig_row.status != "merged" or ig_row.merged_into_id != wa.customer_id:
-        fail(f"source instagram card was not marked merged: {ig_row}")
+    if ig_row is None or ig_row.contact_phone != "+996700200001" or ig_row.status == "merged":
+        fail(f"typed phone was not kept as contact on the instagram card: {ig_row}")
 
     convs = await conversations.list_for_customer(wa.customer_id)
     channels = {item.channel for item in convs}
-    if not {"whatsapp", "instagram", "voice"} <= channels:
-        fail(f"survivor is missing channels after merge: {channels}")
+    if not {"whatsapp", "voice"} <= channels or "instagram" in channels:
+        fail(f"phone owner card has wrong channels: {channels}")
     history = await messages.list_for_customer(wa.customer_id)
-    if len(history) < 6:
-        fail(f"history too thin after merge: {len(history)}")
+    if len(history) < 4:
+        fail(f"history too thin for the phone owner: {len(history)}")
 
     tg = await agent.process_message(
         InboundMessage(channel="telegram", external_user_id="tg_keep_phone", text="салам")
@@ -432,9 +434,8 @@ async def run_identity(agent, session) -> list[str]:
             text="мой номер +996700200099",
         )
     )
-    # tg had no phone; should attach or merge into 200099. 200099 already exists as `other`.
-    if kept.customer_id != other.customer_id:
-        fail(f"telegram did not merge into existing +996700200099, got {kept.customer_id}")
+    if kept.customer_id != tg.customer_id or kept.customer_id == other.customer_id:
+        fail(f"telegram card must stay separate from +996700200099, got {kept.customer_id}")
 
     # A card that already has a phone must not steal another person's number.
     steal = await agent.process_message(
@@ -450,7 +451,7 @@ async def run_identity(agent, session) -> list[str]:
     if still is None or still.phone != "+996700200001":
         fail(f"survivor phone was overwritten, got {still.phone if still else None}")
 
-    seed_aigul = await customers.get_by_phone("+996555111222")
+    seed_aigul = await customers.get_by_phone(await _demo_business_id(session), "+996555111222")
     if seed_aigul is None:
         fail("seed customer Aigul missing by phone")
     again = await agent.process_message(
@@ -461,8 +462,15 @@ async def run_identity(agent, session) -> list[str]:
 
     summary = await SummaryRepository(session).get(wa.customer_id)
     if summary is None or not summary.summary:
-        fail("summary was not written for the merged customer")
+        fail("summary was not written for the phone owner")
     return failures
+
+
+async def _demo_business_id(session) -> UUID:
+    business = await BusinessRepository(session).get_by_name("Demo Realty")
+    if business is None:
+        raise RuntimeError("seed the demo business first")
+    return business.id
 
 
 async def run_persistence_sql(session, customer_id: UUID, phone: str) -> list[str]:

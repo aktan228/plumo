@@ -84,9 +84,9 @@ async def create_meeting(body: MeetingIn, services: Services = Depends(get_servi
     return meeting_out(meeting)
 
 
-@router.get("/metrics", response_model=MetricsOut, summary="Сводка по диалогам")
-async def get_metrics(services: Services = Depends(get_services)) -> MetricsOut:
-    return metrics_out(await services.metrics.snapshot())
+@router.get("/metrics", response_model=MetricsOut, summary="Сводка по диалогам (по одному бизнесу, если указан business_id)")
+async def get_metrics(business_id: UUID | None = None, services: Services = Depends(get_services)) -> MetricsOut:
+    return metrics_out(await services.metrics.snapshot(business_id))
 
 
 async def _business_id(services: Services, explicit: UUID | None) -> UUID:
@@ -104,7 +104,4 @@ async def _business_id(services: Services, explicit: UUID | None) -> UUID:
     rows = await services.businesses.list_all()
     if len(rows) == 1:
         return rows[0].id
-    named = await services.businesses.get_by_name("Demo Realty")
-    if named is not None:
-        return named.id
     raise BusinessNotFound("business_id is required")

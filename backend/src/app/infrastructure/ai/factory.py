@@ -28,6 +28,9 @@ class AIProviderFactory:
             raise ProviderUnavailable(f"unknown model tier '{tier}'")
         if self.settings.mock_mode:
             return self._small if tier == "small" else self._big
+        if tier == "small" and not self.small_enabled:
+            # No small model yet: a canned mock reply must never reach a customer.
+            tier = "big"
         name = self.settings.small_model_provider if tier == "small" else self.settings.big_model_provider
         if name == "mock":
             return self._small if tier == "small" else self._big
@@ -37,6 +40,10 @@ class AIProviderFactory:
                 f"LLM provider '{name}' is not registered. Add it with AIProviderFactory.register_llm."
             )
         return provider
+
+    @property
+    def small_enabled(self) -> bool:
+        return bool(getattr(self.settings, "small_model_enabled", True))
 
     def stt(self) -> STTProvider:
         return self._pick(self._stt, "mock" if self.settings.mock_mode else self.settings.stt_provider, "STT")

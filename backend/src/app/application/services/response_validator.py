@@ -7,6 +7,12 @@ from app.domain.models import AgentContext, QuestionAssessment, ValidationResult
 from app.domain.text_signals import analyze_message, compact_numbers, contains_any, normalize_text
 
 _MEASURE = re.compile(r"(\d{1,4})\s*-?\s*(?:м²|м2|м\b|этаж|комнат)")
+# No calendar is connected: a booking is only a wish the manager confirms, and a
+# live transfer does not exist. Promising either misleads the customer.
+_FALSE_BOOKING = re.compile(
+    r"записал[аи]?\b|записываю|вы записаны|забронир|зарезервир|жазып алдым|броньдоо(?:ду)? (?:жасадым|кылдым)"
+)
+_FALSE_TRANSFER = re.compile(r"перевожу вас|соединяю вас|соединю вас|оставайтесь на линии|не отключайтесь")
 _INSTALLMENT_YES = re.compile(r"(есть|доступ|возмож|оформ)")
 
 
@@ -30,6 +36,11 @@ class ResponseValidator:
         for match in _MEASURE.finditer(normalize_text(response)):
             if match.group(1) not in allowed_norm:
                 return ValidationResult(False, "invented_detail")
+        normalized_response = normalize_text(response)
+        if _FALSE_BOOKING.search(normalized_response):
+            return ValidationResult(False, "unconfirmed_booking")
+        if _FALSE_TRANSFER.search(normalized_response):
+            return ValidationResult(False, "false_transfer")
         if _affirms_installment(response) and "рассроч" not in allowed_norm and "ипотек" not in allowed_norm:
             return ValidationResult(False, "invented_installment")
         if _affirms_availability(response) and not contains_any(allowed, ("доступ", "в наличии", "продае")):

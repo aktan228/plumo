@@ -62,7 +62,9 @@ def agent_out(response: AgentResponse) -> AgentResponseOut:
 def customer_out(customer: Customer) -> CustomerOut:
     return CustomerOut(
         id=customer.id,
+        business_id=customer.business_id,
         phone=customer.phone,
+        contact_phone=customer.contact_phone,
         language=customer.language,
         status=customer.status,
         need=customer.need,

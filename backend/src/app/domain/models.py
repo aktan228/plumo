@@ -52,6 +52,9 @@ class Customer:
     merged_into_id: UUID | None
     created_at: datetime
     updated_at: datetime
+    business_id: UUID | None = None
+    # Typed by the customer: where the manager may call back. Not an identity key.
+    contact_phone: str | None = None
 
 
 @dataclass(slots=True)
@@ -164,6 +167,8 @@ class AgentContext:
     current_message: str
     language: str
     channel: str = "whatsapp"
+    # 0..1 from a voice layer that reports it; None for chats and for platforms that do not.
+    stt_confidence: float | None = None
 
 
 @dataclass(slots=True)
@@ -177,6 +182,9 @@ class LLMGeneration:
     input_tokens: int
     output_tokens: int
     estimated_cost: float
+    # Running note about the customer, written by the model in the same call.
+    memory: str | None = None
+    need: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -270,6 +278,10 @@ class InteractionLog:
     latency_ms: int
     estimated_cost: float
     created_at: datetime
+    # Milliseconds per pipeline step: prepare_ms, model_ms, post_ms.
+    timings: dict[str, int] = field(default_factory=dict)
+    stt_confidence: float | None = None
+    business_id: UUID | None = None
 
 
 @dataclass(slots=True)
@@ -383,6 +395,7 @@ class VoiceCall:
     metadata: dict[str, Any]
     created_at: datetime
     updated_at: datetime
+    business_id: UUID | None = None
 
 
 @dataclass(slots=True)

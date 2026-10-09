@@ -22,6 +22,7 @@ _REASONS = {
     "no_knowledge": "❓ Вопрос вне базы",
     "customer_dissatisfied": "😠 Клиент недоволен",
     "agent_unclear_twice": "🤷 Агент не понял дважды",
+    "model_unavailable": "⚠️ Модель недоступна, клиент ждёт ответа",
 }
 _ROLES = {"user": "Клиент", "assistant": "Plumo", "manager": "Менеджер"}
 

@@ -9,6 +9,8 @@ from app.domain.text_signals import compact_numbers, normalize_text
 
 _TOKEN = re.compile(r"[a-zа-яңөү0-9]+")
 _PRICE = re.compile(r"(\d[\d\s]*\d|\d)\s*usd")
+# Renting, not buying: "снять", "аренда", Kyrgyz "ижара". Rentals go up instead of down.
+_RENT = ("снять", "сниму", "снимать", "сним", "аренд", "ижара", "квартирант")
 # "дешевле" means "the rest of the catalog by price", not words in a listing.
 _CHEAPER = ("дешевл", "подешев", "недорог", "бюджет", "арзан")
 # Three-letter words that are not names: "Чуй" and "Джал" count, "для" does not.
@@ -64,13 +66,14 @@ class SimpleKnowledgeRetriever:
 
 
 class _PreparedQuery:
-    __slots__ = ("normalized", "numbers", "tokens", "catalog")
+    __slots__ = ("normalized", "numbers", "tokens", "catalog", "rent")
 
-    def __init__(self, normalized: str, numbers: list[str], tokens: list[str], catalog: bool) -> None:
+    def __init__(self, normalized: str, numbers: list[str], tokens: list[str], catalog: bool, rent: bool = False) -> None:
         self.normalized = normalized
         self.numbers = numbers
         self.tokens = tokens
         self.catalog = catalog
+        self.rent = rent
 
     @classmethod
     def from_text(cls, query: str) -> "_PreparedQuery":
@@ -85,6 +88,7 @@ class _PreparedQuery:
             compact_numbers(normalized),
             tokens,
             any(token in normalized for token in _CATALOG),
+            any(stem in normalized for stem in _RENT),
         )
 
 
@@ -105,11 +109,13 @@ def _score(query: _PreparedQuery, item) -> float:
         elif len(token) >= 6 and token[:4] in hay:
             # Kyrgyz and Russian endings: "Джалдагы" → "Джал", "Филармонияга" → "Филармония".
             score += 0.75
+    if query.rent and "аренд" in hay and "продан" not in hay:
+        score += 4
     if query.catalog and (item.category == "property" or "квартир" in hay):
         score += 2
         if "продан" in hay:
             score -= 2
-        if "аренд" in hay:
+        if "аренд" in hay and not query.rent:
             score -= 0.5
     return score
 

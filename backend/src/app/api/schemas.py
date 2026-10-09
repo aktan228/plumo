@@ -156,7 +156,12 @@ class VoiceRespondOut(BaseModel):
 
 class CustomerOut(BaseModel):
     id: UUID
+    business_id: UUID | None = None
     phone: str | None
+    contact_phone: str | None = Field(
+        default=None,
+        description="Номер, который клиент написал сам. Для обратного звонка; карточки по нему не склеиваются.",
+    )
     language: str
     status: str
     need: str | None

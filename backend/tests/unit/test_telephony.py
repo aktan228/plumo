@@ -113,8 +113,9 @@ class _Customers:
     def __init__(self, *rows: Customer) -> None:
         self.rows = {row.phone: row for row in rows}
 
-    async def get_by_phone(self, phone: str):
-        return self.rows.get(phone)
+    async def get_by_phone(self, business_id, phone: str):
+        row = self.rows.get(phone)
+        return row if row is not None and row.business_id in (None, business_id) else None
 
 
 class _Messages:
@@ -137,12 +138,15 @@ class _Calls:
         return call
 
 
+_BUSINESS_ID = uuid4()
+
+
 class _Agent:
     def __init__(self) -> None:
         self.seen = []
 
-    async def resolve_business(self, explicit=None):
-        return SimpleNamespace(name="Demo Realty", contacts={"assistant_name": "Айпери"})
+    async def resolve_business(self, explicit=None, called=None):
+        return SimpleNamespace(id=_BUSINESS_ID, name="Demo Realty", contacts={"assistant_name": "Айпери"})
 
     async def process_message(self, message):
         self.seen.append(message)
@@ -283,3 +287,25 @@ async def test_telegram_card_and_failure_does_not_raise() -> None:
 
     broken = TelegramHandoffProvider(token="t", chat_id="42", transport=httpx.MockTransport(lambda r: httpx.Response(500)))
     await broken.notify(handoff)  # logged, not raised
+
+
+async def test_dialled_number_picks_its_business() -> None:
+    from app.application.services.agent_service import AgentService
+
+    first = SimpleNamespace(id=uuid4(), name="Первый", contacts={"voice_numbers": ["+996312000001"]})
+    second = SimpleNamespace(id=uuid4(), name="Второй", contacts={"voice_numbers": ["+996 312 000 002"]})
+
+    class _Businesses:
+        async def list_all(self):
+            return [first, second]
+
+        async def get(self, business_id):
+            return {first.id: first, second.id: second}.get(business_id)
+
+    agent = object.__new__(AgentService)
+    agent.businesses = _Businesses()
+    agent.default_business_id = str(first.id)
+    assert (await agent.resolve_business(None, "+996312000002")).id == second.id
+    # An explicit id wins over the number; an unknown number falls back to the default.
+    assert (await agent.resolve_business(first.id, "+996312000002")).id == first.id
+    assert (await agent.resolve_business(None, "+996312999999")).id == first.id

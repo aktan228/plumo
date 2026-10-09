@@ -42,9 +42,14 @@ class KnowledgeItemRow(Base):
 
 class CustomerRow(Base):
     __tablename__ = "customers"
+    # One person calling two agencies is two customers: history never crosses businesses.
+    __table_args__ = (UniqueConstraint("business_id", "phone", name="uq_customers_business_phone"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    phone: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # A number the customer typed. A callback target, not proof of identity.
+    contact_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     language: Mapped[str] = mapped_column(String(16), default="unknown")
     status: Mapped[str] = mapped_column(String(32), default="new")
     need: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -58,9 +63,12 @@ class CustomerRow(Base):
 
 class CustomerChannelRow(Base):
     __tablename__ = "customer_channels"
-    __table_args__ = (UniqueConstraint("channel", "external_id", name="uq_channel_external"),)
+    __table_args__ = (
+        UniqueConstraint("business_id", "channel", "external_id", name="uq_channel_business_external"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"))
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id"))
     channel: Mapped[str] = mapped_column(String(32))
     external_id: Mapped[str] = mapped_column(String(128))
@@ -83,6 +91,10 @@ class ConversationRow(Base):
 
 class MessageRow(Base):
     __tablename__ = "messages"
+    # A webhook retried concurrently must not run the agent twice.
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "external_id", name="uq_messages_conversation_external"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"), index=True)
@@ -91,6 +103,7 @@ class MessageRow(Base):
     text: Mapped[str] = mapped_column(Text)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    external_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -157,6 +170,9 @@ class InteractionLogRow(Base):
     actions: Mapped[list] = mapped_column(JSONB, default=list)
     latency_ms: Mapped[int] = mapped_column()
     estimated_cost: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    timings: Mapped[dict] = mapped_column(JSONB, default=dict)
+    stt_confidence: Mapped[float | None] = mapped_column(nullable=True)
+    business_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("businesses.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -183,6 +199,7 @@ class VoiceCallRow(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     provider: Mapped[str] = mapped_column(String(32))
     provider_call_id: Mapped[str] = mapped_column(String(128))
+    business_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("businesses.id"), nullable=True, index=True)
     customer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
     caller: Mapped[str | None] = mapped_column(String(32), nullable=True)
     called: Mapped[str | None] = mapped_column(String(32), nullable=True)

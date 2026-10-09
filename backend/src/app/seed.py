@@ -161,6 +161,7 @@ async def seed(session) -> Business:
 
     await _customer(
         customers,
+        business.id,
         CUSTOMER_AIGUL,
         phone="+996555111222",
         channel="whatsapp",
@@ -169,6 +170,7 @@ async def seed(session) -> Business:
     )
     await _customer(
         customers,
+        business.id,
         CUSTOMER_NURLAN,
         phone=None,
         channel="instagram",
@@ -177,6 +179,7 @@ async def seed(session) -> Business:
     )
     await _customer(
         customers,
+        business.id,
         CUSTOMER_BERMET,
         phone=None,
         channel="telegram",
@@ -186,12 +189,14 @@ async def seed(session) -> Business:
     return business
 
 
-async def _customer(customers: CustomerRepository, customer_id: UUID, phone, channel, external_id, language) -> None:
+async def _customer(
+    customers: CustomerRepository, business_id: UUID, customer_id: UUID, phone, channel, external_id, language
+) -> None:
     existing = None
     if phone:
-        existing = await customers.get_by_phone(phone)
+        existing = await customers.get_by_phone(business_id, phone)
     if existing is None:
-        existing = await customers.get_by_channel(channel, external_id)
+        existing = await customers.get_by_channel(business_id, channel, external_id)
     now = utcnow()
     if existing is None:
         await customers.add(
@@ -205,6 +210,7 @@ async def _customer(customers: CustomerRepository, customer_id: UUID, phone, cha
                 merged_into_id=None,
                 created_at=now,
                 updated_at=now,
+                business_id=business_id,
             )
         )
         await customers.link_channel(customer_id, channel, external_id)

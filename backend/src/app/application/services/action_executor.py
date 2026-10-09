@@ -56,7 +56,7 @@ class MockActionExecutor:
         return ActionResult(
             action.type,
             "executed",
-            {"customer_id": str(ctx.customer.id), "has_phone": bool(ctx.customer.phone)},
+            {"customer_id": str(ctx.customer.id), "has_phone": bool(ctx.customer.phone or ctx.customer.contact_phone)},
         )
 
     async def _handoff(self, action: Action, ctx: ActionContext) -> ActionResult:

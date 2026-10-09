@@ -32,7 +32,7 @@ Plumo — **AI-менеджер по продажам недвижимости**
 | Handoff очередь PENDING → ACCEPTED → RESOLVED | Работает |
 | Встречи со статусом PROPOSED (без Google Calendar) | Работает |
 | REST + Swagger | Работает |
-| OpenRouter (Gemini 2.5 Flash или `openrouter/free`) | Подключён адаптером |
+| Gemini напрямую или через OpenRouter (3.8 Flash + запасные модели) | Подключён адаптером: ретраи, смена отключённой модели, thinking `minimal` |
 | STT / TTS | Mock (`audio_id` → текст / текст → `audio_id`) |
 | WhatsApp / Telegram / Instagram SDK | Mock-адаптеры формы payload |
 | Кабинет менеджера / лендинг | Вне этого репозитория |
@@ -267,11 +267,11 @@ Seed кладёт два объекта Demo Realty:
 
 ```
 AI_MODE=production
-SMALL_MODEL_PROVIDER=openrouter_small
+SMALL_MODEL_PROVIDER=none
 BIG_MODEL_PROVIDER=openrouter_big
 OPENROUTER_API_KEY=sk-or-v1-...
-OPENROUTER_SMALL_MODEL=google/gemini-2.5-flash
-OPENROUTER_BIG_MODEL=google/gemini-2.5-flash
+OPENROUTER_BIG_MODEL=google/gemini-3.8-flash
+OPENROUTER_FALLBACK_MODELS=google/gemini-3.7-flash,google/gemini-3.1-flash-lite
 ```
 
 `AI_MODE=mock` — фабрика **игнорирует** имена и всегда отдаёт `MockLLMProvider` (скрипты по ключевым словам). Это защита от случайного боевого биллинга.

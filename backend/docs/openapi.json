@@ -703,8 +703,27 @@
         "tags": [
           "operations"
         ],
-        "summary": "Сводка по диалогам",
+        "summary": "Сводка по диалогам (по одному бизнесу, если указан business_id)",
         "operationId": "get_metrics_api_v1_metrics_get",
+        "parameters": [
+          {
+            "name": "business_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Business Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -712,6 +731,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MetricsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1200,6 +1229,18 @@
             "format": "uuid",
             "title": "Id"
           },
+          "business_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Id"
+          },
           "phone": {
             "anyOf": [
               {
@@ -1210,6 +1251,18 @@
               }
             ],
             "title": "Phone"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone",
+            "description": "Номер, который клиент написал сам. Для обратного звонка; карточки по нему не склеиваются."
           },
           "language": {
             "type": "string",

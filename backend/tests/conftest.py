@@ -64,6 +64,8 @@ async def engine() -> AsyncIterator[AsyncEngine]:
     await _ensure_database()
     db = create_engine(test_database_url(), null_pool=True)
     async with db.begin() as connection:
+        # drop_all first: create_all never alters a table left by an older schema.
+        await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
     yield db
     await db.dispose()

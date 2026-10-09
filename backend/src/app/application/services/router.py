@@ -29,7 +29,7 @@ class RuleBasedRouter:
             return self._big("money_or_installment", 0.91)
         if signals.human_request:
             return self._small("human_request", 0.97)
-        if signals.greeting and not signals.factual:
+        if signals.greeting and not (signals.factual or signals.hours or signals.address or signals.contacts or signals.meeting):
             return self._small("greeting", 0.98)
         if signals.farewell:
             return self._small("farewell", 0.98)

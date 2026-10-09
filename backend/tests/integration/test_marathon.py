@@ -1,7 +1,7 @@
 """Strict marathon: catalog talks, phone identity, concurrent load."""
 
 from app.domain.models import InboundMessage
-from app.infrastructure.database.repositories import CustomerRepository
+from app.infrastructure.database.repositories import BusinessRepository, CustomerRepository
 from app.marathon import run_dialogues, run_identity, run_load, run_persistence_sql
 from app.seed import seed
 
@@ -22,7 +22,8 @@ async def test_marathon_identity_and_sql(agent, session):
 
 async def test_seed_phone_is_stable(agent, session):
     customers = CustomerRepository(session)
-    aigul = await customers.get_by_phone("+996555111222")
+    business = await BusinessRepository(session).get_by_name("Demo Realty")
+    aigul = await customers.get_by_phone(business.id, "+996555111222")
     assert aigul is not None
     first = await agent.process_message(
         InboundMessage(channel="whatsapp", external_user_id="+996555111222", text="Здравствуйте")

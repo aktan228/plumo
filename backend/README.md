@@ -2,9 +2,9 @@
 
 Plumo — ядро AI-менеджера по продажам. Один клиент, одна карточка, одна история, даже если он пишет из WhatsApp, Instagram, Telegram и потом звонит.
 
-Подключить бэк к кабинету, каналам или серверу: [FULLSTACK.md](FULLSTACK.md). Коротко для лида: [LEAD.md](LEAD.md). Живая модель или канал: [INTEGRATION.md](INTEGRATION.md). Звонки: [VOICE.md](VOICE.md). Какую модель брать: [docs/MODELS.md](docs/MODELS.md). Как агент разговаривает: [docs/CONVERSATION.md](docs/CONVERSATION.md). Что подключить и купить: [docs/CHECKLIST.md](docs/CHECKLIST.md).
+Подключить бэк к кабинету, каналам или серверу: [FULLSTACK.md](FULLSTACK.md). Коротко для лида: [LEAD.md](LEAD.md). Живая модель или канал: [INTEGRATION.md](INTEGRATION.md). Звонки: [VOICE.md](VOICE.md). Какую модель брать: [docs/MODELS.md](docs/MODELS.md), сравнить модели на 55 сценариях: [docs/BENCH.md](docs/BENCH.md). Как агент разговаривает: [docs/CONVERSATION.md](docs/CONVERSATION.md). Что подключить и купить: [docs/CHECKLIST.md](docs/CHECKLIST.md).
 
-Сейчас текстовая модель подключается через OpenRouter. При `AI_MODE=production` ядро вызывает Gemini 2.5 Flash. Телефонные звонки идут через ElevenLabs Agents, Plumo подключён к нему как Custom LLM: [VOICE.md](VOICE.md). Порты STT/TTS для голосовых сообщений в чатах пока mock. Каналы WhatsApp/Telegram ещё не живые.
+Текстовая модель — Gemini 3.8 Flash напрямую через Google AI Studio или через OpenRouter, с запасными 3.7 Flash и 3.1 Flash-Lite (2.5 Flash отключается 20.10.2026, см. [docs/MODELS.md](docs/MODELS.md)). Малой модели пока нет: её реплики отвечает большая. Телефонные звонки идут через ElevenLabs Agents, Plumo подключён к нему как Custom LLM: [VOICE.md](VOICE.md). Порты STT/TTS для голосовых сообщений в чатах пока mock. Каналы WhatsApp/Telegram ещё не живые.
 
 ## Архитектура
 
@@ -101,7 +101,7 @@ postgresql+asyncpg://plumo:plumo@localhost:5432/plumo
 
 ## Миграции
 
-Схема в `alembic/versions/001_initial.py`, звонки — `002_voice_calls.py`.
+Схема в `alembic/versions/001_initial.py`, звонки — `002_voice_calls.py`, изоляция клиентов по бизнесу и защита от дублей сообщений — `003_business_isolation.py`, бизнес у звонков и логов, замеры по шагам и уверенность STT — `004_call_metrics.py`. Существующие клиенты при миграции 003 привязываются к самому старому бизнесу.
 
 ```powershell
 alembic upgrade head
@@ -126,6 +126,15 @@ python -m app.seed
 Рассрочки в базе нет. Это специально: вопрос про рассрочку должен уйти человеку.
 
 Также появляются два клиента: Айгуль в WhatsApp `+996555111222` и Нурлан в Instagram `ig_nurlan`.
+
+## База знаний из таблицы
+
+```powershell
+python -m app.import_knowledge --business "Demo Realty" ..\data\demo\knowledge_example.csv --dry-run
+python -m app.import_knowledge --business "Demo Realty" "https://docs.google.com/spreadsheets/d/<id>/edit#gid=0" --deactivate-missing
+```
+
+Колонки: `category`, `title`, `content`, необязательная `active` (да/нет). Строки сопоставляются по `title`: изменённые обновляются, новые добавляются. `--deactivate-missing` выключает то, чего в таблице больше нет: проданный объект пропадает из ответов, но не удаляется. Google-таблица должна быть открыта по ссылке на просмотр, ключи Google не нужны. `--dry-run` показывает изменения без записи.
 
 ## Demo / чат в терминале
 
@@ -169,7 +178,7 @@ Plumo > У меня нет информации о рассрочке. Я пер
 | GET | `/api/v1/knowledge` | база знаний |
 | POST | `/api/v1/knowledge` | добавить факт |
 | POST | `/api/v1/meetings` | создать встречу |
-| GET | `/api/v1/metrics` | сводка, включая минуты и стоимость звонков |
+| GET | `/api/v1/metrics` | сводка, включая минуты и стоимость звонков; `?business_id=` — по одному бизнесу |
 | POST | `/api/v1/telephony/elevenlabs/v1/chat/completions` | реплика звонящего (Custom LLM, SSE) |
 | POST | `/api/v1/telephony/elevenlabs/initiation` | приветствие входящего звонка |
 | POST | `/api/v1/telephony/elevenlabs/post-call` | итог звонка (HMAC) |
@@ -249,8 +258,9 @@ Plumo > У меня нет информации о рассрочке. Я пер
 `CustomerResolver` не вызывает модель.
 
 - WhatsApp и телефон: номер во `external_user_id` — основной ключ. Повторный контакт с тем же номером находит ту же карточку.
-- Telegram и Instagram без номера — отдельная карточка, ключ `(channel, external_id)`.
-- Если в тексте появляется номер и карточка с этим номером уже есть, профили сливаются. Выживает карточка с телефоном.
+- Telegram и Instagram без номера — отдельная карточка, ключ `(business_id, channel, external_id)`.
+- Номер, который клиент написал в тексте, сохраняется в `contact_phone` для обратного звонка и попадает в карточку менеджеру с пометкой «назвал сам». Карточки по нему **не** сливаются: написать можно чужой номер, а слияние показало бы этому человеку чужую историю. Слияние — только через `merge_customers` после подтверждения (например, код в WhatsApp на этот номер) или решения менеджера. Механизм подтверждения ещё не реализован.
+- Клиент принадлежит одному бизнесу. Один и тот же номер в двух агентствах — две разные карточки, история между бизнесами не пересекается.
 - После merge каналы, диалоги, сообщения, встречи, handoff и логи смотрят на один `customer_id`. Исходная карточка остаётся со статусом `merged` и `merged_into_id`.
 
 Историю нужно читать у выжившего id.
@@ -292,6 +302,7 @@ Plumo > У меня нет информации о рассрочке. Я пер
 
 ```powershell
 pytest
+.\dev.cmd lint     # ruff: только ошибки, не стиль
 ```
 
 Нужен запущенный Postgres. Юнит-тесты роутера и валидатора базу не спрашивают, но фикстуры интеграционных тестов поднимают `plumo_test`.
@@ -300,4 +311,6 @@ pytest
 
 `AI_MODE=mock` включает mock LLM, STT, TTS, язык и каналы. `AI_MODE=production` берёт имена из `SMALL_MODEL_PROVIDER`, `BIG_MODEL_PROVIDER`, `STT_PROVIDER`, `TTS_PROVIDER`, `LANGUAGE_DETECTOR`, `HANDOFF_PROVIDER`. Незарегистрированное имя даёт 503, а не тихий откат в mock.
 
-`ROUTER=rules` — текущий роутер. `DEFAULT_LANGUAGE=ru`. `DEFAULT_BUSINESS_ID` необязателен: если бизнес в базе один, берётся он.
+`ROUTER=rules` — текущий роутер. `DEFAULT_LANGUAGE=ru`. `DEFAULT_BUSINESS_ID` необязателен: если бизнес в базе один, берётся он. Если бизнесов несколько, а `business_id` не передан и не задан по умолчанию, запрос получает 404 `business_not_found`: угадывать бизнес нельзя, иначе клиент одной компании попадёт в историю другой.
+
+`SMALL_MODEL_PROVIDER=none` (или `mock` в production) — малой модели нет, её реплики отвечает большая; в `route_reason` остаётся метка роутера с суффиксом `:no_small`, по ней потом учится классификатор. `MANAGER_PAUSE_HOURS=24` — сколько часов принятая и не закрытая передача держит агента молча; 0 — до закрытия менеджером. `STT_LOW_CONFIDENCE=0.6` — реплика с меньшей уверенностью распознавания идёт в большую модель.
