@@ -41,7 +41,14 @@ from app.domain.models import (
     UsageLog,
     utcnow,
 )
-from app.domain.phrases import fallback_phrase, fit_for_voice, human_phrase, unknown_phrase, with_ai_disclosure
+from app.domain.phrases import (
+    drop_reintroduction,
+    fallback_phrase,
+    fit_for_voice,
+    human_phrase,
+    unknown_phrase,
+    with_ai_disclosure,
+)
 from app.domain.scheduling import has_slot
 from app.domain.ports import (
     ActionExecutor,
@@ -95,6 +102,7 @@ class AgentService:
         small_enabled: bool = True,
         manager_pause_hours: float = 24.0,
         stt_low_confidence: float = 0.6,
+        voice_hedge_after_s: float = 3.0,
     ) -> None:
         self.resolver = resolver
         self.memory = memory
@@ -123,6 +131,8 @@ class AgentService:
         self.small_enabled = small_enabled
         self.manager_pause_hours = manager_pause_hours
         self.stt_low_confidence = stt_low_confidence
+        # Voice only: a second request for the same turn after this many seconds. 0 = off.
+        self.voice_hedge_after_s = voice_hedge_after_s
 
     async def process_message(self, message: InboundMessage) -> AgentResponse:
         started = time.perf_counter()
@@ -244,6 +254,11 @@ class AgentService:
                 response_text = fallback_phrase(intent, language, seed)
                 steps.append(f"fallback:{intent}")
 
+        if message.channel == Channel.voice:
+            plain = drop_reintroduction(response_text, assistant_name(business))
+            if plain != response_text:
+                response_text = plain
+                steps.append("voice_no_reintro")
         if message.channel == Channel.voice:
             shorter = fit_for_voice(response_text)
             if shorter != response_text:
@@ -510,10 +525,9 @@ class AgentService:
         remaining = deadline - time.perf_counter()
         if remaining < 0.5:
             return LLMGeneration("", [], False, None, 0.0, f"{tier}:timeout", 0, 0, 0.0)
+        hedge_after = self.voice_hedge_after_s if getattr(context, "channel", None) == Channel.voice else 0.0
         try:
-            generation = await asyncio.wait_for(
-                self.llm_for_tier(tier).generate_response(context, route), timeout=remaining
-            )
+            generation = await self._first_reply(self.llm_for_tier(tier), context, route, remaining, hedge_after)
         except TimeoutError:
             logger.warning("model_timeout", extra={"tier": tier, "budget_s": round(remaining, 2)})
             return LLMGeneration("", [], False, None, 0.0, f"{tier}:timeout", 0, 0, 0.0)
@@ -527,6 +541,42 @@ class AgentService:
             return LLMGeneration("", [], False, None, 0.0, f"{tier}:unavailable", 0, 0, 0.0)
         generations.append(generation)
         return generation
+
+    @staticmethod
+    async def _first_reply(llm, context, route: RouteDecision, timeout: float, hedge_after: float) -> LLMGeneration:
+        """The model's reply within `timeout`. A slow call gets a twin after `hedge_after` seconds.
+
+        A provider sometimes takes 5+ s on one request out of dozens. On a call that
+        is dead air, so a second identical request races the first and the earlier
+        answer wins. It costs one extra call, and only on slow turns.
+        """
+
+        started = time.perf_counter()
+        tasks = {asyncio.ensure_future(llm.generate_response(context, route))}
+        try:
+            if 0 < hedge_after < timeout - 1.0:
+                done, _ = await asyncio.wait(tasks, timeout=hedge_after)
+                if not done:
+                    logger.info("model_hedged", extra={"after_s": hedge_after})
+                    tasks.add(asyncio.ensure_future(llm.generate_response(context, route)))
+            error: BaseException | None = None
+            while tasks:
+                left = timeout - (time.perf_counter() - started)
+                if left <= 0:
+                    break
+                done, tasks = await asyncio.wait(tasks, timeout=left, return_when=asyncio.FIRST_COMPLETED)
+                if not done:
+                    break
+                for task in done:
+                    if task.exception() is None:
+                        return task.result()
+                    error = task.exception()
+            if error is not None and not tasks:
+                raise error
+            raise TimeoutError
+        finally:
+            for task in tasks:
+                task.cancel()
 
     def _pause_since(self) -> datetime | None:
         if self.manager_pause_hours <= 0:

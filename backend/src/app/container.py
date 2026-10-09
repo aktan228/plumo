@@ -136,6 +136,7 @@ def build_agent(session: AsyncSession, runtime: Runtime) -> AgentService:
         small_enabled=runtime.providers.small_enabled,
         manager_pause_hours=runtime.settings.manager_pause_hours,
         stt_low_confidence=runtime.settings.stt_low_confidence,
+        voice_hedge_after_s=runtime.settings.voice_hedge_after_s,
     )
 
 

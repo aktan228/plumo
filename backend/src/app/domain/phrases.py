@@ -111,12 +111,17 @@ def agent_instructions(
     raw_qualify = profile.get("qualify")
     qualify = [str(item).strip() for item in raw_qualify if str(item).strip()] if isinstance(raw_qualify, list) else []
     questions = ", ".join(qualify or DEFAULT_QUALIFY)
+    if channel == "voice":
+        # The call opens with the platform greeting that already says who is speaking.
+        intro_rule = "Звонок уже начался с приветствия, где ты назвал себя ИИ-ассистентом: не здоровайся и не представляйся снова."
+    else:
+        intro_rule = f"В первом ответе разговора представься: «Здравствуйте! Я {assistant_name}, ИИ-ассистент компании «{business_name}».»"
 
     return f"""# Кто ты
 Ты {assistant_name}, менеджер по продажам компании «{business_name}». Говоришь о себе в мужском роде.
 Что мы предлагаем: {offering}.
 Тон: тёплый, спокойный, уверенный, по делу. Без заискивания и без давления.
-Ты ИИ-ассистент, и человек должен это знать (это требование закона). В первом ответе разговора представься: «Здравствуйте! Я {assistant_name}, ИИ-ассистент компании «{business_name}».» Никогда не выдавай себя за человека. Спросят «вы бот?» — честно скажи да и предложи живого менеджера.
+Ты ИИ-ассистент, и человек должен это знать (это требование закона). {intro_rule} Никогда не выдавай себя за человека. Спросят «вы бот?» — честно скажи да и предложи живого менеджера.
 
 # Цель
 Понять, что нужно человеку, подобрать 1–2 подходящих варианта из данных и довести до следующего шага: {meeting}. Скидки, торг, оплату и сделку ведёт живой менеджер.
@@ -129,7 +134,7 @@ def agent_instructions(
 # Как ты говоришь
 - Каждая реплика: живая реакция на слова клиента, ответ, один вопрос. 1–3 предложения.
 - Говори своими словами, как человек: «Да, есть», «Понимаю», «Смотрите», «Ага, тогда…». Не начинай каждую реплику одинаково.
-- Опирайся на сказанное: «Вы говорили, что важна цена — тогда…». Не переспрашивай то, что уже знаешь, и не повторяй проигнорированный вопрос.
+- Опирайся на сказанное: «Вы говорили, что важна цена — тогда…». Не переспрашивай то, что уже знаешь. Клиент не ответил на вопрос — не повторяй его, переходи к следующему.
 - Подстраивайся под клиента: короткие сообщения — короткие ответы; на «ты» — можно на «ты»; кыргызский — отвечай на кыргызском; смешивает языки — смешивай так же.
 - Не здоровайся и не представляйся повторно. Клиент вернулся после паузы — покажи, что помнишь, о чём говорили.
 - Без канцелярита: никаких «данный товар», «ваш запрос», «обращайтесь», «чем ещё могу помочь», «уважаемый клиент», «база знаний», «в базе», «в карточке».
@@ -140,6 +145,7 @@ def agent_instructions(
 - «Дорого», «подумаю»: не спорь и не дави. Признай и предложи шаг: вариант дешевле из данных или вернуться позже.
 - Недоволен или грубит: одно предложение сочувствия, без оправданий, потом действие. Предложи менеджера.
 - Непонятно или обрывок фразы: коротко переспроси одним вопросом. Второй раз непонятно — предложи менеджера.
+- Спросили «что у вас есть?» — одной фразой скажи, что мы предлагаем, назови 1–2 варианта из данных и задай один вопрос.
 - Посторонняя тема: одна дружелюбная фраза и возврат к тому, что мы предлагаем.
 - Клиент назвал номер телефона: поблагодари, скажи, что менеджер свяжется. Варианты не перечисляй, новых вопросов не задавай.
 
@@ -269,19 +275,36 @@ _LEADING_GREETING = re.compile(r"^\s*(здравствуйте|добрый (д�
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 
 
-def fit_for_voice(text: str, limit: int = 3) -> str:
+def fit_for_voice(text: str, limit: int = 4) -> str:
     """A caller listens: at most `limit` sentences, and the closing question survives.
 
     The model is told 1-2 sentences but sometimes writes five. Cutting keeps the
-    first sentences (the answer) and the last question (the next step).
+    first sentence (the reaction), the last question (the next step) and, in
+    between, sentences with digits first: a price must not be the one dropped.
     """
 
     sentences = [part.strip() for part in _SENTENCE_END.split(" ".join((text or "").split())) if part.strip()]
     if len(sentences) <= limit:
         return " ".join(sentences) if sentences else (text or "")
     question = sentences[-1] if sentences[-1].endswith("?") else None
-    head = sentences[: limit - 1 if question else limit]
-    return " ".join(head + ([question] if question else []))
+    middle = sentences[1:-1] if question else sentences[1:]
+    slots = limit - 1 - (1 if question else 0)
+    ranked = sorted(range(len(middle)), key=lambda i: (not re.search(r"\d", middle[i]), i))
+    keep = sorted(ranked[:slots])
+    return " ".join([sentences[0], *(middle[i] for i in keep), *([question] if question else [])])
+
+
+def drop_reintroduction(text: str, assistant_name: str) -> str:
+    """A call already opened with "Это Плюмо, ИИ-ассистент…": a second hello and intro sound broken."""
+
+    rest = _LEADING_GREETING.sub("", text or "", count=1).strip()
+    sentences = _SENTENCE_END.split(rest, maxsplit=1)
+    first = sentences[0].lower()
+    if assistant_name.lower() in first and ("ассистент" in first or "жардамчы" in first) and len(sentences) > 1:
+        rest = sentences[1].strip()
+    if not rest:
+        return text
+    return rest[0].upper() + rest[1:]
 
 
 def discloses_ai(text: str) -> bool:

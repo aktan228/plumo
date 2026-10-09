@@ -375,9 +375,13 @@ async def test_long_voice_reply_keeps_the_answer_and_the_question():
     from app.domain.phrases import fit_for_voice
 
     long = "Да, есть. Диван Осло за 45000 сом. Он прямой. Ткань рогожка. Ещё есть угловой. Вам какой ближе?"
-    assert fit_for_voice(long) == "Да, есть. Диван Осло за 45000 сом. Вам какой ближе?"
+    assert fit_for_voice(long) == "Да, есть. Диван Осло за 45000 сом. Он прямой. Вам какой ближе?"
+    priced = "Понятно. Есть трёхкомнатная на Киевской. Там подземная парковка. Цена 110000 долларов. Посмотрим её?"
+    assert fit_for_voice(priced + " Или дешевле?") == (
+        "Понятно. Есть трёхкомнатная на Киевской. Цена 110000 долларов. Или дешевле?"
+    )
     assert fit_for_voice("Да, есть. Вам для чего?") == "Да, есть. Вам для чего?"
-    assert fit_for_voice("Раз. Два. Три. Четыре.") == "Раз. Два. Три."
+    assert fit_for_voice("Раз. Два. Три. Четыре. Пять.") == "Раз. Два. Три. Четыре."
 
 
 async def test_kyrgyz_place_name_with_ending_finds_the_item():
@@ -389,3 +393,52 @@ async def test_kyrgyz_place_name_with_ending_finds_the_item():
     assert SimpleKnowledgeRetriever.score("Джалдагы батирдин баасы канча?", jal) > SimpleKnowledgeRetriever.score(
         "Джалдагы батирдин баасы канча?", other
     )
+
+
+async def test_voice_prompt_does_not_ask_for_a_second_introduction():
+    from app.domain.phrases import agent_instructions
+
+    voice = agent_instructions("Demo", "Плюмо", "voice", {})
+    chat = agent_instructions("Demo", "Плюмо", "whatsapp", {})
+    assert "не представляйся снова" in voice and "В первом ответе разговора представься" not in voice
+    assert "В первом ответе разговора представься" in chat
+
+
+async def test_call_reply_drops_a_second_introduction():
+    from app.domain.phrases import drop_reintroduction
+
+    text = "Здравствуйте! Я Плюмо, ИИ-ассистент компании «Demo Realty». Вы ищете квартиру для себя?"
+    assert drop_reintroduction(text, "Плюмо") == "Вы ищете квартиру для себя?"
+    assert drop_reintroduction("Здравствуйте! Вам для себя?", "Плюмо") == "Вам для себя?"
+    assert drop_reintroduction("Да, есть. Вам для себя?", "Плюмо") == "Да, есть. Вам для себя?"
+
+
+async def test_slow_voice_turn_is_answered_by_the_hedged_request():
+    import asyncio
+    import time
+
+    from app.application.services.agent_service import AgentService
+    from app.domain.models import LLMGeneration, RouteDecision
+
+    class Slow:
+        calls = 0
+
+        async def generate_response(self, context, route):
+            Slow.calls += 1
+            if Slow.calls == 1:
+                await asyncio.sleep(10)
+            return LLMGeneration("ok", [], False, None, 0.9, "m", 1, 1, 0.0)
+
+    started = time.perf_counter()
+    reply = await AgentService._first_reply(Slow(), None, RouteDecision("big", "t", 1.0), timeout=3.0, hedge_after=0.2)
+    assert reply.text == "ok" and Slow.calls == 2 and time.perf_counter() - started < 1.0
+
+    class Fast(Slow):
+        calls = 0
+
+        async def generate_response(self, context, route):
+            Fast.calls += 1
+            return LLMGeneration("fast", [], False, None, 0.9, "m", 1, 1, 0.0)
+
+    assert (await AgentService._first_reply(Fast(), None, RouteDecision("big", "t", 1.0), 3.0, 0.2)).text == "fast"
+    assert Fast.calls == 1
