@@ -4,66 +4,60 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { LanguageSwitch, useLanguage } from "@/lib/i18n";
-
-const copy = {
-  ru: {
-    title: "Рабочее пространство", preview: "Предпросмотр", menu: "Боковая панель",
-    collapse: "Свернуть панель", expand: "Развернуть панель", back: "На сайт",
-    empty: "Здесь будет ваш кабинет", description: "Разделы будем добавлять постепенно.",
-  },
-  en: {
-    title: "Workspace", preview: "Preview", menu: "Sidebar",
-    collapse: "Collapse sidebar", expand: "Expand sidebar", back: "Back to website",
-    empty: "Your workspace starts here", description: "Sections will be added step by step.",
-  },
-};
-
-function PanelIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" />
-  </svg>;
-}
+import { DashboardIcon } from "./dashboard-icon";
+import { Dialogues } from "./dialogues";
+import { Integrations } from "./integrations";
 
 export function DashboardShell() {
   const { locale, t } = useLanguage();
-  const c = copy[locale];
   const [collapsed, setCollapsed] = useState(false);
-  const controlClass = "flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border-0 bg-transparent text-plumo-muted transition-colors hover:bg-plumo-line/60 hover:text-plumo-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue";
+  const [view, setView] = useState<"integrations" | "dialogues">("integrations");
+  const c = locale === "ru" ? {
+    menu: "Навигация", collapse: "Свернуть панель", expand: "Развернуть панель",
+    back: "На сайт", dialogues: "Диалоги", integrations: "Интеграции", workspace: "Рабочее пространство", business: "Пример бизнеса",
+  } : {
+    menu: "Navigation", collapse: "Collapse sidebar", expand: "Expand sidebar",
+    back: "Back to website", dialogues: "Conversations", integrations: "Integrations", workspace: "Workspace", business: "Example business",
+  };
+  const controlClass = "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-plumo-muted transition-colors hover:bg-plumo-line/60 hover:text-plumo-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue";
+  function navigation(mobile = false) {
+    return (["integrations", "dialogues"] as const).map(item => <button key={item} type="button" aria-current={view === item ? "page" : undefined} aria-label={c[item]} title={!mobile && collapsed ? c[item] : undefined} onClick={() => setView(item)} className={`mb-1 flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 px-3 py-2.5 text-left font-[inherit] text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-plumo-blue ${view === item ? "bg-plumo-soft text-plumo-blue" : "bg-transparent text-plumo-muted hover:bg-plumo-line/40"} ${!mobile && collapsed ? "justify-center" : ""}`}><DashboardIcon name={item === "integrations" ? "plug" : "chat"} size={18} />{(mobile || !collapsed) && c[item]}</button>);
+  }
 
-  return <div className="flex min-h-svh bg-plumo-line/25 text-plumo-ink">
+  return <div className="flex h-svh overflow-hidden bg-white text-plumo-ink">
     <a href="#workspace" className="skip-link">{t.skip}</a>
-    <aside aria-label={c.menu} className={`sticky top-0 hidden h-svh shrink-0 flex-col border-0 border-r border-solid border-plumo-line bg-white transition-[width] duration-200 md:flex ${collapsed ? "w-[76px]" : "w-[248px]"}`}>
-      <div className={`flex h-[76px] shrink-0 items-center ${collapsed ? "justify-center" : "justify-between pl-6 pr-3"}`}>
-        {!collapsed && <Link href="/" aria-label={t.home} className="relative block h-8 w-[120px] overflow-hidden rounded-sm">
-          <Image src="/images/plumo-logo.png" alt="" width={120} height={120} priority className="absolute -top-[45px] left-0" />
-        </Link>}
-        <button type="button" className={controlClass} aria-label={collapsed ? c.expand : c.collapse} title={collapsed ? c.expand : c.collapse} aria-expanded={!collapsed} aria-controls="dashboard-sidebar-body" onClick={() => setCollapsed(value => !value)}><PanelIcon /></button>
+    <aside aria-label={c.menu} className={`hidden h-full shrink-0 flex-col border-0 border-r border-solid border-plumo-line bg-plumo-line/20 transition-[width] duration-200 md:flex ${collapsed ? "w-[72px]" : "w-[216px]"}`}>
+      <div className={`flex h-16 shrink-0 items-center ${collapsed ? "justify-center" : "justify-between pl-5 pr-3"}`}>
+        {!collapsed && <Link href="/" aria-label={t.home} className="relative block h-8 w-[110px] overflow-hidden rounded-sm"><Image src="/images/plumo-logo.png" alt="" width={110} height={110} priority className="absolute -top-[41px] left-0 mix-blend-multiply" /></Link>}
+        <button type="button" className={controlClass} aria-label={collapsed ? c.expand : c.collapse} title={collapsed ? c.expand : c.collapse} aria-expanded={!collapsed} aria-controls="dashboard-nav" onClick={() => setCollapsed(value => !value)}><DashboardIcon name="panel" size={18} /></button>
       </div>
-      <div id="dashboard-sidebar-body" className="flex-1" />
-      <div className="border-0 border-t border-solid border-plumo-line p-3">
-        <Link href="/" aria-label={c.back} title={collapsed ? c.back : undefined} className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-plumo-muted transition-colors hover:bg-plumo-soft hover:text-plumo-blue ${collapsed ? "justify-center" : ""}`}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6" /></svg>
-          {!collapsed && c.back}
-        </Link>
+      <div className={`mx-3 mb-6 flex min-h-12 items-center gap-2.5 rounded-xl border border-solid border-plumo-line bg-white ${collapsed ? "justify-center" : "px-3"}`} title={collapsed ? c.business : undefined}>
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-plumo-ink text-[11px] font-semibold text-white">P</span>
+        {!collapsed && <div className="min-w-0"><p className="m-0 truncate text-xs font-medium">Plumo</p><p className="mb-0 mt-0.5 text-[10px] text-plumo-muted">{c.business}</p></div>}
       </div>
+      <nav id="dashboard-nav" className="flex-1 px-3">
+        {navigation()}
+      </nav>
+      <div className="border-0 border-t border-solid border-plumo-line p-3"><Link href="/" aria-label={c.back} title={collapsed ? c.back : undefined} className={`flex min-h-10 items-center gap-3 rounded-lg px-3 text-xs text-plumo-muted transition-colors hover:bg-plumo-soft hover:text-plumo-blue ${collapsed ? "justify-center" : ""}`}><DashboardIcon name="back" size={18} />{!collapsed && c.back}</Link></div>
     </aside>
     <div className="flex min-w-0 flex-1 flex-col">
-      <header className="flex min-h-[76px] flex-wrap items-center justify-between gap-3 border-0 border-b border-solid border-plumo-line bg-white px-5 py-3 sm:px-8">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-0 border-b border-solid border-plumo-line px-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2">
+          <details className="relative z-20 md:hidden" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
+            <summary aria-label={c.menu} className={`${controlClass} list-none [&::-webkit-details-marker]:hidden`}><DashboardIcon name="menu" /></summary>
+            <nav className="absolute left-0 top-12 w-52 rounded-xl border border-solid border-plumo-line bg-white p-2 shadow-lg" onClick={event => event.currentTarget.closest("details")?.removeAttribute("open")}>
+              {navigation(true)}
+              <Link href="/" className="mt-1 flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-plumo-muted hover:bg-plumo-line/30"><DashboardIcon name="back" size={18} />{c.back}</Link>
+            </nav>
+          </details>
           <Link href="/" className="relative block h-8 w-[100px] overflow-hidden md:hidden" aria-label={t.home}><Image src="/images/plumo-logo.png" alt="" width={100} height={100} priority className="absolute -top-[38px] left-0" /></Link>
-          <h1 className="m-0 hidden text-[15px] font-medium sm:block">{c.title}</h1>
-          <span className="rounded-md bg-plumo-soft px-2.5 py-1 text-xs font-medium text-plumo-blue">{c.preview}</span>
+          <span className="hidden text-xs text-plumo-muted md:block">{c.workspace}<span className="mx-3 text-plumo-line">/</span><span className="text-plumo-ink">{c[view]}</span></span>
         </div>
         <LanguageSwitch />
       </header>
-      <main id="workspace" tabIndex={-1} aria-label={c.title} className="flex flex-1 p-3 focus:outline-none sm:p-6">
-        <div className="flex min-h-[calc(100svh-124px)] w-full items-center justify-center rounded-2xl border border-solid border-plumo-line bg-white px-6 py-12">
-          <div className="max-w-sm text-center">
-            <div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-2xl bg-plumo-soft text-plumo-blue"><PanelIcon /></div>
-            <h2 className="m-0 text-xl font-medium tracking-tight">{c.empty}</h2>
-            <p className="mb-0 mt-2 text-sm leading-6 text-plumo-muted">{c.description}</p>
-          </div>
-        </div>
+      <main id="workspace" tabIndex={-1} aria-label={c[view]} className="min-h-0 flex-1 focus:outline-none">
+        <div className={view === "integrations" ? "h-full" : "hidden"}><Integrations onDialogues={() => setView("dialogues")} /></div>
+        <div className={view === "dialogues" ? "h-full" : "hidden"}><Dialogues /></div>
       </main>
     </div>
   </div>;

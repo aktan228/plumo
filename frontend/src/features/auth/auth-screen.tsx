@@ -79,7 +79,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" | "reset" }) {
           <button type="button" onClick={() => setStatus("google")} className="flex min-h-[46px] w-full cursor-pointer items-center justify-center gap-4 rounded-xl border border-solid border-plumo-line bg-white px-4 py-2 font-[inherit] text-[18px] text-plumo-ink shadow-sm transition-colors hover:bg-plumo-line/25"><AuthIcon type="google" />{t.googleLogin}</button>
         </>}
         <p className="mb-0 mt-4 text-center text-[13px] leading-relaxed text-plumo-muted empty:hidden" role="status" aria-live="polite">{status === "google" ? t.googleUnavailable : status === "form" ? (reset ? t.resetUnavailable : t.unavailable) : ""}</p>
-        {!reset && <p className="mb-0 mt-5 text-center text-[13px] text-plumo-muted"><Link href="/dashboard" className="hover:text-plumo-blue hover:underline hover:underline-offset-4">{locale === "en" ? "Preview workspace" : "Предпросмотр кабинета"}</Link></p>}
+        {!reset && <p className="mb-0 mt-5 text-center text-[13px] text-plumo-muted"><Link href="/dashboard" className="hover:text-plumo-blue hover:underline hover:underline-offset-4">{locale === "en" ? "Open workspace" : "Открыть кабинет"}</Link></p>}
       </section>
     </main>
   </div>;
