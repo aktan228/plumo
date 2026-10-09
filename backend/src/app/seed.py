@@ -36,7 +36,7 @@ _CONTACTS = {
     "instagram": "@demo.realty",
     "email": "hello@demorealty.kg",
     # Persona name the agent introduces itself with. One per business.
-    "assistant_name": "Тимур",
+    "assistant_name": "Плюмо",
 }
 # Sales profile: the agent's wording about what is sold comes from here, not from code.
 _PROFILE = {

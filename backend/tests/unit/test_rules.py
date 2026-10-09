@@ -358,3 +358,34 @@ async def test_fixed_lines_are_not_about_apartments():
     assert lines
     for line in lines:
         assert "квартир" not in line.lower() and "батир" not in line.lower(), line
+
+
+async def test_first_chat_reply_always_says_it_is_an_ai():
+    from app.domain.phrases import discloses_ai, with_ai_disclosure
+
+    text = with_ai_disclosure("Здравствуйте! Да, есть. Для чего выбираете?", "ru", "Плюмо", "Мебель")
+    assert text.startswith("Здравствуйте! Я Плюмо, ИИ-ассистент компании «Мебель».")
+    assert text.count("Здравствуйте") == 1
+    assert with_ai_disclosure("Я ИИ-ассистент, помогу.", "ru", "Плюмо", "X") == "Я ИИ-ассистент, помогу."
+    assert "ИИ-жардамчы" in with_ai_disclosure("Ооба, бар.", "ky", "Плюмо", "X")
+    assert not discloses_ai("Иди сюда, никаких проблем")
+
+
+async def test_long_voice_reply_keeps_the_answer_and_the_question():
+    from app.domain.phrases import fit_for_voice
+
+    long = "Да, есть. Диван Осло за 45000 сом. Он прямой. Ткань рогожка. Ещё есть угловой. Вам какой ближе?"
+    assert fit_for_voice(long) == "Да, есть. Диван Осло за 45000 сом. Вам какой ближе?"
+    assert fit_for_voice("Да, есть. Вам для чего?") == "Да, есть. Вам для чего?"
+    assert fit_for_voice("Раз. Два. Три. Четыре.") == "Раз. Два. Три."
+
+
+async def test_kyrgyz_place_name_with_ending_finds_the_item():
+    from app.application.services.knowledge_retriever import SimpleKnowledgeRetriever
+
+    jal = _item("4-комнатная квартира, 125 м², цена 165000 USD.", title="Квартира на Джале")
+    other = _item("Студия, 28 м², цена 39000 USD.", title="Студия на Ахунбаева")
+    assert SimpleKnowledgeRetriever.score("Джалдагы батирдин баасы канча?", jal) >= 1
+    assert SimpleKnowledgeRetriever.score("Джалдагы батирдин баасы канча?", jal) > SimpleKnowledgeRetriever.score(
+        "Джалдагы батирдин баасы канча?", other
+    )

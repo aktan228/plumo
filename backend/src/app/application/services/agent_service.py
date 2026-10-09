@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
-from app.application.services.context_builder import ContextBuilder
+from app.application.services.context_builder import ContextBuilder, assistant_name
 from app.application.services.customer_resolver import CustomerResolver
 from app.application.services.grounded_reply import is_unusable_reply, is_weasel_reply, quote_knowledge
 from app.application.services.handoff_service import evaluate_handoff
@@ -41,7 +41,7 @@ from app.domain.models import (
     UsageLog,
     utcnow,
 )
-from app.domain.phrases import fallback_phrase, human_phrase, unknown_phrase
+from app.domain.phrases import fallback_phrase, fit_for_voice, human_phrase, unknown_phrase, with_ai_disclosure
 from app.domain.scheduling import has_slot
 from app.domain.ports import (
     ActionExecutor,
@@ -244,6 +244,12 @@ class AgentService:
                 response_text = fallback_phrase(intent, language, seed)
                 steps.append(f"fallback:{intent}")
 
+        if message.channel == Channel.voice:
+            shorter = fit_for_voice(response_text)
+            if shorter != response_text:
+                response_text = shorter
+                steps.append("voice_trimmed")
+
         # A meeting row needs a slot the customer actually named. "Запишите нас"
         # alone becomes a question about the day plus a handoff, not 15:00 tomorrow.
         actions = [
@@ -329,6 +335,16 @@ class AgentService:
         draft.important_facts = write_unclear_count(draft.important_facts, unclear)
         await self.memory.write_summary(customer, draft, language)
         await self.conversations.touch_summary(conversation.id, draft.summary)
+
+        if message.channel != Channel.voice and not any(
+            item.role == MessageRole.assistant and item.conversation_id == conversation.id for item in history
+        ):
+            # A call opens with the platform greeting that already says "ИИ-ассистент".
+            # A chat has no such greeting, so the first reply carries it.
+            disclosed = with_ai_disclosure(response_text, language, assistant_name(business), business.name)
+            if disclosed != response_text:
+                response_text = disclosed
+                steps.append("ai_disclosure")
 
         assistant = Message(
             id=uuid4(),
@@ -696,7 +712,7 @@ FIXED_REPLY_REASONS = frozenset({"human_request", "greeting", "farewell"})
 _SLOT_QUESTIONS = ("какой день", "в какое время", "во сколько", "когда вам удобно", "когда удобно", "кайсы күнү", "саат канчада")
 
 
-_FOLLOWUP = ("уточню", "уточнит", "узнаю у менеджера", "спрошу у менеджера", "тактап", "менеджерден")
+_FOLLOWUP = ("уточню", "узнаю у менеджера", "спрошу у менеджера", "менеджерден тактап")
 
 
 def _promises_followup(text: str) -> bool:

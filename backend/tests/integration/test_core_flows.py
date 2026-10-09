@@ -67,7 +67,7 @@ async def test_chat_then_phone_call_is_one_customer(client, monkeypatch):
     )
     assert greeting.status_code == 200, greeting.text
     first_message = greeting.json()["conversation_config_override"]["agent"]["first_message"]
-    assert "Тимур" in first_message
+    assert "Плюмо" in first_message
     assert "записывается" in first_message
     assert "85000" in first_message
 

@@ -60,11 +60,11 @@ def agent_payload(
     """Agent config. The fallback first message is used only if the initiation webhook fails."""
 
     urls = endpoints(public_url)
-    tts: dict[str, Any] = {}
+    # eleven_v4_turbo speaks Russian and Kyrgyz. Plumo writes digits (the validator
+    # checks them), so ElevenLabs normalises "85 000" into words, not the prompt.
+    tts: dict[str, Any] = {"model_id": tts_model or "eleven_v4_turbo", "text_normalisation_type": "elevenlabs"}
     if voice_id:
         tts["voice_id"] = voice_id
-    if tts_model:
-        tts["model_id"] = tts_model
     conversation: dict[str, Any] = {
         "agent": {
             "first_message": call_greeting(business_name, "ru", None, DEFAULT_ASSISTANT_NAME),
@@ -80,8 +80,7 @@ def agent_payload(
             },
         },
     }
-    if tts:
-        conversation["tts"] = tts
+    conversation["tts"] = tts
     # A normal reply takes 1.5-2.5 s, so the filler must wait longer or it fires on
     # every turn (it did at 1.5 s). It covers only a slow model or a provider retry.
     conversation["turn"] = {"soft_timeout_config": {"timeout_seconds": 3.5, "message": "Секундочку…"}}

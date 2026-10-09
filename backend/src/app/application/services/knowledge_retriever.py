@@ -111,8 +111,11 @@ def _score(query: _PreparedQuery, item) -> float:
             score += 2
         elif token in hay:
             score += 1
-        elif len(token) >= 6 and token[:4] in hay:
+        elif len(token) >= 6 and token[:4] in title:
             # Kyrgyz and Russian endings: "Джалдагы" → "Джал", "Филармонияга" → "Филармония".
+            # A stem that names an item counts like a word; 0.75 kept it under the cut-off.
+            score += 1.5
+        elif len(token) >= 6 and token[:4] in hay:
             score += 0.75
     if query.rent and "аренд" in hay and "продан" not in hay:
         score += 4

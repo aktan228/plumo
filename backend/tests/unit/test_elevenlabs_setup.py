@@ -27,7 +27,8 @@ def test_agent_points_every_callback_at_plumo() -> None:
         "first_message": True,
         "language": True,
     }
-    assert "tts" not in payload["conversation_config"]
+    # Pinned TTS model that speaks Kyrgyz; digits are read out by the platform, not the prompt.
+    assert payload["conversation_config"]["tts"] == {"model_id": "eleven_v4_turbo", "text_normalisation_type": "elevenlabs"}
     assert endpoints("https://h")["post_call"] == "https://h/api/v1/telephony/elevenlabs/post-call"
 
 

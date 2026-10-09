@@ -9,9 +9,10 @@ variants so one dialog does not repeat the same sentence.
 Kyrgyz lines must be proofread by a native speaker before a pilot.
 """
 
+import re
 import zlib
 
-DEFAULT_ASSISTANT_NAME = "Тимур"
+DEFAULT_ASSISTANT_NAME = "Плюмо"
 
 # Fallback for a missing fact. Every Russian variant keeps "уточню":
 # ResponseValidator treats such a line as a refusal, not as a promise.
@@ -115,7 +116,7 @@ def agent_instructions(
 Ты {assistant_name}, менеджер по продажам компании «{business_name}». Говоришь о себе в мужском роде.
 Что мы предлагаем: {offering}.
 Тон: тёплый, спокойный, уверенный, по делу. Без заискивания и без давления.
-Ты ИИ-ассистент. Спросят «вы бот?» — честно скажи да и предложи живого менеджера.
+Ты ИИ-ассистент, и человек должен это знать (это требование закона). В первом ответе разговора представься: «Здравствуйте! Я {assistant_name}, ИИ-ассистент компании «{business_name}».» Никогда не выдавай себя за человека. Спросят «вы бот?» — честно скажи да и предложи живого менеджера.
 
 # Цель
 Понять, что нужно человеку, подобрать 1–2 подходящих варианта из данных и довести до следующего шага: {meeting}. Скидки, торг, оплату и сделку ведёт живой менеджер.
@@ -259,6 +260,45 @@ def call_greeting(
     opening = f"Здравствуйте! Это {assistant_name}, ИИ-ассистент компании «{business_name}». Разговор записывается."
     follow = f" В прошлый раз вы спрашивали: «{recall}» — продолжим?" if recall else " Чем могу помочь?"
     return opening + follow
+
+
+_AI_MENTION = re.compile(r"(?<![а-яa-z])(ии|ai)(?![а-яa-z])|искусствен|жасалма интеллект", re.IGNORECASE)
+_LEADING_GREETING = re.compile(r"^\s*(здравствуйте|добрый (день|вечер|утро)|привет|саламатсызбы|салам)[!,.\s]*", re.IGNORECASE)
+
+
+_SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
+
+
+def fit_for_voice(text: str, limit: int = 3) -> str:
+    """A caller listens: at most `limit` sentences, and the closing question survives.
+
+    The model is told 1-2 sentences but sometimes writes five. Cutting keeps the
+    first sentences (the answer) and the last question (the next step).
+    """
+
+    sentences = [part.strip() for part in _SENTENCE_END.split(" ".join((text or "").split())) if part.strip()]
+    if len(sentences) <= limit:
+        return " ".join(sentences) if sentences else (text or "")
+    question = sentences[-1] if sentences[-1].endswith("?") else None
+    head = sentences[: limit - 1 if question else limit]
+    return " ".join(head + ([question] if question else []))
+
+
+def discloses_ai(text: str) -> bool:
+    return _AI_MENTION.search(text or "") is not None
+
+
+def with_ai_disclosure(text: str, language: str, assistant_name: str, business_name: str) -> str:
+    """First reply of a chat must say the customer talks to an AI (law), whatever the model wrote."""
+
+    if discloses_ai(text):
+        return text
+    body = _LEADING_GREETING.sub("", text, count=1).strip()
+    if language == "ky":
+        intro = f"Саламатсызбы! Мен {assistant_name}, «{business_name}» компаниясынын ИИ-жардамчысымын."
+    else:
+        intro = f"Здравствуйте! Я {assistant_name}, ИИ-ассистент компании «{business_name}»."
+    return f"{intro} {body}".strip()
 
 
 def listening_phrase(language: str) -> str:

@@ -146,7 +146,7 @@ class _Agent:
         self.seen = []
 
     async def resolve_business(self, explicit=None, called=None):
-        return SimpleNamespace(id=_BUSINESS_ID, name="Demo Realty", contacts={"assistant_name": "Тимур"})
+        return SimpleNamespace(id=_BUSINESS_ID, name="Demo Realty", contacts={"assistant_name": "Плюмо"})
 
     async def process_message(self, message):
         self.seen.append(message)
@@ -185,7 +185,7 @@ async def test_greeting_discloses_ai_and_recording_and_recalls_last_question() -
     service, _agent, calls = _service(known, history)
     greeting = await service.start(CallTurn(text="", caller="+996555111222", call_id="conv_1"))
     assert "ИИ-ассистент" in greeting.text
-    assert "Тимур" in greeting.text
+    assert "Плюмо" in greeting.text
     assert "записывается" in greeting.text
     assert "85000" in greeting.text
     assert greeting.customer_id == known.id
