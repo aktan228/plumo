@@ -785,6 +785,7 @@ def _business(row: BusinessRow) -> Business:
         working_hours=row.working_hours,
         contacts=dict(row.contacts or {}),
         rules=row.rules,
+        profile=dict(row.profile or {}),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -798,6 +799,7 @@ def _business_row(business: Business) -> BusinessRow:
         working_hours=business.working_hours,
         contacts=dict(business.contacts),
         rules=business.rules,
+        profile=dict(business.profile or {}),
         created_at=business.created_at,
         updated_at=business.updated_at,
     )

@@ -38,6 +38,12 @@ _CONTACTS = {
     # Persona name the agent introduces itself with. One per business.
     "assistant_name": "Тимур",
 }
+# Sales profile: the agent's wording about what is sold comes from here, not from code.
+_PROFILE = {
+    "offering": "квартиры в Бишкеке: продажа и аренда",
+    "meeting": "просмотр квартиры",
+    "qualify": ["для себя или под инвестицию, на сколько человек", "бюджет", "район", "сколько комнат"],
+}
 _HOURS = "пн-сб 09:00-18:00, вс выходной"
 _RULES = (
     "Не выдумывать цены, наличие, сроки и условия оплаты. "
@@ -126,6 +132,7 @@ async def seed(session) -> Business:
             working_hours=_HOURS,
             contacts=dict(_CONTACTS),
             rules=_RULES,
+            profile=dict(_PROFILE),
             created_at=now,
             updated_at=now,
         )
@@ -137,6 +144,7 @@ async def seed(session) -> Business:
             row.working_hours = _HOURS
             row.contacts = dict(_CONTACTS)
             row.rules = _RULES
+            row.profile = dict(_PROFILE)
             row.updated_at = now
             await session.flush()
             business = await businesses.get(business.id) or business

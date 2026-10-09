@@ -32,6 +32,7 @@ class ContextBuilder:
                 business.name,
                 assistant_name(business),
                 channel,
+                business.profile,
             ),
             business=business,
             knowledge=knowledge,

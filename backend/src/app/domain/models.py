@@ -20,6 +20,8 @@ class Business:
     rules: str
     created_at: datetime
     updated_at: datetime
+    # Sales profile: offering, meeting, qualify. See phrases.agent_instructions.
+    profile: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

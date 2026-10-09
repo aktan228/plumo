@@ -8,7 +8,9 @@ from app.domain.ports import KnowledgeStore
 from app.domain.text_signals import compact_numbers, normalize_text
 
 _TOKEN = re.compile(r"[a-zа-яңөү0-9]+")
-_PRICE = re.compile(r"(\d[\d\s]*\d|\d)\s*usd")
+_PRICE = re.compile(r"(\d[\d\s]*\d|\d)\s*(?:usd|\$|сом|kgs|руб|₽|eur|€|тг|тенге)")
+# Knowledge categories that are things to sell (catalog rows), not FAQ or policy.
+OFFER_CATEGORIES = frozenset({"property", "product", "service", "offer", "товар", "услуга"})
 # Renting, not buying: "снять", "аренда", Kyrgyz "ижара". Rentals go up instead of down.
 _RENT = ("снять", "сниму", "снимать", "сним", "аренд", "ижара", "квартирант")
 # "дешевле" means "the rest of the catalog by price", not words in a listing.
@@ -20,6 +22,9 @@ _STOPWORDS = frozenset(
 _CATALOG = (
     "квартир",
     "прода",
+    "услуг",
+    "цен",
+    "модел",
     "объект",
     "жиль",
     "апарта",
@@ -111,7 +116,7 @@ def _score(query: _PreparedQuery, item) -> float:
             score += 0.75
     if query.rent and "аренд" in hay and "продан" not in hay:
         score += 4
-    if query.catalog and (item.category == "property" or "квартир" in hay):
+    if query.catalog and (item.category in OFFER_CATEGORIES or "квартир" in hay):
         score += 2
         if "продан" in hay:
             score -= 2
@@ -122,7 +127,7 @@ def _score(query: _PreparedQuery, item) -> float:
 
 def _offer(item) -> bool:
     hay = normalize_text(f"{item.title} {item.content}")
-    return item.category == "property" and "продан" not in hay and "не предлагать" not in hay and "аренд" not in hay
+    return item.category in OFFER_CATEGORIES and "продан" not in hay and "не предлагать" not in hay and "аренд" not in hay
 
 
 def _price(item) -> int | None:

@@ -33,6 +33,7 @@ from app.domain.models import (
     InboundMessage,
     InteractionLog,
     KnowledgeSource,
+    HandoffDecision,
     LLMGeneration,
     Message,
     RouteDecision,
@@ -289,6 +290,13 @@ class AgentService:
             unclear = 0
 
         decision = evaluate_handoff(signals, assessment, generation, validation, unclear, model_failed=model_failed)
+        if not decision.required and response_text == generation.text and (
+            generation.handoff_required or _promises_followup(response_text)
+        ):
+            # The model said "уточню у менеджера" for a fact the lexicon did not
+            # catch (guarantee, delivery terms...). The promise needs a real task,
+            # whether or not the model remembered to set its handoff flag.
+            decision = HandoffDecision(required=True, reason="no_knowledge", priority="normal")
         if decision.required and decision.reason:
             actions.append(
                 Action(
@@ -454,7 +462,9 @@ class AgentService:
         deadline: float,
     ) -> tuple[LLMGeneration, RouteDecision]:
         if route.reason == "human_request" or (
-            route.reason in FIXED_REPLY_REASONS and getattr(context, "channel", None) == Channel.voice
+            route.reason in FIXED_REPLY_REASONS
+            and getattr(context, "channel", None) == Channel.voice
+            and len(context.current_message.split()) <= 2
         ):
             # The reply is a fixed line chosen below; a 3-5 s model call would only be thrown away.
             return LLMGeneration("", [], False, None, 1.0, "rules:fixed_reply", 0, 0, 0.0), route
@@ -678,11 +688,20 @@ def _paused_response(customer_id: UUID, conversation_id: UUID, language: str, co
 
 
 # Routes whose reply is always a fixed phrase (human_phrase / greeting / farewell),
-# so the model is skipped. A greeting that carries a question is routed elsewhere.
+# so the model is skipped. Only for a bare "привет" / "пока": "здравствуйте, ищу
+# диван" carries a need the fixed line would ignore.
 FIXED_REPLY_REASONS = frozenset({"human_request", "greeting", "farewell"})
 
 
 _SLOT_QUESTIONS = ("какой день", "в какое время", "во сколько", "когда вам удобно", "когда удобно", "кайсы күнү", "саат канчада")
+
+
+_FOLLOWUP = ("уточню", "уточнит", "узнаю у менеджера", "спрошу у менеджера", "тактап", "менеджерден")
+
+
+def _promises_followup(text: str) -> bool:
+    lowered = text.lower()
+    return any(marker in lowered for marker in _FOLLOWUP)
 
 
 def _asked_for_slot(history: list[Message]) -> bool:

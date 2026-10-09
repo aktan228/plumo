@@ -52,7 +52,7 @@ from app.domain.models import (
 )
 from app.domain.spoken_numbers import spoken_to_digits
 from app.domain.text_signals import detect_language
-from app.seed import _BUSINESS_DESCRIPTION, _CONTACTS, _HOURS, _RULES, DEMO_BUSINESS_ID, KNOWLEDGE
+from app.seed import _BUSINESS_DESCRIPTION, _CONTACTS, _HOURS, _PROFILE, _RULES, DEMO_BUSINESS_ID, KNOWLEDGE
 
 DEFAULT_MODELS = (
     "gemini=openrouter:google/gemini-3.1-flash-lite",
@@ -79,7 +79,9 @@ class _Catalog:
 
 def demo_business() -> tuple[Business, list[KnowledgeItem]]:
     now = datetime(2026, 10, 9, tzinfo=UTC)
-    business = Business(DEMO_BUSINESS_ID, "Demo Realty", _BUSINESS_DESCRIPTION, _HOURS, dict(_CONTACTS), _RULES, now, now)
+    business = Business(
+        DEMO_BUSINESS_ID, "Demo Realty", _BUSINESS_DESCRIPTION, _HOURS, dict(_CONTACTS), _RULES, now, now, dict(_PROFILE)
+    )
     items = [
         KnowledgeItem(item_id, business.id, category, title, content, {}, True, now, now)
         for item_id, category, title, content in KNOWLEDGE
@@ -274,9 +276,9 @@ def judge_catalog() -> str:
     lines = [f"- {item.title} [{item.category}]: {item.content}" for item in items]
     contacts = {key: value for key, value in business.contacts.items() if key != "assistant_name"}
     return (
-        "# Данные агентства\n"
+        "# Данные компании\n"
         f"{business.description}\nЧасы: {business.working_hours}\nКонтакты: {json.dumps(contacts, ensure_ascii=False)}\n"
-        f"Правила: {business.rules}\nОбъекты и факты:\n" + "\n".join(lines)
+        f"Правила: {business.rules}\nВарианты и факты:\n" + "\n".join(lines)
     )
 
 

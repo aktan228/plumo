@@ -329,3 +329,32 @@ async def test_saving_a_phone_is_not_a_booking():
     context = _context("0999555999555")
     assert ResponseValidator().validate("Спасибо, записал ваш номер, менеджер свяжется.", context).safe is True
     assert ResponseValidator().validate("Записал вас на субботу.", context).safe is False
+
+
+async def test_prompt_comes_from_the_business_profile_not_from_real_estate():
+    from app.domain.phrases import agent_instructions
+
+    prompt = agent_instructions(
+        "Мебель",
+        "Тимур",
+        "voice",
+        {"offering": "диваны и кресла", "meeting": "визит в салон", "qualify": ["для какой комнаты", "бюджет"]},
+    )
+    assert "диваны и кресла" in prompt and "визит в салон" in prompt and "для какой комнаты" in prompt
+    for word in ("квартир", "просмотр", "инвестиц", "район", "комнат"):
+        assert word not in agent_instructions("X", "Тимур", "whatsapp", {}).lower(), word
+
+
+async def test_fixed_lines_are_not_about_apartments():
+    from app.domain import phrases
+
+    lines = [
+        line
+        for name in dir(phrases)
+        if name.endswith(("_RU", "_KY"))
+        for line in getattr(phrases, name)
+        if isinstance(line, str)
+    ]
+    assert lines
+    for line in lines:
+        assert "квартир" not in line.lower() and "батир" not in line.lower(), line

@@ -110,7 +110,22 @@ alembic downgrade base
 
 Alembic читает `DATABASE_URL` из настроек приложения. В контейнере миграция применяется при старте API.
 
-Таблицы раздельные: `businesses`, `knowledge_items`, `customers`, `customer_channels`, `conversations`, `messages`, `customer_summaries`, `handoff_requests`, `meetings`, `interaction_logs`, `ai_usage_logs`. JSONB только у metadata, контактов, actions и снимка последних сообщений.
+Таблицы раздельные: `businesses`, `knowledge_items`, `customers`, `customer_channels`, `conversations`, `messages`, `customer_summaries`, `handoff_requests`, `meetings`, `interaction_logs`, `ai_usage_logs`. JSONB только у metadata, контактов, профиля бизнеса, actions и снимка последних сообщений.
+
+## Любой бизнес, не только недвижимость
+
+Агент не привязан к отрасли: что продаём и о чём спрашиваем, берётся из БД, а не из кода.
+
+| Где | Что | Пример |
+| --- | --- | --- |
+| `businesses.name`, `description`, `working_hours`, `rules` | карточка компании | «Салон мягкой мебели в Бишкеке» |
+| `businesses.contacts.assistant_name` | имя агента | `Тимур` (по умолчанию) |
+| `businesses.profile.offering` | что предлагаем, коротко | `диваны и кресла` |
+| `businesses.profile.meeting` | следующий шаг продажи | `визит в салон`, `просмотр квартиры`, `замер` |
+| `businesses.profile.qualify` | вопросы для выяснения потребности, по порядку | `["для какой комнаты", "сколько человек", "бюджет"]` |
+| `knowledge_items` | товары, услуги, FAQ. Товары — категории `product`, `service`, `property` или `offer`, цена в тексте (`45000 сом`, `85000 USD`) | |
+
+Пустой `profile` — агент работает с общими формулировками («товары и услуги», «встреча», «что нужно, бюджет, когда»). Агент мужского рода; готовые фразы (`src/app/domain/phrases.py`) общие для всех отраслей. Демо-данные Demo Realty — только пример.
 
 ## Seed
 

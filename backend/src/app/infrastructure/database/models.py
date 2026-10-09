@@ -21,6 +21,7 @@ class BusinessRow(Base):
     working_hours: Mapped[str] = mapped_column(String(200), default="")
     contacts: Mapped[dict] = mapped_column(JSONB, default=dict)
     rules: Mapped[str] = mapped_column(Text, default="")
+    profile: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

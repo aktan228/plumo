@@ -60,7 +60,7 @@ async def test_request_shape_and_parsed_reply() -> None:
     assert seen["output_config"]["format"]["type"] == "json_schema"
     assert "temperature" not in seen
     assert seen["system"][0]["cache_control"] == {"type": "ephemeral"}
-    assert "Объекты и факты" in seen["system"][1]["text"]
+    assert "Варианты и факты" in seen["system"][1]["text"]
     assert seen["messages"] == [{"role": "user", "content": "Ещё продаётся?"}]
 
     assert generation.text.startswith("Да, ещё продаётся")
