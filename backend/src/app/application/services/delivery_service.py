@@ -181,7 +181,7 @@ async def _mark_connection(session, connection_id, error: ChannelError) -> None:
     connection.status = ConnectionStatus.action_required
     connection.last_check_ok = False
     connection.last_error_code = error.code
-    connection.last_error_message = error.message
+    connection.last_error_message = error.describe()
     connection.last_error_at = now
     connection.version += 1
     await connections.save(connection)

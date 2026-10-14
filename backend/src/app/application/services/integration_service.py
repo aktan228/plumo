@@ -428,21 +428,8 @@ def _ok(connection: ChannelConnection) -> None:
     connection.version += 1
 
 
-_HUMAN = {
-    "token_invalid": "Токен недействителен или отозван. Замените его на сервере и подключите снова.",
-    "credential_missing": "Серверная конфигурация больше недоступна этому бизнесу.",
-    "credential_empty": "В серверной конфигурации нет токена.",
-    "missing_permission": "У приложения нет нужных прав или роли для этого аккаунта.",
-    "subscription_failed": "Meta не подтвердила подписку на сообщения.",
-}
-
-
 def _human(exc: ChannelError) -> str:
-    if exc.code in _HUMAN:
-        return _HUMAN[exc.code]
-    if exc.kind in ("transient", "ambiguous", "rate_limited"):
-        return "Сервис канала временно недоступен. Повторите проверку позже."
-    return exc.message
+    return exc.describe()
 
 
 def _app_error(exc: ChannelError):

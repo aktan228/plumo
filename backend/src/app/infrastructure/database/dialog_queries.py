@@ -131,7 +131,7 @@ class DialogQueries:
                 LEFT JOIN conversation_reads r ON r.conversation_id = c.id AND r.operator_id = :operator_id
                 LEFT JOIN LATERAL (
                     SELECT m.text, m.role, m.timestamp, m.seq FROM messages m
-                    WHERE m.conversation_id = c.id
+                    WHERE m.conversation_id = c.id AND m.role <> 'system'
                     ORDER BY m.timestamp DESC, m.seq DESC
                     LIMIT 1
                 ) lm ON true
@@ -172,7 +172,7 @@ class DialogQueries:
             LEFT JOIN conversation_reads r ON r.conversation_id = c.id AND r.operator_id = :operator_id
             LEFT JOIN LATERAL (
                 SELECT m.text, m.role, m.timestamp, m.seq FROM messages m
-                WHERE m.conversation_id = c.id ORDER BY m.timestamp DESC, m.seq DESC LIMIT 1
+                WHERE m.conversation_id = c.id AND m.role <> 'system' ORDER BY m.timestamp DESC, m.seq DESC LIMIT 1
             ) lm ON true
             WHERE c.id = :conversation_id AND c.business_id = :business_id
             """

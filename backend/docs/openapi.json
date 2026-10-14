@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Plumo AI Core",
-    "summary": "Ядро AI-менеджера. Каналы и модели подключаются адаптерами.",
-    "description": "Нормализованный контракт для WhatsApp, Telegram, Instagram и телефона. Текст — через OpenRouter или mock. Речь и каналы пока mock. POST /api/v1/messages принимает InboundMessage и возвращает AgentResponse.",
-    "version": "0.1.0"
+    "summary": "Ядро AI-менеджера, каналы Telegram/Instagram и API рабочего кабинета.",
+    "description": "Каналы: Telegram-бот и Instagram Direct через /webhooks, ответы отправляет worker. Кабинет: вход оператора (/auth), интеграции, диалоги — только данные его бизнеса. Сервисные вызовы несут X-API-Key; маршруты кабинета — ещё и сессию оператора (Bearer). Ошибки: {error, code, message, correlation_id}.",
+    "version": "0.2.0"
   },
   "paths": {
     "/health": {
@@ -77,7 +77,7 @@
         "tags": [
           "messages"
         ],
-        "summary": "Принять сырое событие канала и нормализовать его",
+        "summary": "Mock-адаптеры каналов: только APP_ENV=development",
         "operationId": "post_channel_event_api_v1_channels__channel__events_post",
         "parameters": [
           {
@@ -119,6 +119,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Выключено на стенде: реальные каналы идут через /webhooks"
           },
           "503": {
             "description": "Адаптер канала не зарегистрирован"
@@ -211,6 +214,88 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Вход оператора (только для сервера Next.js)",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Неверный email или пароль"
+          },
+          "429": {
+            "description": "Слишком много попыток"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Завершить сессию",
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Текущий оператор и его бизнес",
+        "operationId": "me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
                 }
               }
             }
@@ -316,103 +401,6 @@
         }
       }
     },
-    "/api/v1/conversations/{conversation_id}": {
-      "get": {
-        "tags": [
-          "customers"
-        ],
-        "summary": "Один диалог",
-        "operationId": "get_conversation_api_v1_conversations__conversation_id__get",
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Conversation Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationDetailOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/conversations/{conversation_id}/messages": {
-      "post": {
-        "tags": [
-          "customers"
-        ],
-        "summary": "Сообщение менеджера в диалог (агент молчит, пока передача ACCEPTED)",
-        "description": "Store what the manager sent, so history and the next agent turn see it.\n\nDelivery to WhatsApp/Telegram stays with the channel adapter: it sends\n`text` to the customer and calls this endpoint to record it.",
-        "operationId": "post_manager_message_api_v1_conversations__conversation_id__messages_post",
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Conversation Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ManagerMessageIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MessageOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/handoffs": {
       "get": {
         "tags": [
@@ -483,7 +471,7 @@
         "tags": [
           "operations"
         ],
-        "summary": "Взять диалог",
+        "summary": "Взять диалог по передаче",
         "operationId": "accept_handoff_api_v1_handoffs__handoff_id__accept_post",
         "parameters": [
           {
@@ -703,7 +691,7 @@
         "tags": [
           "operations"
         ],
-        "summary": "Сводка по диалогам (по одному бизнесу, если указан business_id)",
+        "summary": "Сводка по диалогам бизнеса",
         "operationId": "get_metrics_api_v1_metrics_get",
         "parameters": [
           {
@@ -741,6 +729,902 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations": {
+      "get": {
+        "tags": [
+          "dialogs"
+        ],
+        "summary": "Диалоги бизнеса: поиск, фильтры, курсор",
+        "operationId": "list_dialogs_api_v1_conversations_get",
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ai | waiting | human",
+              "title": "Mode"
+            },
+            "description": "ai | waiting | human"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Имя, контакт, телефон или текст сообщений",
+              "title": "Q"
+            },
+            "description": "Имя, контакт, телефон или текст сообщений"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DialogListOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation_id}": {
+      "get": {
+        "tags": [
+          "dialogs"
+        ],
+        "summary": "Диалог: история, карточка, режим",
+        "operationId": "get_dialog_api_v1_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DialogDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/messages": {
+      "get": {
+        "tags": [
+          "dialogs"
+        ],
+        "summary": "Более ранние сообщения диалога",
+        "operationId": "older_messages_api_v1_conversations__conversation_id__messages_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 300,
+              "title": "Before"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DialogMessagesOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dialogs"
+        ],
+        "summary": "Ответ менеджера: одна операция отправки в канал диалога",
+        "operationId": "send_manager_message_api_v1_conversations__conversation_id__messages_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagerSendIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerSendOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mode_conflict — диалог ведёт агент; idempotency_key_reused"
+          },
+          "422": {
+            "description": "text_too_long, window_closed, channel_not_connected, channel_disconnected"
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/takeover": {
+      "post": {
+        "tags": [
+          "dialogs"
+        ],
+        "summary": "Взять диалог: агент замолкает, его неотправленные ответы отменяются",
+        "operationId": "takeover_api_v1_conversations__conversation_id__takeover_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DialogStateOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/resume": {
+      "post": {
+        "tags": [
+          "dialogs"
+        ],
+        "summary": "Вернуть агенту: передача закрыта, неотправленные сообщения менеджера отменяются",
+        "operationId": "resume_api_v1_conversations__conversation_id__resume_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DialogStateOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/read": {
+      "post": {
+        "tags": [
+          "dialogs"
+        ],
+        "summary": "Оператор прочитал до seq",
+        "operationId": "mark_read_api_v1_conversations__conversation_id__read_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/outbound-messages/{outbound_id}": {
+      "get": {
+        "tags": [
+          "dialogs"
+        ],
+        "summary": "Статус отправки",
+        "operationId": "get_delivery_api_v1_outbound_messages__outbound_id__get",
+        "parameters": [
+          {
+            "name": "outbound_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Outbound Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/outbound-messages/{outbound_id}/resolve": {
+      "post": {
+        "tags": [
+          "dialogs"
+        ],
+        "summary": "Решение по неуспешной или неизвестной отправке",
+        "operationId": "resolve_delivery_api_v1_outbound_messages__outbound_id__resolve_post",
+        "parameters": [
+          {
+            "name": "outbound_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Outbound Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveDeliveryIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/integrations": {
+      "get": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Telegram и Instagram этого бизнеса",
+        "operationId": "list_integrations_api_v1_integrations_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationsOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/telegram/connect": {
+      "post": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Проверить бота (getMe) и установить webhook",
+        "operationId": "connect_telegram_api_v1_integrations_telegram_connect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Нет такой интеграции или серверной конфигурации у этого бизнеса"
+          },
+          "409": {
+            "description": "Конфликт: аккаунт у другого бизнеса, уже подключён другой, чужой webhook, версия"
+          },
+          "422": {
+            "description": "Токен недействителен или не хватает прав (invalid_credential, missing_permission)"
+          },
+          "503": {
+            "description": "Не настроен сервер (not_configured) или канал временно недоступен"
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/instagram/connect": {
+      "post": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Проверить аккаунт Instagram и подписку на сообщения",
+        "operationId": "connect_instagram_api_v1_integrations_instagram_connect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Нет такой интеграции или серверной конфигурации у этого бизнеса"
+          },
+          "409": {
+            "description": "Конфликт: аккаунт у другого бизнеса, уже подключён другой, чужой webhook, версия"
+          },
+          "422": {
+            "description": "Токен недействителен или не хватает прав (invalid_credential, missing_permission)"
+          },
+          "503": {
+            "description": "Не настроен сервер (not_configured) или канал временно недоступен"
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/{connection_id}/check": {
+      "post": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Повторная проверка",
+        "operationId": "check_integration_api_v1_integrations__connection_id__check_post",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Нет такой интеграции или серверной конфигурации у этого бизнеса"
+          },
+          "409": {
+            "description": "Конфликт: аккаунт у другого бизнеса, уже подключён другой, чужой webhook, версия"
+          },
+          "422": {
+            "description": "Токен недействителен или не хватает прав (invalid_credential, missing_permission)"
+          },
+          "503": {
+            "description": "Не настроен сервер (not_configured) или канал временно недоступен"
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/{connection_id}": {
+      "patch": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Включить или выключить ответы агента",
+        "operationId": "patch_integration_api_v1_integrations__connection_id__patch",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntegrationPatchIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/{connection_id}/disconnect": {
+      "post": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Отключить канал (история сохраняется)",
+        "operationId": "disconnect_integration_api_v1_integrations__connection_id__disconnect_post",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/telegram/{connection_id}": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Telegram Bot API webhook (X-Telegram-Bot-Api-Secret-Token)",
+        "operationId": "telegram_webhook_api_v1_webhooks_telegram__connection_id__post",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Telegram Webhook Api V1 Webhooks Telegram  Connection Id  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/instagram": {
+      "get": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Meta: проверка callback URL (hub.challenge)",
+        "operationId": "instagram_verify_api_v1_webhooks_instagram_get",
+        "parameters": [
+          {
+            "name": "hub.mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Hub.Mode"
+            }
+          },
+          {
+            "name": "hub.verify_token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Hub.Verify Token"
+            }
+          },
+          {
+            "name": "hub.challenge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "default": "",
+              "title": "Hub.Challenge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Meta: события Instagram (X-Hub-Signature-256)",
+        "operationId": "instagram_webhook_api_v1_webhooks_instagram_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Instagram Webhook Api V1 Webhooks Instagram Post"
                 }
               }
             }
@@ -860,6 +1744,46 @@
   },
   "components": {
     "schemas": {
+      "AccountOut": {
+        "properties": {
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          }
+        },
+        "type": "object",
+        "required": [
+          "external_id",
+          "display_name"
+        ],
+        "title": "AccountOut"
+      },
       "ActionOut": {
         "properties": {
           "type": {
@@ -1046,6 +1970,25 @@
           }
         ]
       },
+      "BusinessBriefOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "BusinessBriefOut"
+      },
       "Channel": {
         "type": "string",
         "enum": [
@@ -1134,25 +2077,249 @@
         ],
         "title": "ChannelEventOut"
       },
-      "ConversationDetailOut": {
+      "ChannelIntegrationOut": {
         "properties": {
-          "conversation": {
-            "$ref": "#/components/schemas/ConversationOut"
+          "channel": {
+            "type": "string",
+            "enum": [
+              "telegram",
+              "instagram"
+            ],
+            "title": "Channel"
           },
-          "messages": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "connection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "credentials": {
             "items": {
-              "$ref": "#/components/schemas/MessageOut"
+              "$ref": "#/components/schemas/CredentialOut"
             },
             "type": "array",
-            "title": "Messages"
+            "title": "Credentials"
+          },
+          "requirements": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Requirements"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Url",
+            "description": "Callback для Meta App Dashboard (Instagram)."
           }
         },
         "type": "object",
         "required": [
-          "conversation",
-          "messages"
+          "channel",
+          "status",
+          "credentials",
+          "requirements"
         ],
-        "title": "ConversationDetailOut"
+        "title": "ChannelIntegrationOut"
+      },
+      "ConnectIn": {
+        "properties": {
+          "credential_ref": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Credential Ref"
+          },
+          "replace_webhook": {
+            "type": "boolean",
+            "title": "Replace Webhook",
+            "description": "Telegram: заменить webhook, который сейчас указывает на другой адрес.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "credential_ref"
+        ],
+        "title": "ConnectIn"
+      },
+      "ConnectionBriefOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "channel": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "agent_enabled": {
+            "type": "boolean",
+            "title": "Agent Enabled"
+          },
+          "account": {
+            "$ref": "#/components/schemas/AccountOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "channel",
+          "status",
+          "agent_enabled",
+          "account"
+        ],
+        "title": "ConnectionBriefOut"
+      },
+      "ConnectionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "channel": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_connected",
+              "connecting",
+              "connected",
+              "action_required",
+              "error",
+              "disconnected"
+            ],
+            "title": "Status"
+          },
+          "auth_method": {
+            "type": "string",
+            "title": "Auth Method"
+          },
+          "credential_ref": {
+            "type": "string",
+            "title": "Credential Ref"
+          },
+          "account": {
+            "$ref": "#/components/schemas/AccountOut"
+          },
+          "agent_enabled": {
+            "type": "boolean",
+            "title": "Agent Enabled"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "last_check_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Check At"
+          },
+          "last_check_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Check Ok"
+          },
+          "last_event_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Event At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorStateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "disconnected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disconnected At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "channel",
+          "status",
+          "auth_method",
+          "credential_ref",
+          "account",
+          "agent_enabled",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConnectionOut"
       },
       "ConversationOut": {
         "properties": {
@@ -1221,6 +2388,24 @@
           "updated_at"
         ],
         "title": "ConversationOut"
+      },
+      "CredentialOut": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "title": "Ref"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref",
+          "label"
+        ],
+        "title": "CredentialOut"
       },
       "CustomerOut": {
         "properties": {
@@ -1330,6 +2515,475 @@
           "updated_at"
         ],
         "title": "CustomerOut"
+      },
+      "DeliveryOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "sending",
+              "sent",
+              "failed",
+              "unknown",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "attempts",
+          "updated_at"
+        ],
+        "title": "DeliveryOut"
+      },
+      "DialogCustomerOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handle"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "language"
+        ],
+        "title": "DialogCustomerOut"
+      },
+      "DialogDetailOut": {
+        "properties": {
+          "dialog": {
+            "$ref": "#/components/schemas/DialogItemOut"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/DialogMessageOut"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "older_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Older Cursor"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/CustomerOut"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SummaryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "handoff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HandoffOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "connection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionBriefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reply": {
+            "$ref": "#/components/schemas/ReplyStateOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dialog",
+          "messages",
+          "customer",
+          "reply"
+        ],
+        "title": "DialogDetailOut"
+      },
+      "DialogItemOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "channel": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "ai",
+              "waiting",
+              "human"
+            ],
+            "title": "Mode"
+          },
+          "mode_version": {
+            "type": "integer",
+            "title": "Mode Version"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/DialogCustomerOut"
+          },
+          "connection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
+          "last_message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastMessageOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "activity_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Activity At"
+          },
+          "unread": {
+            "type": "integer",
+            "title": "Unread"
+          },
+          "last_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seq"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "channel",
+          "mode",
+          "mode_version",
+          "customer",
+          "activity_at",
+          "unread"
+        ],
+        "title": "DialogItemOut"
+      },
+      "DialogListOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DialogItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "DialogListOut"
+      },
+      "DialogMessageOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seq"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant",
+              "manager",
+              "system"
+            ],
+            "title": "Role"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event",
+            "description": "takeover / resume для системных событий."
+          },
+          "unsupported": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unsupported",
+            "description": "Тип вложения, которое канал прислал вместо текста."
+          },
+          "delivery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeliveryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "text",
+          "timestamp"
+        ],
+        "title": "DialogMessageOut"
+      },
+      "DialogMessagesOut": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/DialogMessageOut"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "older_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Older Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "title": "DialogMessagesOut"
+      },
+      "DialogStateOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "ai",
+              "waiting",
+              "human"
+            ],
+            "title": "Mode"
+          },
+          "mode_version": {
+            "type": "integer",
+            "title": "Mode Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "mode",
+          "mode_version"
+        ],
+        "title": "DialogStateOut"
+      },
+      "ErrorStateOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorStateOut"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1449,6 +3103,52 @@
           "messages"
         ],
         "title": "HistoryOut"
+      },
+      "IntegrationPatchIn": {
+        "properties": {
+          "agent_enabled": {
+            "type": "boolean",
+            "title": "Agent Enabled"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "Версия из GET; при расхождении 409 version_conflict."
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent_enabled"
+        ],
+        "title": "IntegrationPatchIn"
+      },
+      "IntegrationsOut": {
+        "properties": {
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelIntegrationOut"
+            },
+            "type": "array",
+            "title": "Channels"
+          },
+          "ai_mode": {
+            "type": "string",
+            "title": "Ai Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "channels",
+          "ai_mode"
+        ],
+        "title": "IntegrationsOut"
       },
       "KnowledgeIn": {
         "properties": {
@@ -1583,38 +3283,125 @@
         ],
         "title": "KnowledgeSourceOut"
       },
-      "ManagerMessageIn": {
+      "LastMessageOut": {
         "properties": {
           "text": {
             "type": "string",
-            "maxLength": 4000,
-            "minLength": 1,
-            "title": "Text",
-            "examples": [
-              "Добрый день! Это Азамат, менеджер. Квартира на Чуй свободна, когда удобно посмотреть?"
-            ]
+            "title": "Text"
           },
-          "author": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 100
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Author",
-            "examples": [
-              "Азамат"
-            ]
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
           }
         },
         "type": "object",
         "required": [
-          "text"
+          "text",
+          "role",
+          "at"
         ],
-        "title": "ManagerMessageIn"
+        "title": "LastMessageOut"
+      },
+      "LoginIn": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginIn"
+      },
+      "LoginOut": {
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorOut"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "ai_mode": {
+            "type": "string",
+            "title": "Ai Mode",
+            "description": "mock — ответы ядра без живой модели; production — подключённая LLM."
+          },
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "Значение HttpOnly cookie. Только для сервера Next.js, не для браузерного кода."
+          }
+        },
+        "type": "object",
+        "required": [
+          "operator",
+          "expires_at",
+          "ai_mode",
+          "token"
+        ],
+        "title": "LoginOut"
+      },
+      "ManagerSendIn": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8,
+            "title": "Idempotency Key",
+            "description": "Один ключ на одно нажатие «Отправить»; повтор с тем же ключом вернёт ту же операцию."
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "idempotency_key"
+        ],
+        "title": "ManagerSendIn"
+      },
+      "ManagerSendOut": {
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/DialogMessageOut"
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/DeliveryOut"
+          },
+          "created": {
+            "type": "boolean",
+            "title": "Created"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "delivery",
+          "created"
+        ],
+        "title": "ManagerSendOut"
       },
       "MeetingIn": {
         "properties": {
@@ -1988,6 +3775,167 @@
           "handoff_rate"
         ],
         "title": "MetricsOut"
+      },
+      "OperatorOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "business": {
+            "$ref": "#/components/schemas/BusinessBriefOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "business"
+        ],
+        "title": "OperatorOut"
+      },
+      "ReadIn": {
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Seq",
+            "description": "seq последнего показанного сообщения."
+          }
+        },
+        "type": "object",
+        "required": [
+          "seq"
+        ],
+        "title": "ReadIn"
+      },
+      "ReadOut": {
+        "properties": {
+          "last_read_seq": {
+            "type": "integer",
+            "title": "Last Read Seq"
+          },
+          "unread": {
+            "type": "integer",
+            "title": "Unread"
+          }
+        },
+        "type": "object",
+        "required": [
+          "last_read_seq",
+          "unread"
+        ],
+        "title": "ReadOut"
+      },
+      "ReplyStateOut": {
+        "properties": {
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "max_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Chars"
+          },
+          "max_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Bytes"
+          },
+          "window_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "allowed"
+        ],
+        "title": "ReplyStateOut"
+      },
+      "ResolveDeliveryIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "retry",
+              "mark_sent",
+              "mark_failed"
+            ],
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "ResolveDeliveryIn"
+      },
+      "SessionOut": {
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/OperatorOut"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "ai_mode": {
+            "type": "string",
+            "title": "Ai Mode",
+            "description": "mock — ответы ядра без живой модели; production — подключённая LLM."
+          }
+        },
+        "type": "object",
+        "required": [
+          "operator",
+          "expires_at",
+          "ai_mode"
+        ],
+        "title": "SessionOut"
       },
       "SummaryOut": {
         "properties": {

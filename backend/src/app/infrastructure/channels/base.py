@@ -49,6 +49,24 @@ class ChannelError(Exception):
     def needs_action(self) -> bool:
         return self.kind in ("auth", "permission")
 
+    def describe(self) -> str:
+        """What the dashboard shows: plain Russian, no provider internals."""
+
+        if self.code in _HUMAN:
+            return _HUMAN[self.code]
+        if self.kind in ("transient", "ambiguous", "rate_limited"):
+            return "Сервис канала временно недоступен. Повторите проверку позже."
+        return self.message
+
+
+_HUMAN = {
+    "token_invalid": "Токен недействителен или отозван. Замените его на сервере и подключите снова.",
+    "credential_missing": "Серверная конфигурация больше недоступна этому бизнесу.",
+    "credential_empty": "В серверной конфигурации нет токена.",
+    "missing_permission": "У приложения нет нужных прав или роли для этого аккаунта.",
+    "subscription_failed": "Meta не подтвердила подписку на сообщения.",
+}
+
 
 @dataclass(slots=True)
 class ChannelEvent:
