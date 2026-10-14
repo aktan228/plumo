@@ -1,0 +1,13 @@
+/* Theme for the locally installed Bklit components. Scoped to this preview. */
+.plumo-analytics-chart .text-chart-label { color: var(--chart-label); }
+.plumo-analytics-chart .text-chart-tooltip-foreground { color: #fff; }
+.plumo-analytics-chart .text-chart-tooltip-muted { color: #aeb2bd; }
+.plumo-analytics-chart .bg-chart-tooltip { background: #111113; }
+.plumo-analytics-chart svg { overflow: visible; }
+.plumo-analytics-chart [style*="touch-action"] { touch-action: pan-y !important; }
+@media (prefers-reduced-motion: reduce) {
+  .plumo-analytics-chart *, .plumo-analytics-chart *::before, .plumo-analytics-chart *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,9 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n";
 import "./landing.css";
+import { Hero } from "./hero";
+import { CustomerSituations } from "./customer-situations";
+import { VoiceCallDemo } from "./voice-call-demo";
+import { DialogueToLead } from "./dialogue-to-lead";
+import { SetupPipeline } from "./setup-pipeline";
+import { Statistics } from "./statistics";
+import { PilotCTA } from "./pilot-cta";
+import { FAQ } from "./faq";
+import { Pricing, pricingRequestLabel, type PricingRequest } from "./pricing";
+import { DemoChoice } from "./demo-choice";
+import { DemoContactForm } from "./demo-contact-form";
 
 const copy = {
   ru: {
@@ -36,65 +47,59 @@ const copy = {
 };
 
 export function Landing() {
+  const router = useRouter();
   const { locale } = useLanguage();
   const c = copy[locale];
-  const reduced = useReducedMotion();
-  const [questions, setQuestions] = useState<number[]>([]);
-  const logRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const log = logRef.current;
-    if (log) log.scrollTop = log.scrollHeight;
-  }, [questions]);
-  const [day, setDay] = useState(6);
   const [mailReady, setMailReady] = useState(false);
-  const values = [12, 18, 14, 25, 19, 16, 24];
+  const [pricingChoice, setPricingChoice] = useState<PricingRequest | null>(null);
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [demoStep, setDemoStep] = useState<"choice" | "expert">("choice");
+  const [demoPath, setDemoPath] = useState<"expert" | "self" | null>(null);
+
+  function openDemo(request: PricingRequest | null = null, step: "choice" | "expert" = "choice") {
+    setPricingChoice(request);
+    setDemoStep(step);
+    setMailReady(false);
+    setDemoOpen(true);
+  }
+
+  function followPath(path: "expert" | "self") {
+    setDemoPath(path);
+    if (path === "expert") {
+      setDemoStep("expert");
+    } else {
+      setDemoOpen(false);
+      const params = pricingChoice ? new URLSearchParams({ plan: pricingChoice.choice, volume: String(pricingChoice.volume), billing: pricingChoice.billing, voice: String(pricingChoice.voice) }) : null;
+      router.push(`/create/wizard${params ? `?${params}` : ""}`);
+    }
+  }
+
   function prepareMail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const body = `${c.name}: ${data.get("name")}\n${c.business}: ${data.get("company")}\n${c.email}: ${data.get("email")}\n\n${data.get("message")}`;
-    window.location.href = `mailto:contact@plumo.app?subject=${encodeURIComponent(c.subject)}&body=${encodeURIComponent(body)}`;
+    const pathLabel = demoPath ? (locale === "ru" ? (demoPath === "self" ? "После самостоятельного демо" : "Демо с сотрудником") : (demoPath === "self" ? "After the self-guided demo" : "Demo with the team")) : "";
+    const body = `${pathLabel ? `${pathLabel}\n\n` : ""}${c.name}: ${data.get("name")}\n${c.business}: ${data.get("company")}\n${c.email}: ${data.get("email")}\n\n${data.get("message")}`;
+    window.location.href = `mailto:contact@plumo.app?subject=${encodeURIComponent(c.subject)}&body=${encodeURIComponent(pricingChoice ? `${locale === "ru" ? "Тариф / запрос" : "Plan / inquiry"}: ${pricingRequestLabel(locale, pricingChoice)}\n\n${body}` : body)}`;
     setMailReady(true);
   }
   return <main id="main" className="landing">
-    <section className="hero section-shell">
-      <p className="section-label"><span className="small-dot" />{c.label}</p>
-      <h1>{c.title}<br />{c.title2}<br /><span>{c.title3}</span></h1>
-      <div className="hero-bottom"><p>{c.intro}</p><div><div className="hero-actions"><a className="primary-cta" href="#demo">{c.try}<span>↗</span></a><a className="text-cta" href="#pilot">{c.pilot} →</a></div><small>{c.note}</small></div></div>
-      <div className="hero-stage">
-        <span className="stage-label">{c.sample}</span><div className="stage-grid" aria-hidden="true" />
-        <motion.div className="conversation-card" initial={false} whileInView={reduced ? {} : { y: [18, 0], opacity: [0.6, 1] }} viewport={{ once: true }} transition={{ duration: .6 }}>
-          <div className="mini-heading"><span className="avatar">A</span><div><b>{c.person}</b><small>{c.incoming}</small></div><span className="time">21:48</span></div>
-          <p className="bubble customer">{c.question}</p><p className="bubble agent"><b>plumo</b>{c.answer}</p>
-        </motion.div>
-        <div className="stage-connection" aria-hidden="true"><span /><i>↗</i><span /></div>
-        <motion.div className="lead-card" initial={false} whileInView={reduced ? {} : { y: [26, 0], opacity: [0.6, 1] }} viewport={{ once: true }} transition={{ duration: .7, delay: .15 }}>
-          <div className="lead-top"><span className="small-dot" />{c.lead}<span>↗</span></div><h3>{c.need}</h3><p>{c.rooms}</p><div className="lead-rule" /><small>{c.next}</small><strong>{c.nextValue}</strong><div className="lead-footer">✓ {c.context}</div>
-        </motion.div>
-      </div>
-      <div className="benefit-strip">{c.strip.map((text, i) => <span key={text}><i>0{i + 1}</i>{text}</span>)}</div>
-    </section>
+    <Hero onDemo={() => openDemo()} />
+    <CustomerSituations />
 
-    <section id="demo" className="section-shell split-section">
-      <div className="section-copy"><p className="section-label">{c.demoLabel}</p><h2>{c.demoTitle}</h2><p>{c.demoDesc}</p><small className="disclosure">{c.demoNotice}</small></div>
-      <div className="demo-window"><div className="demo-top"><span className="plumo-mark" aria-hidden="true" /><div><b>{c.chatTitle}</b><small>{c.chatStatus}</small></div><button className="reset-demo" onClick={() => setQuestions([])} aria-label={c.reset} title={c.reset}>↺</button></div>
-        <div ref={logRef} className="chat-log" role="log" aria-live="polite" tabIndex={0} aria-label={c.chatTitle}><p className="chat-agent">{c.welcome}</p>{questions.map((q, i) => <div key={`${i}-${q}`}><p className="chat-customer">{c.prompts[q]}</p><p className="chat-agent">{c.replies[q]}</p></div>)}</div>
-        <div className="chat-options"><small>{c.choose}</small>{c.prompts.map((prompt, i) => <button key={prompt} disabled={questions.includes(i)} onClick={() => setQuestions((old) => [...old, i])}>{prompt}<span>↗</span></button>)}</div>
-      </div>
-    </section>
+    <VoiceCallDemo />
 
-    <section id="product" className="memory-section"><div className="section-shell split-section">
-      <div className="memory-sheet"><span className="section-label">{c.memoryCard}</span><div className="memory-person"><span className="avatar">A</span><h3>{c.person}</h3><span className="memory-id">#0001</span></div><p className="memory-summary">{c.memorySummary}</p><div className="memory-facts"><span>64 м²</span><span>{c.rooms.split(" · ")[0]}</span></div><small>{c.source}</small><div className="handoff-example">{c.human}<span>↗</span></div><small>{c.humanNote}</small></div>
-      <div className="section-copy"><p className="section-label">{c.memoryLabel}</p><h2>{c.memoryTitle}</h2><p>{c.memoryDesc}</p><ul className="memory-list">{c.memoryPoints.map(text => <li key={text}><span>↗</span>{text}</li>)}</ul><small className="disclosure">{c.memoryNote}</small></div>
-    </div></section>
+    <DialogueToLead onDiscuss={() => { setDemoPath("self"); openDemo(pricingChoice, "expert"); }} />
 
-    <section id="how-it-works" className="section-shell process-section"><p className="section-label">{c.processLabel}</p><h2>{c.processTitle}</h2><div className="process-grid">{c.steps.map(([title, description], i) => <article key={title}><span className="step-number">0{i + 1}</span><h3>{title}</h3><p>{description}</p></article>)}</div></section>
+    <SetupPipeline onDemo={() => openDemo()} />
 
-    <section id="channels" className="section-shell channel-section"><div className="section-copy"><p className="section-label">{c.channelLabel}</p><h2>{c.channelTitle}</h2><p>{c.channelDesc}</p></div><div className="channel-list">{c.channels.map(([icon, title, status]) => <div key={title}><span className="channel-icon" aria-hidden="true">{icon}</span><h3>{title}</h3><small>{status}</small></div>)}</div></section>
+    <Statistics />
 
-    <section id="statistics" className="stats-section"><div className="section-shell"><div className="stats-heading"><div><p className="section-label">{c.statsLabel}</p><h2>{c.statsTitle}</h2></div><p>{c.statsDesc}</p></div><div className="stats-board"><div className="stats-board-top"><b>{c.statsPeriod}</b><span>{c.statsBadge}</span></div><div className="metrics">{[128, 32, 18].map((n, i) => <div key={n}><small>{c.metrics[i]}</small><strong>{n}</strong></div>)}</div><div className="chart-heading" aria-live="polite"><span>{c.days[day]}</span><b>{values[day]} {c.statsUnits}</b></div><div className="bar-chart" role="group" aria-label={c.statsPeriod}>{values.map((v, i) => <button key={i} className={day === i ? "selected" : ""} aria-pressed={day === i} aria-label={`${c.days[i]}: ${v} ${c.statsUnits}`} onClick={() => setDay(i)}><span className="chart-track"><span className="chart-bar" style={{ height: `${v / 25 * 100}%` }}><span>{v}</span></span></span><small>{c.days[i]}</small></button>)}</div></div></div></section>
+    <Pricing onChoose={request => openDemo(request)} onDemo={openDemo} />
 
-    <section id="faq" className="section-shell faq-section"><div><p className="section-label">{c.faqLabel}</p><h2>{c.faqTitle}</h2></div><div className="faq-list">{c.faqs.map(([q, a]) => <details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
+    <FAQ items={c.faqs} />
 
-    <section id="pilot" className="pilot-section"><div className="section-shell pilot-grid"><div><p className="section-label">{c.ctaLabel}</p><h2>{c.ctaTitle}</h2><p className="pilot-description">{c.ctaDesc}</p><a className="pilot-email" href="mailto:contact@plumo.app">contact@plumo.app ↗</a></div><form onSubmit={prepareMail} className="pilot-form"><div className="form-row"><label>{c.name}<input name="name" autoComplete="name" required maxLength={100} /></label><label>{c.business}<input name="company" autoComplete="organization" required maxLength={150} /></label></div><label>{c.email}<input type="email" name="email" autoComplete="email" required maxLength={254} /></label><label>{c.message}<textarea name="message" rows={3} required maxLength={1500} /></label><button type="submit">{c.send}<span>↗</span></button><small>{c.mailNote}</small>{mailReady && <p role="status">{c.mailReady}</p>}</form></div></section>
+    <PilotCTA onDemo={() => openDemo(pricingChoice)} />
+    {demoOpen && <DemoChoice onClose={() => setDemoOpen(false)} onSelect={followPath} step={demoStep} onBack={() => setDemoStep("choice")}
+      expertForm={<DemoContactForm onSubmit={prepareMail} selection={pricingChoice} mailReady={mailReady} formCopy={c} />} />}
   </main>;
 }

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <circle cx="24" cy="24" r="23" fill="#fff4e4" stroke="#d5c7b5" stroke-width="2"/>
+  <circle cx="24" cy="24" r="19" fill="#ffdbb5"/>
+  <g shape-rendering="crispEdges">
+    <path fill="#725033" d="M14 10h20v4h4v20h-8v4H14v-4h-4V18h4z"/>
+    <path fill="#aa794b" d="M18 10h12v4h8v8h-4v-4H18v4h-4v12h-4V18h4v-4h4z"/>
+    <path fill="#ffd1a1" d="M18 18h16v16h-4v4H18v-4h-4V22h4z"/>
+    <path fill="#332a2c" d="M18 24h3v3h-3zm11 0h3v3h-3z"/>
+    <path fill="#e7aa86" d="M14 29h4v3h-4zm16 0h4v3h-4z"/>
+    <path fill="#b36e57" d="M22 32h5v2h-5z"/>
+    <path fill="#293b55" d="M14 36h8v4h6v-4h6v4h4v4H10v-4h4z"/>
+    <path fill="#647b9a" d="M14 36h4v4h4v4h-8zm16 0h4v8h-8v-4h4z"/>
+    <path fill="#fff4e4" d="M18 36h4v4h-4zm10 0h2v4h-2z"/>
+  </g>
+</svg>

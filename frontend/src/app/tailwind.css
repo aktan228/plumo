@@ -1,0 +1,12 @@
+/* Preflight is deliberately omitted to preserve existing page styles. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme inline {
+  --color-plumo-blue: var(--blue);
+  --color-plumo-ink: var(--ink);
+  --color-plumo-muted: var(--muted);
+  --color-plumo-line: var(--line);
+  --color-plumo-soft: var(--blue-soft);
+}

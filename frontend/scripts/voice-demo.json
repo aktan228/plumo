@@ -1,0 +1,18 @@
+{
+  "ru": [
+    { "speaker": "plumo", "text": "Здравствуйте! Я Плюмо, ИИ-ассистент агентства. Чем могу помочь?" },
+    { "speaker": "customer", "text": "Здравствуйте. Ищу двухкомнатную квартиру для семьи. Желательно на юге города, рядом со школой." },
+    { "speaker": "plumo", "text": "Понял. Какой бюджет вы рассматриваете?" },
+    { "speaker": "customer", "text": "До восьми миллионов сомов. Можно посмотреть в субботу после двух?" },
+    { "speaker": "plumo", "text": "Передам менеджеру ваш бюджет и пожелания. Он проверит варианты, школу рядом и время просмотра, затем свяжется с вами. Пока просмотр не подтверждён." },
+    { "speaker": "customer", "text": "Отлично, спасибо. Буду ждать звонка." }
+  ],
+  "en": [
+    { "speaker": "plumo", "text": "Hello! I'm Plumo, the agency's AI assistant. How can I help?" },
+    { "speaker": "customer", "text": "Hi. I'm looking for a two-bedroom apartment for my family, in the south of the city, near a school." },
+    { "speaker": "plumo", "text": "Got it. What budget do you have in mind?" },
+    { "speaker": "customer", "text": "Up to eight million soms. Could we arrange a viewing on Saturday after two?" },
+    { "speaker": "plumo", "text": "I'll pass your budget and preferences to the manager. They'll check the options, nearby school and viewing time, then call you back. The viewing isn't confirmed yet." },
+    { "speaker": "customer", "text": "Great, thank you. I'll wait for their call." }
+  ]
+}
