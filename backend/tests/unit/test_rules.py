@@ -195,6 +195,11 @@ def test_short_russian_ack_is_usable():
 def test_two_people_is_not_a_human_request():
     assert analyze_message("мне нужна более дешевая квартира для двух человек").human_request is False
     assert analyze_message("позовите менеджера").human_request is True
+    # Kyrgyz: "a home for two people" is not a request for a person; "I want to talk to a person" is.
+    assert analyze_message("эки адамга уй керек").human_request is False
+    assert analyze_message("үч адамдык батир барбы").human_request is False
+    assert analyze_message("адам менен сүйлөшкүм келет").human_request is True
+    assert analyze_message("менеджерди чакырыңыз").human_request is True
 
 
 def test_products_greeting_is_a_catalog_question():

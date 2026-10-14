@@ -68,7 +68,14 @@ HUMAN = (
     "живой человек",
     "позовите",
     "соедините",
-    "адам",
+    # Kyrgyz "адам" alone is just "person": "эки адамга үй керек" is a flat for two.
+    # Only phrases that ask for a live person count. To be checked with a native speaker.
+    "адам менен сүйлөш",
+    "адам менен суйлош",
+    "тирүү адам",
+    "тируу адам",
+    "адамга туташтыр",
+    "адамды чакыр",
 )
 MEETING = (
     "встреч",
