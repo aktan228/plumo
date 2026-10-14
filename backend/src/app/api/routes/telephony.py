@@ -16,6 +16,7 @@ import hmac
 import json
 import logging
 import os
+import re
 
 from fastapi import APIRouter, Body, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -46,6 +47,7 @@ async def chat_completions(
     services: Services = Depends(get_services),
 ) -> StreamingResponse:
     _require_token(request)
+    _log_shape("llm_request", body)
     turn = parse_llm_request(body)
     try:
         # A failed turn must not leave half a pipeline in the transaction,
@@ -66,6 +68,7 @@ async def initiation(
     services: Services = Depends(get_services),
 ) -> dict:
     _require_token(request)
+    _log_shape("initiation", body)
     greeting = await services.calls.start(parse_initiation(body))
     return initiation_response(greeting.text, greeting.language, greeting.variables)
 
@@ -87,6 +90,40 @@ async def post_call(request: Request, services: Services = Depends(get_services)
         return {"status": "ignored"}
     call = await services.calls.finish(report)
     return {"status": "ok", "call_id": str(call.id)}
+
+
+def _log_shape(kind: str, body: dict) -> None:
+    """With ELEVENLABS_LOG_SHAPE=1, log which fields a platform request carries.
+
+    Temporary: shows what ElevenLabs sends for WhatsApp calls and messages.
+    Digit runs are masked and message texts are logged by length only.
+    """
+
+    if os.getenv("ELEVENLABS_LOG_SHAPE", "").strip() != "1":
+        return
+    logger.info("platform_request_shape", extra={"kind": kind, "shape": _shape(body)})
+
+
+def _shape(value: object, key: str = "") -> object:
+    if isinstance(value, dict):
+        return {k: "<hidden>" if _SECRET_KEY.search(k) else _shape(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_shape(item, key) for item in value[:5]]
+    if isinstance(value, str):
+        if key == "content":
+            # The system prompt carries the markers; user text is personal data.
+            return _MASK_DIGITS.sub(_mask, value[:300]) if "plumo_" in value else f"<text {len(value)}>"
+        return _MASK_DIGITS.sub(_mask, value[:80])
+    return value
+
+
+_MASK_DIGITS = re.compile(r"\d{5,}")
+_SECRET_KEY = re.compile(r"key|secret|password|token|authorization|credential", re.IGNORECASE)
+
+
+def _mask(match: re.Match[str]) -> str:
+    digits = match.group(0)
+    return f"<{len(digits)} digits …{digits[-3:]}>"
 
 
 def _require_token(request: Request) -> None:

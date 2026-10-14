@@ -368,14 +368,19 @@ class AgentService:
             role=MessageRole.assistant,
             text=response_text,
             timestamp=utcnow(),
-            metadata=scrub_mapping(
-                {
-                    "route": route.model,
-                    "route_reason": route.reason,
-                    "model": generation.model_used,
-                    "handoff": decision.required,
-                }
-            ),
+            metadata={
+                **scrub_mapping(
+                    {
+                        "route": route.model,
+                        "route_reason": route.reason,
+                        "model": generation.model_used,
+                        "handoff": decision.required,
+                    }
+                ),
+                # Links the reply to its question, so a voice turn the caller
+                # talked over can be retired together with its unheard reply.
+                **({"reply_to": message.message_id[:128]} if message.message_id else {}),
+            },
             created_at=utcnow(),
         )
         await self.messages.add(assistant)
@@ -645,13 +650,22 @@ class AgentService:
     async def resolve_business(self, explicit: UUID | None = None, called: str | None = None):
         """Business for a turn: explicit id, the dialled number, configured default, or the only one.
 
-        A business lists its Plumo numbers in `contacts.voice_numbers`.
+        A business lists its Plumo numbers in `contacts.voice_numbers`. WhatsApp
+        sends Meta's phone number ID instead of the number; those are listed in
+        `contacts.whatsapp_phone_number_ids` and compared as strings, because the
+        ID is all digits and would otherwise pass for a phone.
         """
 
         if explicit is None and called:
+            rows = await self.businesses.list_all()
+            called_id = called.strip()
+            for business in rows:
+                ids = (business.contacts or {}).get("whatsapp_phone_number_ids") or []
+                if called_id in {str(item).strip() for item in ids}:
+                    return business
             dialled = phone_from_id(called)
             if dialled:
-                for business in await self.businesses.list_all():
+                for business in rows:
                     numbers = (business.contacts or {}).get("voice_numbers") or []
                     if dialled in {phone_from_id(str(item)) for item in numbers}:
                         return business

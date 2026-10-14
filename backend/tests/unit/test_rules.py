@@ -442,3 +442,47 @@ async def test_slow_voice_turn_is_answered_by_the_hedged_request():
 
     assert (await AgentService._first_reply(Fast(), None, RouteDecision("big", "t", 1.0), 3.0, 0.2)).text == "fast"
     assert Fast.calls == 1
+
+
+def test_price_in_words_is_checked_like_digits():
+    box = _item("15 роз в шляпной коробке. Цена 5200 сом. Статус: в наличии.", "Розы в шляпной коробке")
+    context = _context("что есть в пределах 7000?", [box])
+    validator = ResponseValidator()
+    assert validator.validate("Есть розы в коробке за пять тысяч двести сомов.", context).safe
+    invented = validator.validate("Есть розы в коробке за четыре тысячи девятьсот сомов.", context)
+    assert (invented.safe, invented.reason) == (False, "invented_number")
+
+
+def test_small_money_amounts_are_checked():
+    delivery = _item("Доставка по Бишкеку 300 сом, в Джал 400 сом.", "Доставка")
+    context = _context("сколько доставка?", [delivery])
+    validator = ResponseValidator()
+    assert validator.validate("Доставка в Джал 400 сом.", context).safe
+    assert not validator.validate("Доставка в Джал 500 сом.", context).safe
+    # Counts are not money: "15 роз" needs no source.
+    assert validator.validate("Доставка 300 сом, букет из 15 роз довезём.", context).safe
+
+
+def test_customer_budget_may_be_repeated_but_not_agreed_to_as_a_price():
+    box = _item("15 роз в шляпной коробке. Цена 5200 сом. Статус: в наличии.", "Розы в шляпной коробке")
+    context = _context("От 5 до 7000 сомов", [box])
+    validator = ResponseValidator()
+    assert validator.validate("Понял, от пяти до семи тысяч. Есть розы в коробке за 5200 сом.", context).safe
+    assert validator.validate("Понял, бюджет до 7000 сом.", context).safe
+    agreed = validator.validate("Да, есть букет за 7000 сом.", context)
+    assert (agreed.safe, agreed.reason) == (False, "invented_number")
+
+
+def test_ready_to_pay_is_a_hot_lead():
+    said = "Ааа, ладно, я готов покупать. Я щас оплачу вам, вы скинете реквизиты свои и доставите на Джал"
+    assert analyze_message(said).hot_lead
+    assert analyze_message("хочу заказать гортензию на завтра").hot_lead
+    assert not analyze_message("а какие есть розы?").hot_lead
+
+
+def test_budget_is_not_a_question_about_that_price():
+    assert analyze_message("От 5 до 7000. сомов.").numbers == ()
+    assert analyze_message("бюджет где-то 4000").numbers == ()
+    assert analyze_message("в пределах 6 000 сом").numbers == ()
+    # A price the customer asks about still needs data.
+    assert analyze_message("есть квартира за 50000?").numbers == ("50000",)

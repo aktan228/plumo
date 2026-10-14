@@ -82,6 +82,11 @@ class CallService:
         if not turn.text.strip():
             return CallReply(listening_phrase("ru"), "ru", False)
         business = await self.agent.resolve_business(_uuid(turn.business_id), turn.called)
+        turn_prefix = turn.message_id.rsplit(":", 1)[0] + ":" if turn.message_id and turn.message_id.count(":") >= 2 else None
+        if turn_prefix:
+            # Same call and turn number, longer text: the caller kept talking. Earlier
+            # versions and their unheard replies must not reach the model's context.
+            await self.messages.supersede_turn(turn_prefix, keep=turn.message_id)
         response = await self.agent.process_message(
             InboundMessage(
                 channel=Channel.voice,
@@ -94,6 +99,10 @@ class CallService:
         )
         if turn.call_id:
             await self._touch_call(turn, response.customer_id, business.id, getattr(response, "conversation_id", None))
+        if turn_prefix:
+            # An older version still running when this one started stores its reply
+            # late; whichever version finishes last retires everything but the newest.
+            await self.messages.supersede_turn(turn_prefix)
         if getattr(response, "duplicate", False) and not response.response_text.strip():
             # A resend of a turn still being answered: not a manager takeover.
             return CallReply(listening_phrase(response.language), response.language, False)

@@ -56,19 +56,28 @@ def agent_payload(
     business_name: str = "Demo Realty",
     voice_id: str | None = None,
     tts_model: str | None = None,
+    tts_speed: float = 1.1,
+    turn_eagerness: str = "eager",
 ) -> dict[str, Any]:
     """Agent config. The fallback first message is used only if the initiation webhook fails."""
 
     urls = endpoints(public_url)
     # eleven_v4_turbo speaks Russian and Kyrgyz. Plumo writes digits (the validator
     # checks them), so ElevenLabs normalises "85 000" into words, not the prompt.
-    tts: dict[str, Any] = {"model_id": tts_model or "eleven_v4_turbo", "text_normalisation_type": "elevenlabs"}
+    # Speed 1.0 sounded slow on a call; the platform accepts 0.7-1.2.
+    tts: dict[str, Any] = {
+        "model_id": tts_model or "eleven_v4_turbo",
+        "text_normalisation_type": "elevenlabs",
+        "speed": min(max(tts_speed, 0.7), 1.2),
+    }
     if voice_id:
         tts["voice_id"] = voice_id
     conversation: dict[str, Any] = {
         "agent": {
             "first_message": call_greeting(business_name, "ru", None, DEFAULT_ASSISTANT_NAME),
             "language": "ru",
+            # The caller may cut in even during the greeting.
+            "disable_first_message_interruptions": False,
             "prompt": {
                 "prompt": PROMPT_MARKERS,
                 "llm": "custom-llm",
@@ -83,7 +92,32 @@ def agent_payload(
     conversation["tts"] = tts
     # A normal reply takes 1.5-2.5 s, so the filler must wait longer or it fires on
     # every turn (it did at 1.5 s). It covers only a slow model or a provider retry.
-    conversation["turn"] = {"soft_timeout_config": {"timeout_seconds": 3.5, "message": "Секундочку…"}}
+    # Speculative turns ask the LLM while the caller is still talking. Plumo answers
+    # only after the validator, so an early request gains nothing; each one was a
+    # full paid turn and landed in the history (6 copies of one phrase, 10.10.2026).
+    conversation["turn"] = {
+        "soft_timeout_config": {"timeout_seconds": 3.5, "message": "Секундочку…"},
+        "speculative_turn": False,
+        # How long the platform waits after the caller stops before it answers. On
+        # "normal" a call waited up to 5.5 s (10.10.2026). "eager" answers sooner; a
+        # phrase the caller then continues comes again and replaces the first version.
+        "turn_eagerness": turn_eagerness if turn_eagerness in ("eager", "normal", "patient") else "eager",
+    }
+    # Background voices and the agent's own voice from a speaker were heard as the
+    # caller still talking: the platform kept listening and cut every reply off
+    # (one phrase got "Напиши ему в приват, блин" appended, 7 replies, none spoken).
+    conversation["vad"] = {"background_voice_detection": True}
+    # "interruption" in client events is what lets the caller cut the agent off.
+    conversation["conversation"] = {
+        "client_events": [
+            "audio",
+            "interruption",
+            "agent_response",
+            "user_transcript",
+            "agent_response_correction",
+            "agent_tool_response",
+        ]
+    }
     return {
         "name": name,
         "conversation_config": conversation,
@@ -100,6 +134,15 @@ def agent_payload(
             },
         },
     }
+
+
+def keep_voice(payload: dict[str, Any]) -> dict[str, Any]:
+    """Drop voice and TTS model from an update so the agent keeps what was set in the dashboard."""
+
+    tts = payload["conversation_config"].get("tts") or {}
+    tts.pop("voice_id", None)
+    tts.pop("model_id", None)
+    return payload
 
 
 def set_env_values(path: Path, values: dict[str, str]) -> None:
@@ -137,6 +180,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--public-url", default=os.getenv("PLUMO_PUBLIC_URL", ""), help="https-адрес backend (ngrok и т.п.)")
     parser.add_argument("--business-name", default="Demo Realty", help="имя в запасном приветствии")
+    parser.add_argument(
+        "--set-voice",
+        action="store_true",
+        help="перезаписать голос и TTS-модель агента из .env; без флага у существующего агента они не трогаются",
+    )
     parser.add_argument("--dry-run", action="store_true", help="показать конфиг агента, ничего не отправлять")
     args = parser.parse_args(argv)
 
@@ -155,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     agent_id = os.getenv("ELEVENLABS_AGENT_ID", "").strip()
     voice_id = os.getenv("ELEVENLABS_VOICE_ID", "").strip() or None
     tts_model = os.getenv("ELEVENLABS_TTS_MODEL", "").strip() or None
+    tts_speed = float(os.getenv("ELEVENLABS_TTS_SPEED", "").strip() or 1.1)
+    turn_eagerness = os.getenv("ELEVENLABS_TURN_EAGERNESS", "").strip() or "eager"
 
     if args.dry_run:
         payload = agent_payload(
@@ -165,6 +215,8 @@ def main(argv: list[str] | None = None) -> int:
             business_name=args.business_name,
             voice_id=voice_id,
             tts_model=tts_model,
+            tts_speed=tts_speed,
+            turn_eagerness=turn_eagerness,
         )
         print(json.dumps(_redacted(payload), ensure_ascii=False, indent=2))
         return 0
@@ -204,8 +256,14 @@ def main(argv: list[str] | None = None) -> int:
         business_name=args.business_name,
         voice_id=voice_id,
         tts_model=tts_model,
+        tts_speed=tts_speed,
+        turn_eagerness=turn_eagerness,
     )
     if agent_id:
+        if not args.set_voice:
+            # Voice and model are picked by ear in the dashboard; a rerun for a new
+            # tunnel URL must not swap them back (it did, 10.10.2026).
+            keep_voice(payload)
         client.call("PATCH", f"/v1/convai/agents/{agent_id}", payload)
         print(f"агент обновлён: {agent_id}")
     else:

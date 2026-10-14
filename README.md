@@ -145,4 +145,6 @@ Backend и worker предполагаются в одном репозитор�
 
 ## Разработка и запуск
 
-Frontend: в папке frontend выполнить `npm install`, затем `npm run dev`. Подробности и текущий объём — в [frontend/README.md](frontend/README.md). Backend и миграции пока не созданы. .gitignore исключает зависимости, сборки, локальное окружение и секреты.
+Frontend: в папке frontend выполнить `npm install`, затем `npm run dev`. Подробности и текущий объём — в [frontend/README.md](frontend/README.md).
+
+Backend (AI-ядро на FastAPI + PostgreSQL) создан: агент, память клиента, база знаний, роутер, валидатор фактов, передача менеджеру, звонки через ElevenLabs. Запуск, API и статус — в [backend/README.md](backend/README.md) и [backend/FULLSTACK.md](backend/FULLSTACK.md). Каналы WhatsApp/Telegram для покупателей и деплой ещё не подключены. .gitignore исключает зависимости, сборки, локальное окружение и секреты.

@@ -37,6 +37,10 @@ _CATALOG = (
     "вариант",
     "совет",
     "бюджет",
+    "букет",
+    "цвет",
+    "композиц",
+    "растени",
 )
 
 
@@ -53,10 +57,20 @@ class SimpleKnowledgeRetriever:
     async def retrieve(self, business_id: UUID, query: str, limit: int = 5) -> list[KnowledgeHit]:
         items = await self.knowledge.list_active(business_id)
         prepared = _PreparedQuery.from_text(query)
-        if any(stem in prepared.normalized for stem in _CHEAPER):
+        budget = _budget(prepared.normalized)
+        limit_named = budget is not None and _LIMIT.search(prepared.normalized) is not None
+        if limit_named or any(stem in prepared.normalized for stem in _CHEAPER):
             offers = [item for item in items if _offer(item) and _price(item) is not None]
+            if budget is not None:
+                # "Маме, бюджет 4 тысячи": the best match that fits, not the cheapest
+                # row in the catalog (a gift card for 150). "До 7000" means 7000:
+                # roses for 7500 offered on a call sounded like ignoring the customer.
+                fitting = [item for item in offers if _price(item) <= budget]
+                if fitting:
+                    fitting.sort(key=lambda item: (-_score(prepared, item), -_price(item)))
+                    return [KnowledgeHit(item=item, score=3.0) for item in fitting[:limit]]
             if offers:
-                offers.sort(key=_price)
+                offers.sort(key=lambda item: (-_score(prepared, item), _price(item)))
                 return [KnowledgeHit(item=item, score=3.0) for item in offers[:limit]]
         ranked = [KnowledgeHit(item=item, score=_score(prepared, item)) for item in items]
         ranked.sort(key=lambda hit: hit.score, reverse=True)
@@ -131,6 +145,25 @@ def _score(query: _PreparedQuery, item) -> float:
 def _offer(item) -> bool:
     hay = normalize_text(f"{item.title} {item.content}")
     return item.category in OFFER_CATEGORIES and "продан" not in hay and "не предлагать" not in hay and "аренд" not in hay
+
+
+# "до 7000", "от 5 до 7 тысяч", "в пределах 4000": a budget, not one exact price
+# ("квартира за 85000" still looks for that listing).
+_LIMIT = re.compile(r"(?<!\w)(?:до|от|в пределах|не дороже|не больше|максимум|около|примерно)\s+\d")
+_AMOUNT = re.compile(r"(?<![\d.,])(\d{1,3}(?:\s\d{3})+|\d+(?:[.,]\d+)?)\s*(тыс\w*|миң\w*|мин\b|к\b|k\b)?")
+
+
+def _budget(normalized: str) -> int | None:
+    """Largest amount the customer named: "4 тысячи", "3,5 тыс", "50 000", "5000 сом"."""
+
+    amounts = []
+    for number, thousands in _AMOUNT.findall(normalized):
+        value = float(re.sub(r"\s+", "", number).replace(",", "."))
+        if thousands:
+            value *= 1000
+        if value >= 100:
+            amounts.append(int(value))
+    return max(amounts) if amounts else None
 
 
 def _price(item) -> int | None:

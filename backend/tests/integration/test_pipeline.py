@@ -217,3 +217,24 @@ async def test_knowledge_import_updates_adds_and_switches_off(session):
     assert active == {kept: "Новый текст 1 USD", "Новая строка": "Текст"}
     again = await apply_rows(session, business.id, rows, deactivate_missing=True)
     assert again.unchanged == [kept, "Новая строка"] and not again.added and not again.updated
+
+
+async def test_talked_over_voice_turn_leaves_history(agent, session):
+    """The caller paused, got no answer yet and went on: only the full phrase stays."""
+
+    repo = MessageRepository(session)
+    caller = "+996555900500"
+    first = await agent.process_message(_msg("Квартира на Чуй", channel="voice", external=caller, message_id="conv_t:2:aaa"))
+    await repo.supersede_turn("conv_t:2:", keep="conv_t:2:bbb")
+    second = await agent.process_message(
+        _msg("Квартира на Чуй ещё продаётся?", channel="voice", external=caller, message_id="conv_t:2:bbb")
+    )
+    await repo.supersede_turn("conv_t:2:")
+    assert first.customer_id == second.customer_id
+    history = await repo.list_for_customer(second.customer_id)
+    assert [item.text for item in history][0] == "Квартира на Чуй ещё продаётся?"
+    assert len(history) == 2
+    assert history[1].metadata.get("reply_to") == "conv_t:2:bbb"
+    # Rerun is a no-op; the next turn number is untouched.
+    assert await repo.supersede_turn("conv_t:2:") == 0
+    assert await repo.supersede_turn("conv_t:3:") == 0

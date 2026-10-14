@@ -47,7 +47,8 @@ def is_weasel_reply(text: str) -> bool:
     return any(marker in blob for marker in _WEASEL)
 
 
-_STATUS = re.compile(r"\s*Статус:[^.]*\.?", re.IGNORECASE)
+# Internal tags of a catalog row: stock status and who it suits ("Повод: маме").
+_STATUS = re.compile(r"\s*(?:Статус|Повод):[^.]*\.?", re.IGNORECASE)
 _HIDDEN = ("не предлагать", "продана", "продан,")
 
 

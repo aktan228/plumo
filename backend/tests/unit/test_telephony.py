@@ -125,6 +125,10 @@ class _Messages:
     async def list_for_customer(self, customer_id, limit: int = 100):
         return [item for item in self.history if item.customer_id == customer_id][-limit:]
 
+    async def supersede_turn(self, prefix: str, keep: str | None = None) -> int:
+        self.superseded = [*getattr(self, "superseded", []), (prefix, keep)]
+        return 0
+
 
 class _Calls:
     def __init__(self) -> None:
@@ -309,3 +313,43 @@ async def test_dialled_number_picks_its_business() -> None:
     # An explicit id wins over the number; an unknown number falls back to the default.
     assert (await agent.resolve_business(first.id, "+996312000002")).id == first.id
     assert (await agent.resolve_business(None, "+996312999999")).id == first.id
+
+
+async def test_whatsapp_phone_number_id_picks_its_business() -> None:
+    from app.application.services.agent_service import AgentService
+
+    first = SimpleNamespace(id=uuid4(), name="Первый", contacts={"voice_numbers": ["106540352242922"]})
+    second = SimpleNamespace(id=uuid4(), name="Второй", contacts={"whatsapp_phone_number_ids": ["106540352242922"]})
+
+    class _Businesses:
+        async def list_all(self):
+            return [first, second]
+
+        async def get(self, business_id):
+            return {first.id: first, second.id: second}.get(business_id)
+
+    agent = object.__new__(AgentService)
+    agent.businesses = _Businesses()
+    agent.default_business_id = None
+    # Meta's ID looks like a phone; the WhatsApp list must win over a phone match.
+    assert (await agent.resolve_business(None, "106540352242922")).id == second.id
+    assert (await agent.resolve_business(None, " 106540352242922 ")).id == second.id
+
+
+def test_request_shape_masks_digits_texts_and_secrets() -> None:
+    from app.api.routes.telephony import _shape
+
+    shape = _shape(
+        {
+            "messages": [
+                {"role": "system", "content": "plumo_caller=+996555111222 plumo_call=conv_1"},
+                {"role": "user", "content": "Квартира за 85000 ещё есть?"},
+            ],
+            "elevenlabs_extra_body": {"caller_id": "996555111222", "api_key": "sk-1"},
+        }
+    )
+    dumped = json.dumps(shape, ensure_ascii=False)
+    assert "555111" not in dumped and "85000" not in dumped and "sk-1" not in dumped
+    assert shape["messages"][1]["content"] == "<text 27>"
+    assert shape["elevenlabs_extra_body"]["caller_id"] == "<12 digits …222>"
+    assert shape["elevenlabs_extra_body"]["api_key"] == "<hidden>"

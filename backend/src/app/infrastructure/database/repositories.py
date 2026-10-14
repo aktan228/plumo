@@ -340,7 +340,7 @@ class MessageRepository:
     async def list_for_conversation(self, conversation_id: UUID) -> list[Message]:
         stmt = (
             select(MessageRow)
-            .where(MessageRow.conversation_id == conversation_id)
+            .where(MessageRow.conversation_id == conversation_id, _not_superseded())
             .order_by(MessageRow.timestamp.asc())
         )
         rows = (await self.session.scalars(stmt)).all()
@@ -349,7 +349,7 @@ class MessageRepository:
     async def list_for_customer(self, customer_id: UUID, limit: int = 100) -> list[Message]:
         stmt = (
             select(MessageRow)
-            .where(MessageRow.customer_id == customer_id)
+            .where(MessageRow.customer_id == customer_id, _not_superseded())
             .order_by(MessageRow.timestamp.desc())
             .limit(limit)
         )
@@ -385,6 +385,40 @@ class MessageRepository:
         )
         row = await self.session.scalar(stmt)
         return _message(row) if row else None
+
+    async def supersede_turn(self, prefix: str, keep: str | None = None) -> int:
+        """Keep one version of a voice turn (`keep`, else the newest); retire the rest with their replies.
+
+        The caller paused, the platform asked for a reply, then the caller went on
+        talking: the same turn comes again with longer text and the first reply is
+        never heard. Rows stay for audit, marked `superseded`, and drop out of history.
+        Idempotent: a reply stored after its question was retired is caught next time.
+        """
+
+        stmt = (
+            select(MessageRow)
+            .where(MessageRow.role == "user", MessageRow.external_id.startswith(prefix, autoescape=True))
+            .order_by(MessageRow.created_at.asc())
+        )
+        versions = list((await self.session.scalars(stmt)).all())
+        stale = [row for row in versions if row.external_id != keep] if keep else versions[:-1]
+        if not stale:
+            return 0
+        ids = [row.external_id for row in stale]
+        replies = await self.session.scalars(
+            select(MessageRow).where(MessageRow.role == "assistant", MessageRow.metadata_json["reply_to"].astext.in_(ids))
+        )
+        marked = 0
+        for row in [*stale, *replies.all()]:
+            if not (row.metadata_json or {}).get("superseded"):
+                row.metadata_json = {**(row.metadata_json or {}), "superseded": True}
+                marked += 1
+        await self.session.flush()
+        return marked
+
+
+def _not_superseded():
+    return MessageRow.metadata_json["superseded"].astext.is_(None)
 
 
 class KnowledgeRepository:

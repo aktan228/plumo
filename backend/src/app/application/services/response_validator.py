@@ -4,6 +4,7 @@ import json
 import re
 
 from app.domain.models import AgentContext, QuestionAssessment, ValidationResult
+from app.domain.spoken_numbers import spoken_to_digits
 from app.domain.text_signals import analyze_message, compact_numbers, contains_any, find_phones, normalize_text
 
 _MEASURE = re.compile(r"(\d{1,4})\s*-?\s*(?:м²|м2|м\b|этаж|комнат)")
@@ -29,10 +30,17 @@ class ResponseValidator:
     def validate(self, response: str, context: AgentContext, extra: str = "") -> ValidationResult:
         allowed = f"{_corpus(context)}\n{extra}"
         allowed_norm = normalize_text(allowed)
-        allowed_numbers = set(compact_numbers(allowed))
-        for number in compact_numbers(response):
-            if number not in allowed_numbers:
-                return ValidationResult(False, "invented_number")
+        allowed_numbers = set(compact_numbers(allowed)) | set(_DIGITS.findall(_join_thousands(allowed_norm)))
+        customer_numbers = set(_DIGITS.findall(_join_thousands(normalize_text(_customer_text(context)))))
+        spoken = _join_thousands(spoken_to_digits(normalize_text(response)))
+        for number in _reply_numbers(response):
+            if number in allowed_numbers:
+                continue
+            # "Понял, до 7000": repeating the customer's own budget is not a fact.
+            # "Есть за 7000" is: agreeing to a price the customer named stays invented.
+            if number in customer_numbers and _BUDGET_ECHO(number).search(spoken):
+                continue
+            return ValidationResult(False, "invented_number")
         for match in _MEASURE.finditer(normalize_text(response)):
             if match.group(1) not in allowed_norm:
                 return ValidationResult(False, "invented_detail")
@@ -88,6 +96,44 @@ def _topic(signals) -> str:
     if signals.contacts:
         return "contacts"
     return "property"
+
+
+_DIGITS = re.compile(r"\d+")
+# A money amount of any length: "300 сом", "150 сомов". Bare short numbers ("2 этаж",
+# "15 роз") are not checked: they are counts, and the measure check covers details.
+_MONEY = re.compile(r"(?<!\d)(\d{2,})\s*(?:сом|kgs|usd|\$|долл|руб|₽|eur|€|тенге|тг\b)")
+
+
+def _BUDGET_ECHO(number: str) -> re.Pattern[str]:
+    return re.compile(rf"(?:бюджет\w*|до|от|в пределах|около|примерно|на сумму|в районе)\s+(?:\d+\s+(?:до|-|–)\s+)?{number}(?!\d)")
+
+
+def _join_thousands(text: str) -> str:
+    previous = None
+    while previous != text:
+        previous = text
+        text = re.sub(r"(?<=\d)\s+(?=\d{3}(?!\d))", "", text)
+    return text
+
+
+def _reply_numbers(response: str) -> set[str]:
+    """Amounts in a reply, whether the model wrote "5200 сом" or "пять тысяч двести сомов".
+
+    The prompt asks for digits, but a voice reply sometimes comes in words, and a
+    price in words must not slip past the check that compares digits.
+    """
+
+    numbers: set[str] = set()
+    for text in (normalize_text(response), spoken_to_digits(normalize_text(response))):
+        joined = _join_thousands(text)
+        numbers.update(compact_numbers(joined))
+        numbers.update(_MONEY.findall(joined))
+    return numbers
+
+
+def _customer_text(context: AgentContext) -> str:
+    said = [message.text for message in context.recent_messages if str(message.role) == "user"]
+    return "\n".join([*said, context.current_message or ""])
 
 
 def _corpus(context: AgentContext) -> str:

@@ -1,6 +1,6 @@
 """ElevenLabs agent config built by the setup script. No network."""
 
-from app.elevenlabs_setup import PROMPT_MARKERS, agent_payload, endpoints, set_env_values
+from app.elevenlabs_setup import PROMPT_MARKERS, agent_payload, endpoints, keep_voice, set_env_values
 from app.infrastructure.telephony.elevenlabs import parse_llm_request
 
 
@@ -28,7 +28,16 @@ def test_agent_points_every_callback_at_plumo() -> None:
         "language": True,
     }
     # Pinned TTS model that speaks Kyrgyz; digits are read out by the platform, not the prompt.
-    assert payload["conversation_config"]["tts"] == {"model_id": "eleven_v4_turbo", "text_normalisation_type": "elevenlabs"}
+    assert payload["conversation_config"]["tts"] == {
+        "model_id": "eleven_v4_turbo",
+        "text_normalisation_type": "elevenlabs",
+        "speed": 1.1,
+    }
+    # One LLM request per finished phrase, and the caller can cut the agent off.
+    assert payload["conversation_config"]["turn"]["speculative_turn"] is False
+    assert payload["conversation_config"]["turn"]["turn_eagerness"] == "eager"
+    assert "interruption" in payload["conversation_config"]["conversation"]["client_events"]
+    assert agent["disable_first_message_interruptions"] is False
     assert endpoints("https://h")["post_call"] == "https://h/api/v1/telephony/elevenlabs/post-call"
 
 
@@ -47,3 +56,24 @@ def test_env_values_replace_and_append(tmp_path) -> None:
     env.write_text("A=1\nELEVENLABS_AGENT_ID=\n# note\n", encoding="utf-8")
     set_env_values(env, {"ELEVENLABS_AGENT_ID": "ag_1", "NEW": "x"})
     assert env.read_text(encoding="utf-8") == "A=1\nELEVENLABS_AGENT_ID=ag_1\n# note\nNEW=x\n"
+
+
+def test_tts_speed_stays_in_platform_range() -> None:
+    def speed(value: float) -> float:
+        return agent_payload(public_url="https://h", llm_token="t", llm_secret_id="s", webhook_id="w", tts_speed=value)[
+            "conversation_config"
+        ]["tts"]["speed"]
+
+    assert speed(1.5) == 1.2
+    assert speed(0.5) == 0.7
+    assert speed(1.15) == 1.15
+
+
+def test_update_keeps_the_voice_picked_in_the_dashboard() -> None:
+    payload = agent_payload(
+        public_url="https://h", llm_token="t", llm_secret_id="s", webhook_id="w", voice_id="male_voice", tts_model="m"
+    )
+    assert payload["conversation_config"]["vad"] == {"background_voice_detection": True}
+    tts = keep_voice(payload)["conversation_config"]["tts"]
+    assert "voice_id" not in tts and "model_id" not in tts
+    assert tts["speed"] == 1.1

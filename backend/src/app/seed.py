@@ -10,6 +10,7 @@ from app.domain.models import Business, Customer, KnowledgeItem, utcnow
 from app.infrastructure.database.models import BusinessRow
 from app.infrastructure.database.repositories import BusinessRepository, CustomerRepository, KnowledgeRepository
 from app.migrate import upgrade_database
+from app.seed_flowers import seed_flowers
 
 DEMO_BUSINESS_ID = UUID("11111111-1111-4111-8111-111111111111")
 APT_CHUI = UUID("22222222-2222-4222-8222-222222222221")
@@ -231,8 +232,10 @@ async def main() -> None:
     runtime = build_runtime(settings)
     async with runtime.session_factory() as session:
         business = await seed(session)
+        flowers = await seed_flowers(session)
         await session.commit()
     print(f"seeded business {business.id} ({business.name})")
+    print(f"seeded business {flowers.id} ({flowers.name}); demo calls use it with DEFAULT_BUSINESS_ID={flowers.id}")
     await runtime.engine.dispose()
 
 

@@ -101,7 +101,22 @@ ADDRESS = ("адрес", "где наход", "находитесь", "как д
 CONTACTS = ("ваш телефон", "ваш номер", "как связать", "контакт")
 AVAILABILITY = ("продае", "доступ", "в наличии", "еще прода", "сатылат", "барбы")
 PRICE = ("цена", "стоит", "сколько", "баа")
-HOT = ("беру", "покупаю", "оформляем", "готов купить", "задаток", "брониру")
+HOT = (
+    "беру",
+    "покупаю",
+    "оформляем",
+    "готов купить",
+    "готов покупать",
+    "готов оплат",
+    "оплачу",
+    "реквизит",
+    "хочу заказать",
+    "заказываю",
+    "оформите",
+    "давайте оформ",
+    "задаток",
+    "брониру",
+)
 # Item details: real estate plus generic product words. Questions about them need data.
 PROPERTY = ("квартир", "комнат", "этаж", "объект", "метраж", "размер", "характеристик", "материал", "комплектац", "гаранти", "доставк")
 CATALOG = (
@@ -117,6 +132,7 @@ RECOMMEND = (
     "посовет",
     "что взять",
     "что выбрать",
+    "что подарить",
     "для двоих",
     "для двух",
     "для троих",
@@ -165,6 +181,22 @@ def find_phones(text: str) -> list[str]:
         if phone and phone not in found:
             found.append(phone)
     return found
+
+
+# "От 5 до 7000", "бюджет где-то 4000", "в пределах 6000": the customer's budget.
+# It is a wish, not a question about a price ("есть за 7000?") that needs data.
+_BUDGET_NUMBER = re.compile(
+    r"(?:бюджет\w*(?:\s+\S+){0,2}?|(?<!\w)до|(?<!\w)от|в пределах|не дороже|не больше|максимум|около|примерно)\s+(\d{4,})"
+)
+
+
+def _budget_numbers(text: str) -> set[str]:
+    joined = normalize_text(text)
+    previous = None
+    while previous != joined:
+        previous = joined
+        joined = re.sub(r"(?<=\d)\s+(?=\d{3}(?!\d))", "", joined)
+    return set(_BUDGET_NUMBER.findall(joined))
 
 
 def compact_numbers(text: str) -> list[str]:
@@ -287,5 +319,5 @@ def analyze_message(text: str) -> MessageSignals:
         property_details=contains_any(normalized, PROPERTY),
         catalog=contains_any(normalized, CATALOG),
         recommend=contains_any(normalized, RECOMMEND),
-        numbers=tuple(compact_numbers(PHONE_RE.sub(" ", text))),
+        numbers=tuple(number for number in compact_numbers(PHONE_RE.sub(" ", text)) if number not in _budget_numbers(text)),
     )
