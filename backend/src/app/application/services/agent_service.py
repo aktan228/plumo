@@ -15,7 +15,7 @@ from app.application.services.handoff_service import evaluate_handoff
 from app.application.services.memory_service import MemoryService, read_unclear_count, write_unclear_count
 from app.application.services.response_validator import ResponseValidator
 from app.correlation import get_correlation_id, get_request_id
-from app.domain.enums import PHONE_CHANNELS, ActionType, Channel, MessageRole, RouteModel
+from app.domain.enums import PHONE_CHANNELS, ActionType, Channel, ConversationMode, InboundKind, MessageRole, RouteModel
 from app.domain.errors import (
     BusinessNotFound,
     CustomerNotFound,
@@ -47,6 +47,7 @@ from app.domain.phrases import (
     fit_for_voice,
     human_phrase,
     unknown_phrase,
+    unsupported_phrase,
     with_ai_disclosure,
 )
 from app.domain.scheduling import has_slot
@@ -157,7 +158,7 @@ class AgentService:
         customer = await self.memory.update_language(customer, language)
         steps.append(f"customer:{customer.id}")
 
-        conversation = await self._conversation(customer.id, message.channel)
+        conversation = await self._conversation(customer.id, message, business.id)
         if message.message_id:
             seen = await self.messages.find_by_external_id(conversation.id, message.message_id)
             if seen is not None:
@@ -183,12 +184,20 @@ class AgentService:
             )
         )
 
-        if self.handoffs is not None and await self.handoffs.find_accepted(conversation.id, since=self._pause_since()):
-            # A manager took this dialog. The message is in history; the agent stays quiet.
-            return _paused_response(customer.id, conversation.id, language, correlation_id, started)
+        conversation, paused = await self._pause_reason(conversation, message)
+        if paused:
+            # A manager owns this dialog, or the agent is off on the connection.
+            # The message is in history; the agent stays quiet.
+            return _paused_response(
+                customer.id, conversation.id, language, correlation_id, started, paused, conversation.mode_version
+            )
+        if message.kind in (InboundKind.start, InboundKind.unsupported):
+            return await self._service_reply(
+                message, business, customer.id, conversation, language, correlation_id, started
+            )
 
         summary = await self.memory.get_summary(customer.id)
-        history = await self.messages.list_for_customer(customer.id, limit=20)
+        history = await self.messages.list_context(customer.id, limit=20)
         knowledge = await self.retriever.retrieve(business.id, message.text)
         context = self.context_builder.build(
             business=business,
@@ -483,6 +492,93 @@ class AgentService:
             language=language,
             correlation_id=correlation_id,
             handoff_id=handoff_id,
+            mode_version=conversation.mode_version,
+            reply_message_id=assistant.id,
+        )
+
+    async def _pause_reason(self, conversation: Conversation, message: InboundMessage) -> tuple[Conversation, str | None]:
+        """Why the agent must not answer this turn, or None.
+
+        A takeover older than MANAGER_PAUSE_HOURS (when > 0) is released here:
+        the dialog goes back to `ai` with a new mode version.
+        """
+
+        if conversation.mode == ConversationMode.human:
+            since = self._pause_since()
+            if since is None:
+                return conversation, "manager_active"
+            released = await self.conversations.release_expired_pause(conversation.id, since)
+            if released is None:
+                return conversation, "manager_active"
+            conversation = released
+            logger.info("manager_pause_expired", extra={"conversation_id": str(conversation.id)})
+        if not message.auto_reply:
+            return conversation, "agent_disabled"
+        return conversation, None
+
+    async def _service_reply(
+        self,
+        message: InboundMessage,
+        business,
+        customer_id: UUID,
+        conversation: Conversation,
+        language: str,
+        correlation_id: str,
+        started: float,
+    ) -> AgentResponse:
+        """Telegram /start and unsupported attachments: a fixed line, no model call.
+
+        The unsupported notice is not repeated back to back, so a customer who
+        sends three photos gets it once.
+        """
+
+        history = await self.messages.list_for_conversation(conversation.id)
+        said_before = any(item.role == MessageRole.assistant for item in history)
+        kind = str(message.kind)
+        if kind == InboundKind.unsupported:
+            last = next((item for item in reversed(history) if item.role == MessageRole.assistant), None)
+            if last is not None and last.metadata.get("service") == InboundKind.unsupported:
+                return _paused_response(
+                    customer_id, conversation.id, language, correlation_id, started, "notice_already_sent",
+                    conversation.mode_version, handoff=False,
+                )
+            text = unsupported_phrase(language)
+        else:
+            text = fallback_phrase("greeting", language, str(conversation.id))
+        if not said_before:
+            text = with_ai_disclosure(text, language, assistant_name(business), business.name)
+        now = utcnow()
+        assistant = Message(
+            id=uuid4(),
+            conversation_id=conversation.id,
+            customer_id=customer_id,
+            role=MessageRole.assistant,
+            text=text,
+            timestamp=now,
+            metadata={"service": kind, "model": f"rules:{kind}", "route": "rules", "handoff": False},
+            created_at=now,
+        )
+        await self.messages.add(assistant)
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        return AgentResponse(
+            response_text=text,
+            customer_id=customer_id,
+            conversation_id=conversation.id,
+            model_used=f"rules:{kind}",
+            route="rules",
+            route_reason=kind,
+            confidence=1.0,
+            actions=[],
+            handoff_required=False,
+            handoff_reason=None,
+            knowledge_sources=[],
+            usage=Usage(0, 0, 0.0, latency_ms),
+            latency_ms=latency_ms,
+            logs=[f"service:{kind}"],
+            language=language,
+            correlation_id=correlation_id,
+            mode_version=conversation.mode_version,
+            reply_message_id=assistant.id,
         )
 
     async def _generate(
@@ -675,20 +771,25 @@ class AgentService:
         # customer into another's history.
         raise BusinessNotFound("business_id is required")
 
-    async def _conversation(self, customer_id: UUID, channel: str) -> Conversation:
-        existing = await self.conversations.get_open(customer_id, channel)
+    async def _conversation(self, customer_id: UUID, message: InboundMessage, business_id: UUID) -> Conversation:
+        existing = await self.conversations.get_open(customer_id, message.channel)
         if existing is not None:
             return existing
         now = utcnow()
         conversation = Conversation(
             id=uuid4(),
             customer_id=customer_id,
-            channel=channel,
+            channel=message.channel,
             started_at=now,
             ended_at=None,
             summary=None,
             created_at=now,
             updated_at=now,
+            business_id=business_id,
+            connection_id=message.connection_id,
+            external_chat_id=message.reply_to,
+            contact_name=message.contact_name,
+            contact_handle=message.contact_handle,
         )
         return await self.conversations.add(conversation)
 
@@ -730,26 +831,39 @@ def _as_assistant_preview(conversation: Conversation, customer_id: UUID, text: s
     )
 
 
-def _paused_response(customer_id: UUID, conversation_id: UUID, language: str, correlation_id: str, started: float) -> AgentResponse:
+def _paused_response(
+    customer_id: UUID,
+    conversation_id: UUID,
+    language: str,
+    correlation_id: str,
+    started: float,
+    reason: str = "manager_active",
+    mode_version: int | None = None,
+    *,
+    handoff: bool | None = None,
+) -> AgentResponse:
     latency_ms = int((time.perf_counter() - started) * 1000)
+    # Only a manager's takeover is a handoff; a switched-off agent is a separate state.
+    handoff = reason == "manager_active" if handoff is None else handoff
     return AgentResponse(
         response_text="",
         customer_id=customer_id,
         conversation_id=conversation_id,
         model_used="none",
-        route="human",
-        route_reason="manager_active",
+        route="human" if reason == "manager_active" else "none",
+        route_reason=reason,
         confidence=1.0,
         actions=[],
-        handoff_required=True,
-        handoff_reason="manager_active",
+        handoff_required=handoff,
+        handoff_reason=reason if handoff else None,
         knowledge_sources=[],
         usage=Usage(0, 0, 0.0, latency_ms),
         latency_ms=latency_ms,
-        logs=["manager_active"],
+        logs=[reason],
         language=language,
         correlation_id=correlation_id,
         send_reply=False,
+        mode_version=mode_version,
     )
 
 

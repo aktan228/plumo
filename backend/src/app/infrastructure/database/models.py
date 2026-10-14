@@ -4,7 +4,20 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Identity,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -88,6 +101,16 @@ class ConversationRow(Base):
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
+    connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("channel_connections.id"), nullable=True, index=True
+    )
+    mode: Mapped[str] = mapped_column(String(16), default="ai", server_default="ai")
+    mode_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    mode_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    external_chat_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    contact_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    contact_handle: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
 class MessageRow(Base):
@@ -95,8 +118,11 @@ class MessageRow(Base):
     # A webhook retried concurrently must not run the agent twice.
     __table_args__ = (
         UniqueConstraint("conversation_id", "external_id", name="uq_messages_conversation_external"),
+        Index("ix_messages_conversation_timestamp", "conversation_id", "timestamp", "seq"),
     )
+    __mapper_args__ = {"eager_defaults": True}
 
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(always=False), unique=True)
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"), index=True)
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id"), index=True)
@@ -211,4 +237,165 @@ class VoiceCallRow(Base):
     cost: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=0)
     metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class OperatorRow(Base):
+    __tablename__ = "operators"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    display_name: Mapped[str] = mapped_column(String(100), default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class OperatorSessionRow(Base):
+    __tablename__ = "operator_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    operator_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("operators.id"), index=True)
+    # sha256 of the cookie value: a database dump does not hand out live sessions.
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ChannelConnectionRow(Base):
+    __tablename__ = "channel_connections"
+    __table_args__ = (
+        UniqueConstraint("business_id", "channel", "external_account_id", name="uq_connection_business_account"),
+        # One live connection of a channel per business, and one business per bot/account.
+        Index(
+            "uq_connection_active_business_channel",
+            "business_id",
+            "channel",
+            unique=True,
+            postgresql_where=text("status <> 'disconnected'"),
+        ),
+        Index(
+            "uq_connection_active_account",
+            "channel",
+            "external_account_id",
+            unique=True,
+            postgresql_where=text("status <> 'disconnected'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
+    channel: Mapped[str] = mapped_column(String(16))
+    credential_ref: Mapped[str] = mapped_column(String(64))
+    auth_method: Mapped[str] = mapped_column(String(32), default="server_credential")
+    external_account_id: Mapped[str] = mapped_column(String(64))
+    display_name: Mapped[str] = mapped_column(String(200), default="")
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(24))
+    agent_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Telegram webhook secret is HMAC(CHANNEL_SECRET_KEY, id + nonce); the secret itself is not stored.
+    webhook_nonce: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    last_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_check_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_error_message: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    details: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    disconnected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class InboundEventRow(Base):
+    __tablename__ = "inbound_events"
+    __table_args__ = (
+        UniqueConstraint("connection_id", "external_event_id", name="uq_inbound_connection_event"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
+    connection_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channel_connections.id"))
+    channel: Mapped[str] = mapped_column(String(16))
+    external_event_id: Mapped[str] = mapped_column(String(128))
+    kind: Mapped[str] = mapped_column(String(24))
+    sender_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    provider_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class OutboundMessageRow(Base):
+    __tablename__ = "outbound_messages"
+    __table_args__ = (
+        UniqueConstraint("business_id", "idempotency_key", name="uq_outbound_business_idempotency"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"), index=True)
+    connection_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("channel_connections.id"), nullable=True)
+    message_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("messages.id"), nullable=True, unique=True)
+    author_role: Mapped[str] = mapped_column(String(16))
+    operator_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("operators.id"), nullable=True)
+    text: Mapped[str] = mapped_column(Text)
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    mode_version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    parts_sent: Mapped[int] = mapped_column(Integer, default=0)
+    provider_message_ids: Mapped[list] = mapped_column(JSONB, default=list)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class JobRow(Base):
+    __tablename__ = "jobs"
+    __table_args__ = (
+        Index("ix_jobs_status_run_at", "status", "run_at"),
+        Index("ix_jobs_ordering_key_id", "ordering_key", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"))
+    # Jobs with one key run one at a time, in id order: one dialog's messages stay in sequence.
+    ordering_key: Mapped[str] = mapped_column(String(200))
+    inbound_event_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("inbound_events.id"), nullable=True)
+    outbound_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("outbound_messages.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(16))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=5)
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ConversationReadRow(Base):
+    """How far an operator has read a dialog. Only moves forward."""
+
+    __tablename__ = "conversation_reads"
+
+    operator_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("operators.id"), primary_key=True)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"), primary_key=True)
+    last_read_seq: Mapped[int] = mapped_column(BigInteger, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -7,6 +7,8 @@ rem   dev db       start local PostgreSQL (downloads once into .tools)
 rem   dev db-stop  stop local PostgreSQL
 rem   dev seed     apply migrations and load the demo business
 rem   dev run      start the API on http://127.0.0.1:8000/docs
+rem   dev worker   start the channel worker (Telegram/Instagram replies), separate window
+rem   dev operator create --email a@b.kg --business "Demo Realty"   dashboard sign-in
 rem   dev demo     chat with the agent in the terminal
 rem   dev test     run all tests
 rem   dev eval     live 10-turn dialog with the real model
@@ -30,6 +32,8 @@ if /i "%~1"=="db" goto db
 if /i "%~1"=="db-stop" goto dbstop
 if /i "%~1"=="seed" goto seed
 if /i "%~1"=="run" goto run
+if /i "%~1"=="worker" goto worker
+if /i "%~1"=="operator" goto operator
 if /i "%~1"=="demo" goto demo
 if /i "%~1"=="test" goto test
 if /i "%~1"=="eval" goto eval
@@ -70,6 +74,15 @@ exit /b %errorlevel%
 :run
 echo Swagger: http://127.0.0.1:8000/docs
 "%PY%" -m uvicorn app.main:app --reload
+exit /b %errorlevel%
+
+:worker
+echo Channel worker: Ctrl+C to stop. Unfinished jobs continue after a restart.
+"%PY%" -m app.worker
+exit /b %errorlevel%
+
+:operator
+"%PY%" -m app.operators %2 %3 %4 %5 %6 %7 %8 %9
 exit /b %errorlevel%
 
 :demo

@@ -342,6 +342,14 @@ def manager_callback_phrase(language: str) -> str:
     return "Вашим вопросом уже занимается менеджер, он скоро вам перезвонит."
 
 
+def unsupported_phrase(language: str) -> str:
+    """Photo, voice or file in a chat: the first version reads text only."""
+
+    if language == "ky":
+        return "Азырынча текст билдирүүлөрдү гана окуй алам. Сурооңузду жазып жибериңизчи."
+    return "Пока я читаю только текстовые сообщения. Напишите, пожалуйста, вопрос текстом."
+
+
 def _pick(variants: tuple[str, ...], seed: str) -> str:
     """Stable variety: the same turn gets the same line, different turns rotate."""
 

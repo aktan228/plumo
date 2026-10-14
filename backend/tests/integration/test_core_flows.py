@@ -26,12 +26,14 @@ async def test_manager_takeover_pauses_agent_until_resolved(client):
     assert paused["response_text"] == ""
     assert paused["route_reason"] == "manager_active"
 
+    # A dialog that came through /messages has no connected channel to deliver through:
+    # the dashboard refuses instead of recording a reply nobody will receive.
     manager = await client.post(
         f"/api/v1/conversations/{paused['conversation_id']}/messages",
-        json={"text": "Здравствуйте, это Азамат. Чем помочь?", "author": "Азамат"},
+        json={"text": "Здравствуйте, это Азамат. Чем помочь?", "idempotency_key": "manager-reply-0001"},
     )
-    assert manager.status_code == 200, manager.text
-    assert manager.json()["role"] == "manager"
+    assert manager.status_code == 422, manager.text
+    assert manager.json()["code"] == "channel_not_connected"
 
     assert (await client.post(f"/api/v1/handoffs/{handoff_id}/resolve")).status_code == 200
     back = await _send(client, "Еще продается квартира за 85000?")
@@ -39,7 +41,13 @@ async def test_manager_takeover_pauses_agent_until_resolved(client):
     assert "85 000" in back["response_text"]
 
     history = (await client.get(f"/api/v1/customers/{back['customer_id']}/history")).json()
-    assert [item["role"] for item in history["messages"]].count("manager") == 1
+    roles = [item["role"] for item in history["messages"]]
+    assert roles.count("manager") == 0
+    # Takeover and return are visible in history as events, not as customer or agent lines.
+    assert [item["metadata"].get("event") for item in history["messages"] if item["role"] == "system"] == [
+        "takeover",
+        "resume",
+    ]
 
 
 async def test_webhook_retry_is_answered_once(client):

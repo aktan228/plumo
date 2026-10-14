@@ -15,3 +15,5 @@ htmlcov/
 .coverage
 .tools/
 .pgdata/
+# Server-side channel tokens (see channel-credentials.example.json)
+channel-credentials.json

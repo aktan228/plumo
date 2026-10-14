@@ -83,12 +83,40 @@ class Settings(BaseSettings):
     voice_platform: str = "elevenlabs"
     # Platform price per call minute, from the ElevenLabs plan. 0 = unknown.
     voice_usd_per_minute: float = 0.0
-    # Comma-separated origins allowed to call the API from a browser (dashboard).
+    # Comma-separated origins allowed to call the API from a browser. The dashboard goes
+    # through the Next.js server (BFF), so a stand needs none.
     cors_origins: str = ""
+    # development: open API without PLUMO_API_KEY, mock channel endpoint on.
+    # stand / production: PLUMO_API_KEY and CHANNEL_SECRET_KEY required, mock endpoint off.
+    app_env: str = "development"
+    # Public HTTPS address of this API for Telegram webhooks, e.g. https://plumo.example.kg.
+    public_base_url: str = ""
+    # JSON file with server-side channel credentials (see infrastructure/channels/credentials.py).
+    channel_credentials_file: str = ""
+    instagram_api_version: str = "v25.0"
+    channel_send_timeout_s: float = 15.0
+    # POST /api/v1/channels/{channel}/events: mock adapters for local tests only.
+    mock_channel_events: bool = True
+    # Operator session lifetime in the dashboard.
+    session_ttl_hours: float = 12.0
+    worker_concurrency: int = 4
+    worker_poll_interval_s: float = 0.5
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    @property
+    def is_development(self) -> bool:
+        return self.app_env.strip().lower() in ("", "dev", "development", "local", "test")
+
+    @property
+    def mock_channel_events_enabled(self) -> bool:
+        return self.is_development and self.mock_channel_events
+
+    @property
+    def webhook_base_url(self) -> str:
+        return self.public_base_url.strip().rstrip("/")
 
     @property
     def small_model_enabled(self) -> bool:

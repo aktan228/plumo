@@ -79,6 +79,19 @@ class Conversation:
     summary: str | None
     created_at: datetime
     updated_at: datetime
+    business_id: UUID | None = None
+    # Channel connection the dialog came through (Telegram bot, Instagram account).
+    connection_id: UUID | None = None
+    # "ai" or "human". mode_version grows on every switch: a reply prepared
+    # under an older version is not sent.
+    mode: str = "ai"
+    mode_version: int = 0
+    mode_changed_at: datetime | None = None
+    # Where the channel adapter sends replies: Telegram chat id, Instagram IGSID.
+    external_chat_id: str | None = None
+    # As the channel shows the customer. Never invented when the channel gives none.
+    contact_name: str | None = None
+    contact_handle: str | None = None
 
 
 @dataclass(slots=True)
@@ -91,6 +104,8 @@ class Message:
     timestamp: datetime
     metadata: dict[str, Any]
     created_at: datetime
+    # Insertion order in the database; stable tie-breaker and the operator's read cursor.
+    seq: int | None = None
 
 
 @dataclass(slots=True)
@@ -119,6 +134,15 @@ class InboundMessage:
     business_id: UUID | None = None
     correlation_id: str | None = None
     request_id: str | None = None
+    # Set by the channel worker, never by a payload: the connection proves the business.
+    connection_id: UUID | None = None
+    # "text", "start" (Telegram /start) or "unsupported" (photo, voice...): the last two skip the model.
+    kind: str = "text"
+    # False: store the message, do not answer (agent switched off on the connection).
+    auto_reply: bool = True
+    reply_to: str | None = None
+    contact_name: str | None = None
+    contact_handle: str | None = None
 
 
 @dataclass(slots=True)
@@ -322,6 +346,10 @@ class AgentResponse:
     send_reply: bool = True
     # True: the channel re-delivered a message already answered.
     duplicate: bool = False
+    # Dialog mode version the reply was prepared under; delivery checks it again before sending.
+    mode_version: int | None = None
+    # The stored assistant message, so a channel worker can tie its delivery to it.
+    reply_message_id: UUID | None = None
 
 
 @dataclass(slots=True)
@@ -429,3 +457,117 @@ class CustomerHistory:
     conversations: list[Conversation]
     messages: list[Message]
     summary: CustomerSummary | None
+
+
+@dataclass(slots=True)
+class Operator:
+    """A team member who signs in to the dashboard. Sees one business."""
+
+    id: UUID
+    business_id: UUID
+    email: str
+    display_name: str
+    active: bool
+    created_at: datetime
+
+
+@dataclass(slots=True)
+class OperatorSession:
+    id: UUID
+    operator_id: UUID
+    business_id: UUID
+    expires_at: datetime
+
+
+@dataclass(slots=True)
+class ChannelConnection:
+    """One Telegram bot or Instagram account linked to one business.
+
+    The secret is not here: `credential_ref` names a server-side credential.
+    """
+
+    id: UUID
+    business_id: UUID
+    channel: str
+    credential_ref: str
+    external_account_id: str
+    display_name: str
+    username: str | None
+    status: str
+    agent_enabled: bool
+    version: int
+    created_at: datetime
+    updated_at: datetime
+    auth_method: str = "server_credential"
+    webhook_nonce: str | None = None
+    last_check_at: datetime | None = None
+    last_check_ok: bool | None = None
+    last_event_at: datetime | None = None
+    last_error_code: str | None = None
+    last_error_message: str | None = None
+    last_error_at: datetime | None = None
+    details: dict[str, Any] = field(default_factory=dict)
+    disconnected_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class InboundEvent:
+    """A webhook event saved before the provider gets 2xx. Only what processing needs is kept."""
+
+    id: UUID
+    business_id: UUID
+    connection_id: UUID
+    channel: str
+    external_event_id: str
+    kind: str
+    status: str
+    received_at: datetime
+    sender_id: str | None = None
+    provider_message_id: str | None = None
+    text: str | None = None
+    data: dict[str, Any] = field(default_factory=dict)
+    provider_time: datetime | None = None
+    processed_at: datetime | None = None
+    error_code: str | None = None
+
+
+@dataclass(slots=True)
+class OutboundMessage:
+    """One reply to deliver: an agent answer or a manager's message from the dashboard."""
+
+    id: UUID
+    business_id: UUID
+    conversation_id: UUID
+    connection_id: UUID | None
+    message_id: UUID | None
+    author_role: str
+    text: str
+    idempotency_key: str
+    mode_version: int
+    status: str
+    attempts: int
+    created_at: datetime
+    updated_at: datetime
+    operator_id: UUID | None = None
+    parts_sent: int = 0
+    provider_message_ids: list[str] = field(default_factory=list)
+    error_code: str | None = None
+    error_message: str | None = None
+    sent_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class Job:
+    id: int
+    kind: str
+    business_id: UUID
+    ordering_key: str
+    status: str
+    attempts: int
+    max_attempts: int
+    run_at: datetime
+    inbound_event_id: UUID | None = None
+    outbound_message_id: UUID | None = None
+    locked_until: datetime | None = None
+    locked_by: str | None = None
+    last_error: str | None = None
