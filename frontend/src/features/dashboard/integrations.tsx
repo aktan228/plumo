@@ -18,6 +18,7 @@ import { useLanguage } from "@/lib/i18n";
 import { apiErrorText } from "./api-messages";
 import { formatTime } from "./dialogue-model";
 import { canConnect, cardStatus, missingRequirements, statusLabel, statusTone } from "./integration-model";
+import { TelegramSetup } from "./telegram-setup";
 import { WhatsAppSetup } from "./whatsapp-setup";
 import { initialWhatsAppDraft } from "./whatsapp-setup-model";
 
@@ -155,8 +156,8 @@ export function Integrations({ onDialogues }: { onDialogues: () => void }) {
     }
   }
 
-  async function connect(item: ChannelIntegration, replaceWebhook = false) {
-    const ref = credential[item.channel] ?? item.credentials[0]?.ref;
+  async function connect(item: ChannelIntegration, replaceWebhook = false, chosenRef?: string) {
+    const ref = chosenRef ?? credential[item.channel] ?? item.credentials[0]?.ref;
     if (!ref) return;
     const done = await run(`connect:${item.channel}`, item.channel, () => api<Connection>(`integrations/${item.channel}/connect`, { method: "POST", body: { credential_ref: ref, replace_webhook: replaceWebhook } }), c.connectedOk);
     if (done) { setActive(null); focusTitle(); }
@@ -168,6 +169,7 @@ export function Integrations({ onDialogues }: { onDialogues: () => void }) {
   return <section ref={containerRef} className="h-full overflow-y-auto bg-plumo-line/15 px-5 py-6 sm:px-8 sm:py-8">
     <div className="mx-auto max-w-[1120px]">
       {active === "whatsapp" ? <WhatsAppSetup draft={whatsappDraft} onChange={setWhatsappDraft} onBack={close} onSave={() => setWhatsappSaved(true)} />
+        : selected?.channel === "telegram" ? <TelegramSetup item={selected} busy={busy === "connect:telegram"} notice={notice?.channel === "telegram" ? notice : null} onBack={close} onConnect={(ref, replace) => connect(selected, replace, ref)} />
         : selected ? renderConnect(selected)
         : <>
           <h1 ref={titleRef} tabIndex={-1} className="m-0 text-2xl font-semibold tracking-tight outline-none">{c.title}</h1>
