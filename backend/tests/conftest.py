@@ -39,6 +39,11 @@ from app.seed import seed
 from app.worker import Worker
 from channel_stand import APP_SECRET, IG_TOKEN, TG_TOKEN, FakeProviders, Stand
 
+# A developer's backend/.env may describe a live stand (APP_ENV=stand, MANAGER_PAUSE_HOURS=0).
+# Tests run against the defaults the code documents, whatever that file says.
+os.environ["APP_ENV"] = "development"
+os.environ["MANAGER_PAUSE_HOURS"] = "24"
+
 
 def test_database_url() -> str:
     explicit = os.environ.get("TEST_DATABASE_URL")
