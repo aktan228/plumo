@@ -4,7 +4,7 @@ Plumo — ядро AI-менеджера по продажам. Один кли�
 
 Подключить бэк к кабинету, каналам или серверу: [FULLSTACK.md](FULLSTACK.md). Коротко для лида: [LEAD.md](LEAD.md). Живая модель или канал: [INTEGRATION.md](INTEGRATION.md). Звонки: [VOICE.md](VOICE.md). Какую модель брать: [docs/MODELS.md](docs/MODELS.md), сравнить модели на 55 сценариях: [docs/BENCH.md](docs/BENCH.md). Как агент разговаривает: [docs/CONVERSATION.md](docs/CONVERSATION.md). Что подключить и купить: [docs/CHECKLIST.md](docs/CHECKLIST.md).
 
-Текстовая модель — Claude Haiku 5.5 через OpenRouter, thinking выключен, запасная Haiku 4.5: в 2 раза быстрее и в 6 раз дешевле Gemini 3.8 Flash на наших замерах ([docs/MODELS.md](docs/MODELS.md)). Агента зовут Плюмо, он всегда говорит, что он ИИ; что продаёт бизнес — из `businesses.profile`, не из кода. Малой модели пока нет: её реплики отвечает большая. Телефонные звонки идут через ElevenLabs Agents, Plumo подключён к нему как Custom LLM: [VOICE.md](VOICE.md). Порты STT/TTS для голосовых сообщений в чатах пока mock. Каналы WhatsApp/Telegram ещё не живые.
+Текстовая модель — Claude Haiku 5.5 через OpenRouter, thinking выключен, запасная Haiku 4.5: в 2 раза быстрее и в 6 раз дешевле Gemini 3.8 Flash на наших замерах ([docs/MODELS.md](docs/MODELS.md)). Агента зовут Плюмо, он всегда говорит, что он ИИ; что продаёт бизнес — из `businesses.profile`, не из кода. Малой модели пока нет: её реплики отвечает большая. Телефонные звонки идут через ElevenLabs Agents, Plumo подключён к нему как Custom LLM: [VOICE.md](VOICE.md). Порты STT/TTS для голосовых сообщений в чатах пока mock. Telegram-бот и Instagram Direct подключены через webhook и worker, проверены тестами на фейковых API; живая проверка ещё не проведена, WhatsApp не подключён. Запуск, настройка и политика надёжности: [../docs/dashboard-channels.md](../docs/dashboard-channels.md).
 
 ## Архитектура
 
@@ -181,19 +181,26 @@ Plumo > У меня нет информации о рассрочке. Я пер
 | Метод | Путь | Зачем |
 | --- | --- | --- |
 | POST | `/api/v1/messages` | нормализованное сообщение → `AgentResponse` |
-| POST | `/api/v1/channels/{channel}/events` | сырое mock-событие канала |
+| POST | `/api/v1/channels/{channel}/events` | сырое mock-событие канала (только `APP_ENV=development`) |
+| POST | `/api/v1/webhooks/telegram/{connection_id}` | Telegram Bot API, проверка `X-Telegram-Bot-Api-Secret-Token` |
+| GET · POST | `/api/v1/webhooks/instagram` | Meta: `hub.challenge` и события с `X-Hub-Signature-256` |
+| POST | `/api/v1/auth/login` · `/logout`, GET `/auth/me` | вход оператора кабинета (вызывает сервер Next.js) |
+| GET · POST · PATCH | `/api/v1/integrations…` | подключения Telegram/Instagram бизнеса |
+| GET | `/api/v1/conversations` | список диалогов: поиск, фильтры, курсор |
+| POST | `/api/v1/conversations/{id}/takeover` · `/resume` · `/messages` · `/read` | взять, вернуть, ответить менеджером, прочитано |
+| GET · POST | `/api/v1/outbound-messages/{id}` · `/resolve` | статус отправки и ручное решение |
 | POST | `/api/v1/voice/transcribe` | mock STT по `audio_id` |
 | POST | `/api/v1/voice/respond` | аудио → агент → mock audio id |
 | GET | `/api/v1/customers/{id}` | карточка |
 | GET | `/api/v1/customers/{id}/history` | история по всем каналам |
-| GET | `/api/v1/conversations/{id}` | один диалог |
+| GET | `/api/v1/conversations/{id}` | диалог для кабинета: сообщения со статусами доставки, карточка, режим |
 | GET | `/api/v1/handoffs` | очередь человеку |
 | POST | `/api/v1/handoffs/{id}/accept` | взять диалог |
 | POST | `/api/v1/handoffs/{id}/resolve` | закрыть передачу |
 | GET | `/api/v1/knowledge` | база знаний |
 | POST | `/api/v1/knowledge` | добавить факт |
 | POST | `/api/v1/meetings` | создать встречу |
-| GET | `/api/v1/metrics` | сводка, включая минуты и стоимость звонков; `?business_id=` — по одному бизнесу |
+| GET | `/api/v1/metrics` | сводка бизнеса оператора, включая минуты и стоимость звонков |
 | POST | `/api/v1/telephony/elevenlabs/v1/chat/completions` | реплика звонящего (Custom LLM, SSE) |
 | POST | `/api/v1/telephony/elevenlabs/initiation` | приветствие входящего звонка |
 | POST | `/api/v1/telephony/elevenlabs/post-call` | итог звонка (HMAC) |
@@ -212,9 +219,9 @@ Plumo > У меня нет информации о рассрочке. Я пер
 
 Каждый ответ несёт заголовки `X-Correlation-Id` и `X-Request-Id`. Тот же id пишется в лог и в `interaction_logs`, так что один запрос можно пройти от API до роутера, модели и базы.
 
-Если задан `PLUMO_API_KEY`, все `/api/v1/*` кроме телефонии требуют заголовок `X-API-Key`.
+Если задан `PLUMO_API_KEY`, все `/api/v1/*` кроме телефонии и webhook требуют заголовок `X-API-Key`. Маршруты кабинета (`/auth/me`, `/customers`, `/conversations`, `/handoffs`, `/knowledge`, `/meetings`, `/metrics`, `/integrations`, `/outbound-messages`) дополнительно требуют сессию оператора (`Authorization: Bearer`, ставит сервер Next.js) и видят только его бизнес; чужой id отвечает 404. Операторов создаёт `python -m app.operators create`.
 
-Ошибки приходят JSON-ом: `error`, `message`, `correlation_id`. Нет ключа — 401. Пустой текст — 422 `invalid_message`. Нет клиента — 404. Незарегистрированный провайдер в production — 503.
+Ошибки приходят JSON-ом: `error` и `code` (одно значение), `message`, `correlation_id`; 500 — `internal_error` без traceback. Нет ключа — 401. Пустой текст — 422 `invalid_message`. Нет клиента — 404. Незарегистрированный провайдер в production — 503.
 
 Известные mock audio id: `mock_audio_apt`, `mock_audio_installment`, `mock_audio_hello`, `mock_audio_meeting`, `mock_audio_manager`.
 
@@ -298,7 +305,7 @@ Plumo > У меня нет информации о рассрочке. Я пер
 
 `evaluate_handoff` решает, звать ли человека. Поводы: клиент просит человека, горячий лид, готовность к встрече, вопрос вне базы, небезопасный ответ, недовольство, два непонятых хода подряд.
 
-Запись `HandoffRequest` получает статус `PENDING`, затем `ACCEPTED` и `RESOLVED`. `MockHandoffProvider` только пишет лог. Telegram-уведомление потом реализуется тем же портом `notify`.
+Запись `HandoffRequest` получает статус `PENDING`, затем `ACCEPTED` и `RESOLVED`. Кто отвечает в диалоге, решает `conversations.mode` (`ai` / `human`) с версией `mode_version`: «Взять диалог» принимает передачу или создаёт новую и переводит диалог в `human`, «Вернуть агенту» закрывает передачи и возвращает `ai` (`dialog_service.py`). Доставка ответа сверяет версию под блокировкой диалога. `MockHandoffProvider` только пишет лог; `TelegramHandoffProvider` шлёт карточку менеджеру отдельным ботом.
 
 Встреча при этом всё равно сохраняется локально со статусом `PROPOSED`. Календаря нет.
 
@@ -307,8 +314,8 @@ Plumo > У меня нет информации о рассрочке. Я пер
 - малая и большая LLM (`mock_small` = 0.001, `mock_big` = 0.01 за ответ)
 - STT и TTS
 - детектор языка (словарная эвристика за интерфейсом)
-- уведомление человеку
-- каналы
+- уведомление человеку (или Telegram-бот менеджеров при `HANDOFF_PROVIDER=telegram`)
+- каналы WhatsApp и голосовые сообщения в чатах (Telegram и Instagram — настоящие адаптеры)
 - календарь внутри `schedule_meeting`
 
 Не mock, а настоящая логика на Postgres: клиенты, merge, память, база знаний, роутер, валидатор фактов, handoff, встречи, логи, метрики, API.
@@ -320,7 +327,7 @@ pytest
 .\dev.cmd lint     # ruff: только ошибки, не стиль
 ```
 
-Нужен запущенный Postgres. Юнит-тесты роутера и валидатора базу не спрашивают, но фикстуры интеграционных тестов поднимают `plumo_test`.
+Нужен запущенный Postgres. Юнит-тесты роутера и валидатора базу не спрашивают, но фикстуры интеграционных тестов поднимают `plumo_test`. Каналы end-to-end (webhook → worker → агент → отправка, гонки, повторы, изоляция): `tests/integration/test_channels.py`, Telegram и Meta там подменены на уровне HTTP (`tests/channel_stand.py`).
 
 ## Конфигурация
 
@@ -328,4 +335,4 @@ pytest
 
 `ROUTER=rules` — текущий роутер. `DEFAULT_LANGUAGE=ru`. `DEFAULT_BUSINESS_ID` необязателен: если бизнес в базе один, берётся он. Если бизнесов несколько, а `business_id` не передан и не задан по умолчанию, запрос получает 404 `business_not_found`: угадывать бизнес нельзя, иначе клиент одной компании попадёт в историю другой.
 
-`SMALL_MODEL_PROVIDER=none` (или `mock` в production) — малой модели нет, её реплики отвечает большая; в `route_reason` остаётся метка роутера с суффиксом `:no_small`, по ней потом учится классификатор. `MANAGER_PAUSE_HOURS=24` — сколько часов принятая и не закрытая передача держит агента молча; 0 — до закрытия менеджером. `STT_LOW_CONFIDENCE=0.6` — реплика с меньшей уверенностью распознавания идёт в большую модель.
+`SMALL_MODEL_PROVIDER=none` (или `mock` в production) — малой модели нет, её реплики отвечает большая; в `route_reason` остаётся метка роутера с суффиксом `:no_small`, по ней потом учится классификатор. `MANAGER_PAUSE_HOURS=24` — сколько часов режим менеджера держит агента молча, после чего диалог сам возвращается агенту; 0 — до «Вернуть агенту» (так на стенде). `STT_LOW_CONFIDENCE=0.6` — реплика с меньшей уверенностью распознавания идёт в большую модель.

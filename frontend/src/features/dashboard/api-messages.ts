@@ -1,0 +1,81 @@
+// Plain-language texts for API error codes. The server message is a fallback, never a stack trace.
+type Locale = "ru" | "en";
+
+const texts: Record<Locale, Record<string, string>> = {
+  ru: {
+    network_error: "Нет связи с сервером. Проверьте интернет и повторите.",
+    backend_unavailable: "Сервер Plumo недоступен. Повторите через минуту.",
+    internal_error: "Ошибка на сервере. Сообщите команде код запроса.",
+    not_authenticated: "Сессия завершилась. Войдите снова.",
+    forbidden: "Действие запрещено.",
+    too_many_requests: "Слишком много попыток. Подождите и повторите.",
+    conversation_not_found: "Диалог не найден или недоступен.",
+    integration_not_found: "Интеграция не найдена.",
+    outbound_not_found: "Отправка не найдена.",
+    credential_not_found: "Для этого бизнеса нет такой серверной конфигурации.",
+    credential_empty: "В серверной конфигурации нет токена. Его нужно положить на сервер.",
+    public_url_missing: "На сервере не задан публичный HTTPS-адрес (PUBLIC_BASE_URL).",
+    secret_key_missing: "На сервере не задан CHANNEL_SECRET_KEY.",
+    instagram_app_not_configured: "На сервере не заданы INSTAGRAM_APP_SECRET и INSTAGRAM_VERIFY_TOKEN.",
+    invalid_credential: "Токен недействителен или отозван. Замените его на сервере.",
+    missing_permission: "У приложения Meta нет нужных прав или роли для этого аккаунта.",
+    account_in_use: "Этот бот или аккаунт уже подключён к другому бизнесу.",
+    already_connected: "Уже подключён другой аккаунт этого канала. Сначала отключите его.",
+    webhook_conflict: "Webhook бота указывает на другой адрес.",
+    webhook_not_set: "Telegram не подтвердил webhook. Повторите проверку.",
+    integration_disconnected: "Интеграция отключена. Подключите её снова.",
+    version_conflict: "Настройки изменились в другой вкладке. Обновили данные — повторите действие.",
+    mode_conflict: "Режим диалога изменился: обновите диалог.",
+    text_too_long: "Текст длиннее, чем разрешает канал.",
+    window_closed: "Окно ответа Instagram закрыто: клиент писал более 24 часов назад.",
+    channel_not_connected: "У диалога нет подключённого канала.",
+    channel_disconnected: "Канал отключён.",
+    channel_action_required: "Канал требует действия в «Интеграциях».",
+    idempotency_key_reused: "Повторите отправку.",
+    delivery_not_resolvable: "Для этой отправки действие уже недоступно.",
+    channel_unavailable: "Сервис канала временно недоступен. Повторите позже.",
+    invalid_message: "Проверьте введённые данные.",
+  },
+  en: {
+    network_error: "No connection to the server. Check the internet and retry.",
+    backend_unavailable: "The Plumo server is unavailable. Retry in a minute.",
+    internal_error: "Server error. Give the team the request code.",
+    not_authenticated: "Your session has ended. Sign in again.",
+    forbidden: "This action is not allowed.",
+    too_many_requests: "Too many attempts. Wait and retry.",
+    conversation_not_found: "The conversation was not found or is not available.",
+    integration_not_found: "The integration was not found.",
+    outbound_not_found: "The delivery was not found.",
+    credential_not_found: "There is no such server configuration for this business.",
+    credential_empty: "The server configuration has no token. Put it on the server.",
+    public_url_missing: "The server has no public HTTPS address (PUBLIC_BASE_URL).",
+    secret_key_missing: "CHANNEL_SECRET_KEY is not set on the server.",
+    instagram_app_not_configured: "INSTAGRAM_APP_SECRET and INSTAGRAM_VERIFY_TOKEN are not set on the server.",
+    invalid_credential: "The token is invalid or revoked. Replace it on the server.",
+    missing_permission: "The Meta app lacks permissions or a role for this account.",
+    account_in_use: "This bot or account is connected to another business.",
+    already_connected: "Another account of this channel is connected. Disconnect it first.",
+    webhook_conflict: "The bot's webhook points to another address.",
+    webhook_not_set: "Telegram did not confirm the webhook. Run the check again.",
+    integration_disconnected: "The integration is disconnected. Connect it again.",
+    version_conflict: "Settings changed in another tab. Data reloaded — retry.",
+    mode_conflict: "The conversation mode changed: reload it.",
+    text_too_long: "The text is longer than the channel allows.",
+    window_closed: "The Instagram reply window is closed: the customer wrote over 24 hours ago.",
+    channel_not_connected: "This conversation has no connected channel.",
+    channel_disconnected: "The channel is disconnected.",
+    channel_action_required: "The channel needs attention in Integrations.",
+    idempotency_key_reused: "Retry sending.",
+    delivery_not_resolvable: "This action is no longer available for the delivery.",
+    channel_unavailable: "The channel service is temporarily unavailable. Retry later.",
+    invalid_message: "Check the entered data.",
+  },
+};
+
+export function apiErrorText(code: string, locale: Locale, fallback = ""): string {
+  if (texts[locale][code]) return texts[locale][code];
+  if (code.endsWith("_unreachable") || code.endsWith("_timeout") || code.endsWith("_server_error") || code.endsWith("_rate_limited")) {
+    return texts[locale].channel_unavailable;
+  }
+  return fallback || (locale === "ru" ? "Не получилось. Повторите." : "Something went wrong. Retry.");
+}

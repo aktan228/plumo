@@ -18,18 +18,48 @@ function AuthIcon({ type }: { type: "email" | "eye" | "eye-off" | "name" | "glob
 const inputClass = "h-[46px] w-full rounded-xl border border-solid border-plumo-line bg-transparent px-3.5 pr-12 font-[inherit] text-[18px] text-plumo-ink shadow-sm placeholder:text-plumo-muted focus:border-plumo-blue sm:text-[20px]";
 const labelClass = "text-[17px] leading-6 text-plumo-ink";
 
+type Status = "form" | "google" | "signing" | "wrong" | "locked" | "offline" | null;
+
+// Only a same-site path is allowed after sign-in, never an external address.
+function nextPath(): string {
+  const value = new URLSearchParams(window.location.search).get("next") ?? "";
+  return value.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
+}
+
 export function AuthScreen({ mode }: { mode: "login" | "register" | "reset" }) {
   const { t, locale } = useLanguage();
   const [showPassword, setShowPassword] = useState(false);
-  const [status, setStatus] = useState<"form" | "google" | null>(null);
+  const [status, setStatus] = useState<Status>(null);
   const register = mode === "register";
   const reset = mode === "reset";
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // UI only: never persist or transmit credentials before a backend exists.
-    setStatus("form");
+    if (mode !== "login") {
+      // No public registration or self-service reset: accounts are issued by the team.
+      setStatus("form");
+      return;
+    }
+    const form = new FormData(event.currentTarget);
+    setStatus("signing");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-plumo-request": "1" },
+        credentials: "same-origin",
+        body: JSON.stringify({ email: String(form.get("email") ?? ""), password: String(form.get("password") ?? "") }),
+      });
+      if (response.ok) {
+        window.location.assign(nextPath());
+        return;
+      }
+      setStatus(response.status === 429 ? "locked" : response.status === 401 || response.status === 422 ? "wrong" : "offline");
+    } catch {
+      setStatus("offline");
+    }
   }
+  const message = status === "google" ? t.googleUnavailable : status === "form" ? (reset ? t.resetUnavailable : t.unavailable)
+    : status === "wrong" ? t.loginWrong : status === "locked" ? t.loginLocked : status === "offline" ? t.loginOffline : "";
 
   return <div className="min-h-svh bg-plumo-line/15 text-plumo-ink">
     <header className="flex h-[72px] items-center justify-between px-4 sm:px-8">
@@ -71,14 +101,14 @@ export function AuthScreen({ mode }: { mode: "login" | "register" | "reset" }) {
             {register && <span className="mt-1 text-[13px] text-plumo-muted" id="password-hint">{t.passwordHint}</span>}
           </div>}
           {mode === "login" && <p className="m-0 text-[17px] leading-6">{t.forgot}{" "}<Link className="hover:underline hover:underline-offset-4" href="/forgot-password">{t.recover}</Link></p>}
-          <button className="flex min-h-[46px] w-full cursor-pointer items-center justify-center rounded-xl border border-solid border-plumo-ink bg-plumo-ink px-4 py-2 font-[inherit] text-[18px] font-medium text-white shadow-sm transition-opacity hover:opacity-85" type="submit">{reset ? t.resetAction : register ? t.register : t.login}</button>
+          <button className="flex min-h-[46px] w-full cursor-pointer items-center justify-center rounded-xl border border-solid border-plumo-ink bg-plumo-ink px-4 py-2 font-[inherit] text-[18px] font-medium text-white shadow-sm transition-opacity hover:opacity-85 disabled:cursor-wait disabled:opacity-60" type="submit" disabled={status === "signing"}>{reset ? t.resetAction : register ? t.register : status === "signing" ? t.signingIn : t.login}</button>
         </form>
         {reset ? <p className="mb-0 mt-7 text-center text-[17px]"><Link className="hover:underline hover:underline-offset-4" href="/login">{t.backLogin}</Link></p> : <>
           <p className="mb-0 mt-7 text-center text-[17px] leading-6">{register ? t.hasAccount : t.noAccount}{" "}<Link className="hover:underline hover:underline-offset-4" href={register ? "/login" : "/register"}>{register ? t.login : t.registerTitle}</Link></p>
           <div className="my-7 flex items-center gap-3 text-[14px] uppercase text-plumo-muted"><span className="h-px flex-1 bg-plumo-line" /><span>{t.or}</span><span className="h-px flex-1 bg-plumo-line" /></div>
           <button type="button" onClick={() => setStatus("google")} className="flex min-h-[46px] w-full cursor-pointer items-center justify-center gap-4 rounded-xl border border-solid border-plumo-line bg-white px-4 py-2 font-[inherit] text-[18px] text-plumo-ink shadow-sm transition-colors hover:bg-plumo-line/25"><AuthIcon type="google" />{t.googleLogin}</button>
         </>}
-        <p className="mb-0 mt-4 text-center text-[13px] leading-relaxed text-plumo-muted empty:hidden" role="status" aria-live="polite">{status === "google" ? t.googleUnavailable : status === "form" ? (reset ? t.resetUnavailable : t.unavailable) : ""}</p>
+        <p className={`mb-0 mt-4 text-center text-[13px] leading-relaxed empty:hidden ${status === "wrong" || status === "locked" || status === "offline" ? "text-red-700" : "text-plumo-muted"}`} role="status" aria-live="polite">{message}</p>
         {!reset && <p className="mb-0 mt-5 text-center text-[13px] text-plumo-muted"><Link href="/dashboard" className="hover:text-plumo-blue hover:underline hover:underline-offset-4">{locale === "en" ? "Open workspace" : "Открыть кабинет"}</Link></p>}
       </section>
     </main>

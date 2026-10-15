@@ -46,7 +46,7 @@ python -m app.seed && uvicorn app.main:app --reload
 ### Проверить ядро целиком
 
 ```powershell
-.\dev.cmd test                       # 69 тестов, нужна база
+.\dev.cmd test                       # все тесты, нужна база
 .\dev.cmd eval                       # живая модель: 10 реплик, тон, цена, задержка
 ```
 
@@ -55,14 +55,16 @@ python -m app.seed && uvicorn app.main:app --reload
 | Переменная | Зачем | Пример |
 | --- | --- | --- |
 | `DATABASE_URL` | Postgres, async-драйвер | `postgresql+asyncpg://plumo:plumo@db:5432/plumo` |
-| `PLUMO_API_KEY` | ключ для `/api/v1/*`, заголовок `X-API-Key`. **На сервере обязателен** | длинная случайная строка |
-| `CORS_ORIGINS` | адреса фронта через запятую | `https://app.plumo.kg,http://localhost:3000` |
+| `APP_ENV` | `stand` / `production`: без `PLUMO_API_KEY` и `CHANNEL_SECRET_KEY` API не стартует | `stand` |
+| `PLUMO_API_KEY` | ключ для `/api/v1/*`, заголовок `X-API-Key`; его знает только сервер Next.js. **На сервере обязателен** | длинная случайная строка |
+| `CORS_ORIGINS` | прямой доступ браузера к API; кабинету не нужен (он ходит через Next.js) | пусто |
+| `PUBLIC_BASE_URL`, `CHANNEL_SECRET_KEY`, `CHANNEL_CREDENTIALS_FILE` | каналы Telegram/Instagram, см. [../docs/dashboard-channels.md](../docs/dashboard-channels.md) | `https://api.plumo.kg` |
 | `AI_MODE` | `mock` — без внешних вызовов, `production` — живая модель | `production` |
 | `SMALL_MODEL_PROVIDER` / `BIG_MODEL_PROVIDER` | семейство моделей, см. [docs/MODELS.md](docs/MODELS.md) | `none` / `openrouter_big` |
 | `OPENROUTER_BIG_MODEL` | модель | `anthropic/claude-haiku-5.5` |
 | `OPENROUTER_API_KEY` | ключ OpenRouter, если модели через него | `sk-or-v1-…` |
 | `HANDOFF_PROVIDER` | `telegram` — карточка менеджеру в Telegram | `telegram` |
-| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_MANAGER_CHAT_ID` | бот и чат менеджеров | `123:ABC…` / `-100…` |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_MANAGER_CHAT_ID` | бот уведомлений менеджерам (не клиентский бот) | `123:ABC…` / `-100…` |
 | `ELEVENLABS_LLM_TOKEN` | секрет, с которым ElevenLabs ходит к нам | случайная строка |
 | `ELEVENLABS_WEBHOOK_SECRET` | HMAC post-call вебхука, берётся в ElevenLabs | `wsec_…` |
 | `VOICE_USD_PER_MINUTE` | цена минуты по тарифу ElevenLabs, для метрик | `0.08` |
@@ -73,17 +75,20 @@ python -m app.seed && uvicorn app.main:app --reload
 
 Полная схема: [docs/openapi.json](docs/openapi.json). Обновить её: `python -m app.export_openapi`. Типы для фронта: `npx openapi-typescript docs/openapi.json -o src/api/plumo.d.ts`.
 
-Все запросы к `/api/v1/*`, кроме телефонии, идут с заголовком `X-API-Key`.
+Все запросы к `/api/v1/*`, кроме телефонии и webhook, идут с заголовком `X-API-Key`. Маршруты кабинета требуют ещё сессию оператора и ограничены его бизнесом; браузер обращается к ним только через сервер Next.js (`frontend/src/app/api/plumo`). Полный список и политика доставки — [../docs/dashboard-channels.md](../docs/dashboard-channels.md).
 
 | Метод | Путь | Для чего |
 | --- | --- | --- |
 | POST | `/api/v1/messages` | Входящее сообщение из любого канала → ответ агента |
 | GET | `/api/v1/customers/{id}` | Карточка клиента |
 | GET | `/api/v1/customers/{id}/history` | Вся история по всем каналам |
-| GET | `/api/v1/conversations/{id}` | Один диалог |
+| GET | `/api/v1/conversations` · `/{id}` | Диалоги бизнеса: поиск, фильтры, курсор; история со статусами доставки |
+| POST | `/api/v1/conversations/{id}/takeover` · `/resume` | Взять диалог (агент замолкает) / вернуть агенту |
 | GET | `/api/v1/handoffs?status=PENDING` | Очередь «передать человеку» |
-| POST | `/api/v1/handoffs/{id}/accept` · `/resolve` | Менеджер взял диалог (агент замолкает) / вернул агенту |
-| POST | `/api/v1/conversations/{id}/messages` | Записать сообщение менеджера в историю |
+| POST | `/api/v1/handoffs/{id}/accept` · `/resolve` | То же через конкретную передачу |
+| POST | `/api/v1/conversations/{id}/messages` | Ответ менеджера: одна операция отправки в канал (`idempotency_key`) |
+| GET · POST · PATCH | `/api/v1/integrations…` | Подключение Telegram/Instagram, проверка, агент вкл/выкл, отключение |
+| POST | `/api/v1/webhooks/telegram/{id}` · `/webhooks/instagram` | Только для провайдеров, своя проверка подлинности |
 | GET · POST | `/api/v1/knowledge` | База знаний бизнеса |
 | POST | `/api/v1/meetings` | Встреча вручную |
 | GET | `/api/v1/metrics` | Цифры для еженедельного отчёта клиенту |
@@ -113,10 +118,10 @@ curl -X POST https://api.example.com/api/v1/messages \
 
 ### Менеджер забирает диалог
 
-1. Агент создал передачу → карточка в Telegram и в `GET /handoffs?status=PENDING`.
-2. Менеджер жмёт «Взять» в кабинете → `POST /handoffs/{id}/accept`. С этого момента агент на новые сообщения клиента отвечает `send_reply: false`, но пишет их в историю.
-3. Менеджер пишет клиенту из кабинета: адаптер канала отправляет текст в WhatsApp/Telegram и записывает его через `POST /conversations/{id}/messages`.
-4. Закончил → `POST /handoffs/{id}/resolve`, агент снова отвечает сам и видит в истории, что говорил менеджер.
+1. Агент создал передачу → карточка в Telegram-боте менеджеров и в `GET /handoffs?status=PENDING`; в кабинете диалог «Нужен менеджер».
+2. Менеджер жмёт «Взять диалог» → `POST /conversations/{id}/takeover` (работает и без передачи). Агент на новые сообщения не отвечает, но пишет их в историю; неотправленные ответы агента отменяются.
+3. Менеджер пишет клиенту: `POST /conversations/{id}/messages` создаёт одну отправку, worker доставляет её в Telegram/Instagram и пишет статус.
+4. Закончил → `POST /conversations/{id}/resume`: агент снова отвечает и видит в истории доставленные реплики менеджера; недоставленные в контекст модели не попадают.
 
 ### Ошибки
 
@@ -146,4 +151,4 @@ curl -X POST https://api.example.com/api/v1/messages \
 
 Работаем по git flow: ветка `feature/<что-делаем>` от `develop`, PR в `develop`. В `develop` и `main` напрямую не пушим.
 
-Тесты: `pytest tests/unit` — без базы; `pytest` — нужен Postgres.
+Тесты: `pytest tests/unit` — без базы; `pytest` — нужен Postgres. Worker: `.\dev.cmd worker` (или `python -m app.worker`), в отдельном окне рядом с API.

@@ -16,7 +16,7 @@ from sqlalchemy import select, update
 
 from app.domain.models import Business
 from app.infrastructure.database.models import ConversationRow, HandoffRequestRow, InteractionLogRow, VoiceCallRow
-from app.infrastructure.database.repositories import BusinessRepository
+from app.infrastructure.database.repositories import BusinessRepository, MetricsRepository
 from app.infrastructure.database.session import create_session_factory
 
 _AUTH = {"Authorization": "Bearer tok"}
@@ -203,11 +203,15 @@ async def test_metrics_and_logs_are_per_business(client, engine):
     assert log.business_id is not None
     assert set(log.timings) == {"prepare_ms", "model_ms", "post_ms"}
 
+    # The operator sees their own business; another business's id answers 404, not its numbers.
     everyone = (await client.get("/api/v1/metrics")).json()
     mine = (await client.get("/api/v1/metrics", params={"business_id": str(log.business_id)})).json()
-    empty = (await client.get("/api/v1/metrics", params={"business_id": str(other.id)})).json()
+    foreign = await client.get("/api/v1/metrics", params={"business_id": str(other.id)})
     assert everyone["total_messages"] == mine["total_messages"] == 2
-    assert empty["total_messages"] == 0 and empty["total_conversations"] == 0
+    assert foreign.status_code == 404
+    async with factory() as session:
+        empty = await MetricsRepository(session).collect(other.id)
+    assert empty.total_messages == 0 and empty.total_conversations == 0
 
 
 async def test_forgotten_takeover_expires(client, engine):
@@ -224,12 +228,17 @@ async def test_forgotten_takeover_expires(client, engine):
 
     factory = create_session_factory(engine)
     async with factory() as session:
-        await session.execute(
-            update(HandoffRequestRow).values(updated_at=datetime.now(UTC) - timedelta(hours=25))
-        )
+        stale = datetime.now(UTC) - timedelta(hours=25)
+        await session.execute(update(HandoffRequestRow).values(updated_at=stale))
+        await session.execute(update(ConversationRow).values(mode_changed_at=stale))
         await session.commit()
     back = await send("Еще продается квартира за 85000?")
     assert back["send_reply"] is True and back["response_text"]
+    async with factory() as session:
+        conversation = (await session.scalars(select(ConversationRow))).one()
+        handoffs = (await session.scalars(select(HandoffRequestRow))).all()
+    assert conversation.mode == "ai" and conversation.mode_version == 2
+    assert {item.status for item in handoffs} == {"RESOLVED"}
 
 
 async def test_model_outage_hands_off_instead_of_503(agent):

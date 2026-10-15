@@ -11,8 +11,11 @@ class AppError(Exception):
     code = "error"
     http_status = 400
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, *, code: str | None = None) -> None:
         self.message = message
+        if code:
+            # A narrower reason inside the same HTTP class, e.g. "webhook_conflict".
+            self.code = code
         super().__init__(message)
 
 
@@ -102,3 +105,79 @@ class Unauthorized(AppError):
 
     code = "unauthorized"
     http_status = 401
+
+
+class NotAuthenticated(AppError):
+    """No valid operator session: sign in again."""
+
+    code = "not_authenticated"
+    http_status = 401
+
+
+class Forbidden(AppError):
+    code = "forbidden"
+    http_status = 403
+
+
+class NotFound(AppError):
+    code = "not_found"
+    http_status = 404
+
+
+class TooManyRequests(AppError):
+    code = "too_many_requests"
+    http_status = 429
+
+
+class IntegrationNotFound(AppError):
+    code = "integration_not_found"
+    http_status = 404
+
+
+class CredentialNotFound(AppError):
+    """No server credential with this name is prepared for the business."""
+
+    code = "credential_not_found"
+    http_status = 404
+
+
+class OutboundNotFound(AppError):
+    code = "outbound_not_found"
+    http_status = 404
+
+
+class ModeConflict(InvalidState):
+    """The dialog is in the other mode: a manager reply needs `human`, the agent needs `ai`."""
+
+    code = "mode_conflict"
+
+
+class VersionConflict(InvalidState):
+    """Someone changed the record since it was read. Reload and try again."""
+
+    code = "version_conflict"
+
+
+class IntegrationConflict(InvalidState):
+    code = "integration_conflict"
+
+
+class ChannelLimit(AppError):
+    """The channel does not allow this send: text too long, reply window closed, not connected."""
+
+    code = "channel_limit"
+    http_status = 422
+
+
+class NotConfigured(AppError):
+    """A server-side setting is missing (public URL, secret key, app secret)."""
+
+    code = "not_configured"
+    http_status = 503
+
+
+class ChannelUnavailable(AppError):
+    """The channel provider did not answer. Temporary; try again."""
+
+    code = "channel_unavailable"
+    http_status = 503

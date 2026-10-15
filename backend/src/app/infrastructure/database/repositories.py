@@ -8,7 +8,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.enums import CustomerStatus
+from app.domain.enums import OUTBOUND_NOT_DELIVERED, CustomerStatus
 from app.domain.errors import CustomerConflict, CustomerNotFound, DuplicateMessage, HandoffNotFound, InvalidState
 from app.domain.models import (
     Business,
@@ -36,6 +36,7 @@ from app.infrastructure.database.models import (
     KnowledgeItemRow,
     MeetingRow,
     MessageRow,
+    OutboundMessageRow,
     UsageLogRow,
     VoiceCallRow,
 )
@@ -316,6 +317,73 @@ class ConversationRepository:
         row.updated_at = row.ended_at
         await self.session.flush()
 
+    async def lock(self, conversation_id: UUID) -> Conversation | None:
+        """The dialog row FOR UPDATE, fresh from the database.
+
+        Mode switches and the start of every delivery take this lock, so a reply
+        cannot start sending once a manager's takeover has committed.
+        """
+
+        stmt = (
+            select(ConversationRow)
+            .where(ConversationRow.id == conversation_id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        )
+        row = await self.session.scalar(stmt)
+        return _conversation(row) if row else None
+
+    async def set_mode(self, conversation_id: UUID, mode: str) -> Conversation:
+        """Switch the mode and bump its version. Call under `lock`."""
+
+        row = await self.session.get(ConversationRow, conversation_id)
+        if row is None:
+            raise InvalidState(f"conversation {conversation_id} disappeared")
+        now = utcnow()
+        row.mode = mode
+        row.mode_version = (row.mode_version or 0) + 1
+        row.mode_changed_at = now
+        row.updated_at = now
+        await self.session.flush()
+        return _conversation(row)
+
+    async def release_expired_pause(self, conversation_id: UUID, since: datetime) -> Conversation | None:
+        """A takeover older than `since` that nobody resolved: the agent answers again.
+
+        Returns the updated dialog, or None when the pause is still valid.
+        """
+
+        now = utcnow()
+        released = await self.session.execute(
+            update(ConversationRow)
+            .where(
+                ConversationRow.id == conversation_id,
+                ConversationRow.mode == "human",
+                (ConversationRow.mode_changed_at.is_(None)) | (ConversationRow.mode_changed_at < since),
+            )
+            .values(mode="ai", mode_version=ConversationRow.mode_version + 1, mode_changed_at=now, updated_at=now)
+            .returning(ConversationRow.id)
+        )
+        if released.first() is None:
+            return None
+        await self.session.execute(
+            update(HandoffRequestRow)
+            .where(HandoffRequestRow.conversation_id == conversation_id, HandoffRequestRow.status == "ACCEPTED")
+            .values(status="RESOLVED", updated_at=now)
+        )
+        return await self.refresh(conversation_id)
+
+    async def refresh(self, conversation_id: UUID) -> Conversation | None:
+        """Read again, past the session cache, without locking."""
+
+        stmt = (
+            select(ConversationRow)
+            .where(ConversationRow.id == conversation_id)
+            .execution_options(populate_existing=True)
+        )
+        row = await self.session.scalar(stmt)
+        return _conversation(row) if row else None
+
 
 class MessageRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -326,6 +394,7 @@ class MessageRepository:
         if row.external_id is None:
             self.session.add(row)
             await self.session.flush()
+            message.seq = row.seq
             return message
         # A savepoint keeps the request's transaction usable when a concurrent
         # retry of the same webhook already stored this message.
@@ -335,15 +404,47 @@ class MessageRepository:
                 await self.session.flush()
         except IntegrityError as exc:
             raise DuplicateMessage(f"message {row.external_id} is already stored") from exc
+        message.seq = row.seq
         return message
 
     async def list_for_conversation(self, conversation_id: UUID) -> list[Message]:
         stmt = (
             select(MessageRow)
             .where(MessageRow.conversation_id == conversation_id)
-            .order_by(MessageRow.timestamp.asc())
+            .order_by(MessageRow.timestamp.asc(), MessageRow.seq.asc())
         )
         rows = (await self.session.scalars(stmt)).all()
+        return [_message(row) for row in rows]
+
+    async def get(self, message_id: UUID) -> Message | None:
+        row = await self.session.get(MessageRow, message_id)
+        return _message(row) if row else None
+
+    async def last_timestamp(self, conversation_id: UUID, role: str) -> datetime | None:
+        stmt = select(func.max(MessageRow.timestamp)).where(
+            MessageRow.conversation_id == conversation_id, MessageRow.role == role
+        )
+        return await self.session.scalar(stmt)
+
+    async def list_context(self, customer_id: UUID, limit: int = 20) -> list[Message]:
+        """What the model may read: no dialog events, no replies that surely never reached the customer."""
+
+        undelivered = select(OutboundMessageRow.message_id).where(
+            OutboundMessageRow.message_id.is_not(None),
+            OutboundMessageRow.status.in_([str(item) for item in OUTBOUND_NOT_DELIVERED]),
+        )
+        stmt = (
+            select(MessageRow)
+            .where(
+                MessageRow.customer_id == customer_id,
+                MessageRow.role != "system",
+                MessageRow.id.not_in(undelivered),
+            )
+            .order_by(MessageRow.timestamp.desc(), MessageRow.seq.desc())
+            .limit(limit)
+        )
+        rows = list((await self.session.scalars(stmt)).all())
+        rows.reverse()
         return [_message(row) for row in rows]
 
     async def list_for_customer(self, customer_id: UUID, limit: int = 100) -> list[Message]:
@@ -499,10 +600,30 @@ class HandoffRepository:
         row = await self.session.get(HandoffRequestRow, handoff_id)
         return _handoff(row) if row else None
 
-    async def list_requests(self, status: str | None, limit: int) -> list[HandoffRequest]:
+    async def list_requests(
+        self, status: str | None, limit: int, business_id: UUID | None = None
+    ) -> list[HandoffRequest]:
         stmt = select(HandoffRequestRow).order_by(HandoffRequestRow.created_at.desc()).limit(limit)
         if status:
             stmt = stmt.where(HandoffRequestRow.status == status)
+        if business_id is not None:
+            stmt = stmt.join(ConversationRow, ConversationRow.id == HandoffRequestRow.conversation_id).where(
+                ConversationRow.business_id == business_id
+            )
+        rows = (await self.session.scalars(stmt)).all()
+        return [_handoff(row) for row in rows]
+
+    async def list_open(self, conversation_id: UUID) -> list[HandoffRequest]:
+        """PENDING and ACCEPTED handoffs of a dialog, oldest first."""
+
+        stmt = (
+            select(HandoffRequestRow)
+            .where(
+                HandoffRequestRow.conversation_id == conversation_id,
+                HandoffRequestRow.status.in_(("PENDING", "ACCEPTED")),
+            )
+            .order_by(HandoffRequestRow.created_at.asc())
+        )
         rows = (await self.session.scalars(stmt)).all()
         return [_handoff(row) for row in rows]
 
@@ -843,6 +964,14 @@ def _conversation(row: ConversationRow) -> Conversation:
         summary=row.summary,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        business_id=row.business_id,
+        connection_id=row.connection_id,
+        mode=row.mode,
+        mode_version=row.mode_version,
+        mode_changed_at=row.mode_changed_at,
+        external_chat_id=row.external_chat_id,
+        contact_name=row.contact_name,
+        contact_handle=row.contact_handle,
     )
 
 
@@ -856,6 +985,14 @@ def _conversation_row(conversation: Conversation) -> ConversationRow:
         summary=conversation.summary,
         created_at=conversation.created_at,
         updated_at=conversation.updated_at,
+        business_id=conversation.business_id,
+        connection_id=conversation.connection_id,
+        mode=conversation.mode,
+        mode_version=conversation.mode_version,
+        mode_changed_at=conversation.mode_changed_at,
+        external_chat_id=_clip(conversation.external_chat_id, 128),
+        contact_name=_clip(conversation.contact_name, 200),
+        contact_handle=_clip(conversation.contact_handle, 100),
     )
 
 
@@ -869,6 +1006,7 @@ def _message(row: MessageRow) -> Message:
         timestamp=row.timestamp,
         metadata=dict(row.metadata_json or {}),
         created_at=row.created_at,
+        seq=row.seq,
     )
 
 
