@@ -3,13 +3,10 @@
 import { useCallback, useRef, useState } from "react";
 import Image from "next/image";
 import Alert02Icon from "@hugeicons/core-free-icons/Alert02Icon";
-import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
 import Chatting01Icon from "@hugeicons/core-free-icons/Chatting01Icon";
 import LinkSquare02Icon from "@hugeicons/core-free-icons/LinkSquare02Icon";
 import Loading03Icon from "@hugeicons/core-free-icons/Loading03Icon";
 import Refresh01Icon from "@hugeicons/core-free-icons/Refresh01Icon";
-import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
-import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import { PlumoIcon } from "@/components/ui/plumo-icon";
 import { ApiError, api, goToLogin } from "@/lib/api/client";
 import type { ChannelIntegration, Connection, IntegrationChannel, IntegrationsResponse } from "@/lib/api/types";
@@ -17,8 +14,8 @@ import { usePolling } from "@/lib/api/use-polling";
 import { useLanguage } from "@/lib/i18n";
 import { apiErrorText } from "./api-messages";
 import { formatTime } from "./dialogue-model";
-import { canConnect, cardStatus, missingRequirements, statusLabel, statusTone } from "./integration-model";
-import { TelegramSetup } from "./telegram-setup";
+import { cardStatus, statusLabel, statusTone } from "./integration-model";
+import { ChannelSetup } from "./channel-setup";
 import { WhatsAppSetup } from "./whatsapp-setup";
 import { initialWhatsAppDraft } from "./whatsapp-setup-model";
 
@@ -107,7 +104,6 @@ export function Integrations({ onDialogues }: { onDialogues: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
-  const [credential, setCredential] = useState<Record<string, string>>({});
   const [whatsappDraft, setWhatsappDraft] = useState(initialWhatsAppDraft);
   const [whatsappSaved, setWhatsappSaved] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -157,7 +153,7 @@ export function Integrations({ onDialogues }: { onDialogues: () => void }) {
   }
 
   async function connect(item: ChannelIntegration, replaceWebhook = false, chosenRef?: string) {
-    const ref = chosenRef ?? credential[item.channel] ?? item.credentials[0]?.ref;
+    const ref = chosenRef ?? item.credentials[0]?.ref;
     if (!ref) return;
     const done = await run(`connect:${item.channel}`, item.channel, () => api<Connection>(`integrations/${item.channel}/connect`, { method: "POST", body: { credential_ref: ref, replace_webhook: replaceWebhook } }), c.connectedOk);
     if (done) { setActive(null); focusTitle(); }
@@ -169,8 +165,7 @@ export function Integrations({ onDialogues }: { onDialogues: () => void }) {
   return <section ref={containerRef} className="h-full overflow-y-auto bg-plumo-line/15 px-5 py-6 sm:px-8 sm:py-8">
     <div className="mx-auto max-w-[1120px]">
       {active === "whatsapp" ? <WhatsAppSetup draft={whatsappDraft} onChange={setWhatsappDraft} onBack={close} onSave={() => setWhatsappSaved(true)} />
-        : selected?.channel === "telegram" ? <TelegramSetup item={selected} busy={busy === "connect:telegram"} notice={notice?.channel === "telegram" ? notice : null} onBack={close} onConnect={(ref, replace) => connect(selected, replace, ref)} />
-        : selected ? renderConnect(selected)
+        : selected ? <ChannelSetup key={selected.channel} item={selected} busy={busy === `connect:${selected.channel}`} notice={notice?.channel === selected.channel ? notice : null} onBack={close} onConnect={(ref, replace) => connect(selected, replace, ref)} />
         : <>
           <h1 ref={titleRef} tabIndex={-1} className="m-0 text-2xl font-semibold tracking-tight outline-none">{c.title}</h1>
           <p className="mb-0 mt-2 text-sm leading-6 text-plumo-muted">{c.description}</p>
@@ -223,50 +218,5 @@ export function Integrations({ onDialogues }: { onDialogues: () => void }) {
       </div>
         : <button type="button" className={`mt-6 ${primary}`} onClick={() => open(item.channel)} aria-label={`${item.connection ? c.reconnect : c.connect} ${names[item.channel]}`}>{item.connection ? c.reconnect : c.connect}</button>}
     </article>;
-  }
-
-  function renderConnect(item: ChannelIntegration) {
-    const missing = missingRequirements(item);
-    const ready = canConnect(item);
-    const chosen = credential[item.channel] ?? item.credentials[0]?.ref ?? "";
-    const panelNotice = notice && notice.channel === item.channel ? notice : null;
-    const checklist = item.channel === "telegram" ? c.tgItems : c.igItems;
-    return <>
-      <button type="button" className={`${secondary} mb-6`} onClick={close}><PlumoIcon icon={ArrowLeft01Icon} size={16} />{c.back}</button>
-      <div className="overflow-hidden rounded-2xl border border-solid border-plumo-line bg-white">
-        <div className="grid lg:grid-cols-[1.35fr_1fr]">
-          <div className="p-6 sm:p-9">
-            <div className="mb-7 flex flex-wrap items-center justify-between gap-4"><Logo channel={item.channel} /><span className={`rounded-md px-2 py-1 text-[11px] font-medium ${tones[statusTone(cardStatus(item))]}`}>{statusLabel(cardStatus(item), locale)}</span></div>
-            <h1 ref={titleRef} tabIndex={-1} className="m-0 text-2xl font-medium leading-tight tracking-tight outline-none">{item.channel === "telegram" ? c.tgTitle : c.igTitle}</h1>
-            <p className="mb-6 mt-3 text-sm leading-6 text-plumo-muted">{item.channel === "telegram" ? c.tgMethod : c.igMethod}</p>
-            <fieldset className="m-0 space-y-3 border-0 p-0">
-              <legend className="mb-3 text-sm font-medium">{c.choose}</legend>
-              {item.credentials.length === 0 && <p className="m-0 rounded-xl bg-amber-50 p-4 text-sm leading-6 text-amber-800">{c.none}</p>}
-              {item.credentials.map(option => <label key={option.ref} className={`flex cursor-pointer items-center gap-3 rounded-xl border border-solid p-4 transition-colors ${chosen === option.ref ? "border-plumo-blue bg-plumo-soft/50" : "border-plumo-line hover:bg-plumo-line/20"}`}>
-                <input type="radio" name={`credential-${item.channel}`} value={option.ref} checked={chosen === option.ref} onChange={() => setCredential(values => ({ ...values, [item.channel]: option.ref }))} className="shrink-0 accent-plumo-blue" />
-                <span className="text-sm font-medium">{option.label}</span><span className="ml-auto text-xs text-plumo-muted">{option.ref}</span>
-              </label>)}
-            </fieldset>
-            <h2 className="mb-3 mt-7 text-sm font-medium">{c.serverReady}</h2>
-            <ul className="m-0 list-none space-y-2 p-0">{Object.entries(item.requirements).map(([name, ok]) => <li key={name} className={`flex items-center gap-2 text-xs ${ok ? "text-emerald-700" : "text-red-700"}`}><PlumoIcon icon={ok ? Tick02Icon : Cancel01Icon} size={16} />{c.requirement[name] ?? name}</li>)}</ul>
-            {item.channel === "instagram" && item.webhook_url && <div className="mt-6 rounded-xl bg-plumo-line/20 p-4"><p className="m-0 text-xs text-plumo-muted">{c.callback}</p><code className="mt-1.5 block break-all text-xs">{item.webhook_url}</code></div>}
-            {panelNotice && <div role="alert" className={`mt-6 rounded-xl p-4 text-sm leading-6 ${panelNotice.tone === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-800"}`}>
-              <p className="m-0">{panelNotice.text}{item.connection?.details.conflict_host ? ` (${item.connection.details.conflict_host})` : ""}</p>
-              {panelNotice.conflict && <><p className="mb-0 mt-2 text-xs">{c.conflictHint}</p><button type="button" className={`${secondary} mt-3`} disabled={busy !== null} onClick={() => connect(item, true)}>{c.replace}</button></>}
-            </div>}
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <button type="button" className={`${primary} flex-1`} disabled={!ready || busy !== null || !chosen} onClick={() => connect(item)}>
-                {busy === `connect:${item.channel}` ? <><PlumoIcon icon={Loading03Icon} size={16} className="animate-spin" />{c.submitting}</> : c.submit}
-              </button>
-            </div>
-            {missing.length > 0 && <p className="mb-0 mt-3 text-xs leading-5 text-red-700">{missing.map(name => c.requirement[name] ?? name).join(", ")}</p>}
-          </div>
-          <aside className="flex flex-col justify-center gap-5 border-0 border-t border-solid border-plumo-line bg-plumo-line/20 p-6 sm:p-9 lg:border-l lg:border-t-0">
-            <div className="rounded-2xl border border-solid border-plumo-line bg-white p-5"><h2 className="m-0 text-sm font-medium">{item.channel === "instagram" ? c.igNeeds : c.method}</h2><ul className="mb-0 mt-4 list-none space-y-4 p-0">{checklist.map(entry => <li key={entry} className="flex items-start gap-2.5 text-xs leading-5"><span className="mt-0.5 shrink-0 text-plumo-blue"><PlumoIcon icon={Tick02Icon} size={16} /></span>{entry}</li>)}</ul></div>
-            <div className="rounded-2xl bg-plumo-soft p-5"><h2 className="m-0 text-sm font-medium">{c.help}</h2><p className="mb-0 mt-2 text-xs leading-6 text-plumo-muted">{c.helpText}</p><p className="mb-0 mt-3 text-xs font-medium text-plumo-blue">{c.agentOff}</p></div>
-          </aside>
-        </div>
-      </div>
-    </>;
   }
 }

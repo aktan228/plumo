@@ -7,7 +7,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.enums import ConnectionStatus, JobStatus, OutboundStatus
+from app.domain.enums import ConnectionStatus, InboundStatus, JobStatus, OutboundStatus
 from app.domain.models import (
     ChannelConnection,
     InboundEvent,
@@ -234,6 +234,20 @@ class InboundEventRepository:
     async def get(self, event_id: UUID) -> InboundEvent | None:
         row = await self.session.get(InboundEventRow, event_id)
         return _inbound(row) if row else None
+
+    async def redact_older_than(self, days: int) -> int:
+        """Clear text and contact data of finished events received more than `days` ago."""
+
+        result = await self.session.execute(
+            update(InboundEventRow)
+            .where(
+                InboundEventRow.received_at < utcnow() - timedelta(days=days),
+                InboundEventRow.status != InboundStatus.queued,
+                (InboundEventRow.text.is_not(None)) | (InboundEventRow.data != text("'{}'::jsonb")),
+            )
+            .values(text=None, data={})
+        )
+        return result.rowcount or 0
 
     async def mark(self, event_id: UUID, status: str, error_code: str | None = None) -> None:
         await self.session.execute(

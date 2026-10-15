@@ -686,3 +686,20 @@ async def test_old_dialog_mode_snapshot(stand):
     rows = await stand.sql("SELECT mode, mode_version FROM conversations")
     assert tuple(rows[0]) == ("ai", 2)
     assert datetime.now(UTC) - timedelta(minutes=1) < (await stand.sql("SELECT mode_changed_at FROM conversations"))[0][0]
+
+
+async def test_old_raw_events_lose_text_but_history_stays(stand):
+    connection = await stand.telegram(agent_enabled=False)
+    await stand.tg_update(connection, 400, "Мой номер 0555 123 456, старое сообщение")
+    await stand.worker.drain()
+    await stand.tg_update(connection, 401, "Свежее сообщение")
+    await stand.sql("UPDATE inbound_events SET received_at = now() - interval '31 days' WHERE external_event_id = '400'")
+    await stand.sql("UPDATE inbound_events SET received_at = now() - interval '31 days' WHERE external_event_id = '401'")
+
+    assert await stand.worker.redact_old_events() == 1  # the queued event is not touched
+    rows = await stand.sql("SELECT external_event_id, text, data FROM inbound_events ORDER BY external_event_id")
+    assert [tuple(row) for row in rows] == [("400", None, {}), ("401", "Свежее сообщение", rows[1][2])]
+    assert rows[1][2]["contact_name"] == "Айгуль"
+    history = await stand.sql("SELECT text FROM messages WHERE role = 'user'")
+    assert [row[0] for row in history] == ["Мой номер 0555 123 456, старое сообщение"]
+    assert await stand.worker.redact_old_events() == 0

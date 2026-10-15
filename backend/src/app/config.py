@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     mock_channel_events: bool = True
     # Operator session lifetime in the dashboard.
     session_ttl_hours: float = 12.0
+    # Days the raw webhook copy of a customer message keeps its text; the dialog history stays.
+    # 0 = keep forever.
+    inbound_retention_days: int = 30
     worker_concurrency: int = 4
     worker_poll_interval_s: float = 0.5
 

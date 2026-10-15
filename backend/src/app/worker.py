@@ -27,6 +27,8 @@ logger = logging.getLogger("plumo.worker")
 
 # Longer than one agent turn (CHAT_TURN_BUDGET_S, 25 s) plus storage, and than one send.
 LEASE_S = 120.0
+# How often the worker clears expired raw events.
+HOUSEKEEPING_S = 3600.0
 
 
 class Worker:
@@ -80,9 +82,37 @@ class Worker:
                     except TimeoutError:
                         pass
 
+        async def housekeeping() -> None:
+            while not stop.is_set():
+                try:
+                    await self.redact_old_events()
+                except Exception:
+                    logger.exception("housekeeping_failed")
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=HOUSEKEEPING_S)
+                except TimeoutError:
+                    pass
+
         logger.info("worker_started", extra={"worker_id": self.worker_id, "concurrency": concurrency})
-        await asyncio.gather(*(slot(index) for index in range(max(1, concurrency))))
+        await asyncio.gather(housekeeping(), *(slot(index) for index in range(max(1, concurrency))))
         logger.info("worker_stopped", extra={"worker_id": self.worker_id})
+
+    async def redact_old_events(self) -> int:
+        """Drop the customer's text and contact data from raw events older than INBOUND_RETENTION_DAYS.
+
+        The dialog history keeps the message; only the webhook copy is cleared.
+        Events still queued are left alone.
+        """
+
+        days = self.runtime.settings.inbound_retention_days
+        if days <= 0:
+            return 0
+        async with self.runtime.session_factory() as session:
+            cleared = await InboundEventRepository(session).redact_older_than(days)
+            await session.commit()
+        if cleared:
+            logger.info("inbound_events_redacted", extra={"events": cleared, "older_than_days": days})
+        return cleared
 
     async def _give_up(self, job: Job) -> None:
         """The job crashed its worker too many times: final state, nothing resent."""
