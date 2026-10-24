@@ -9,6 +9,7 @@ import { Dialogues } from "./dialogues";
 import { Integrations } from "./integrations";
 import { ChatBoard } from "./chat-board";
 import { SoonDialog } from "./soon-dialog";
+import type { IntegrationsResponse, Session } from "@/lib/api/types";
 
 const groups = [
   { ru: "Основное", en: "Main", items: [
@@ -44,24 +45,50 @@ const actions: { ru: string; en: string; icon: DashboardIconName }[] = [
 ];
 const controlClass = "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-1 text-plumo-muted transition-colors hover:bg-plumo-line/65 hover:text-plumo-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue";
 
-export function DashboardShell() {
+export function DashboardShell({ session }: { session: Session }) {
   const { locale, t } = useLanguage();
   const [collapsed, setCollapsed] = useState(false);
   const [view, setView] = useState<View>("chats");
   const [layout, setLayout] = useState<"kanban" | "list">("kanban");
   const [soon, setSoon] = useState(false);
+  const [integrations, setIntegrations] = useState<IntegrationsResponse | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  const [logoutError, setLogoutError] = useState(false);
   const c = locale === "ru" ? {
     menu: "Навигация", collapse: "Свернуть панель", expand: "Развернуть панель",
     disabled: "Ответы ИИ отключены", description: "Продолжайте обучать и тестировать ИИ-агента. Включите ответы клиентам, когда будете готовы.",
-    enable: "Включить ИИ", period: "Период", kanban: "Канбан", list: "Список", more: "Ещё",
+    enable: "Настроить ИИ", enabled: "Ответы ИИ включены", checking: "Проверяем состояние ИИ…", activeChannels: "Активные каналы", logout: "Выйти", logoutFailed: "Не удалось выйти. Повторите попытку.", mock: "Модель: mock", period: "Период", kanban: "Канбан", list: "Список", more: "Ещё",
     trial: "Пробный период", subscription: "Купить подписку", telegram: "Наш Telegram", help: "Помощь",
   } : {
     menu: "Navigation", collapse: "Collapse sidebar", expand: "Expand sidebar",
     disabled: "AI replies are disabled", description: "Keep training and testing your AI agent. Enable customer replies when you are ready.",
-    enable: "Turn the AI on", period: "Date range", kanban: "Kanban", list: "List", more: "More options",
+    enable: "Manage AI", enabled: "AI replies are enabled", checking: "Checking AI status…", activeChannels: "Active channels", logout: "Sign out", logoutFailed: "Could not sign out. Please try again.", mock: "Model: mock", period: "Date range", kanban: "Kanban", list: "List", more: "More options",
     trial: "Trial period", subscription: "Buy subscription", telegram: "Join our Telegram", help: "Help",
   };
   const title = pages.find(page => page.id === view)?.[locale];
+  const activeChannels = (integrations?.channels ?? [])
+    .filter(item => item.connection?.status === "connected" && item.connection.agent_enabled)
+    .map(item => item.channel === "telegram" ? "Telegram" : "Instagram");
+  const operator = session.operator.display_name || session.operator.email;
+  const business = session.operator.business.name;
+
+  async function logout() {
+    setLeaving(true);
+    setLogoutError(false);
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST", headers: { "x-plumo-request": "1" }, credentials: "same-origin" });
+      if (!response.ok) throw new Error("logout_failed");
+      window.location.assign("/login");
+    } catch {
+      setLogoutError(true);
+      setLeaving(false);
+    }
+  }
+
+  function openInbox() {
+    setLayout("list");
+    navigate("chats");
+  }
 
   useEffect(() => {
     const readHash = () => {
@@ -108,25 +135,35 @@ export function DashboardShell() {
           <button type="button" onClick={() => setSoon(true)} className="mx-2 mb-1.5 mt-[7px] flex h-[27px] cursor-pointer items-center gap-1.5 rounded-md border-0 bg-plumo-blue/[0.07] px-1.5 text-[10.5px] text-plumo-ink hover:bg-plumo-blue/10 focus-visible:outline-2 focus-visible:outline-plumo-blue"><Image src="/images/channels/telegram.svg" alt="" width={18} height={18} /><span className="truncate">{c.telegram}</span></button>
         </>}
         <button type="button" aria-label={c.help} title={collapsed ? c.help : undefined} onClick={() => setSoon(true)} className={`flex h-7 cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-3 text-left text-[11.5px] text-plumo-ink hover:bg-plumo-ink/[0.04] ${collapsed ? "justify-center px-0" : ""}`}><DashboardIcon name="help" size={16} />{!collapsed && c.help}</button>
+        <div className="mt-2 border-0 border-t border-solid border-plumo-ink/10 pt-1">
+          {!collapsed && <div className="px-3 py-1.5" title={`${business} · ${operator}`}><p className="m-0 truncate text-[10.5px] font-medium">{business}</p><p className="mb-0 mt-0.5 truncate text-[10px] text-plumo-muted">{operator}</p></div>}
+          <button type="button" onClick={logout} disabled={leaving} aria-label={c.logout} title={collapsed ? c.logout : undefined} className={`flex h-7 w-full cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-3 text-left text-[11.5px] text-plumo-ink hover:bg-plumo-ink/[0.04] disabled:opacity-50 ${collapsed ? "justify-center px-0" : ""}`}><DashboardIcon name="logout" size={16} />{!collapsed && c.logout}</button>
+        </div>
         {!collapsed && <div className="mt-2 px-1 [&_button]:min-h-7 [&_button]:px-1.5 [&_button]:py-1 [&_button]:text-[9px]"><LanguageSwitch /></div>}
       </div>
     </aside>
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[3px] bg-white">
       <header className="flex min-h-14 shrink-0 items-center gap-3 border-0 border-b border-solid border-plumo-line px-3 py-2.5 md:pl-[15px]">
-        <span className="hidden text-plumo-muted sm:flex"><DashboardIcon name="pause" size={13} /></span>
-        <div className="min-w-0 flex-1"><p className="m-0 text-xs font-semibold leading-[18px]">{c.disabled}</p><p className="m-0 hidden text-xs leading-[18px] text-plumo-muted sm:block">{c.description}</p></div>
-        <button type="button" onClick={() => setSoon(true)} className="min-h-[25px] shrink-0 cursor-pointer rounded-lg border border-solid border-plumo-ink/80 bg-plumo-ink px-2 py-1 font-[inherit] text-[11px] text-white shadow-sm hover:bg-plumo-ink/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue">{c.enable}</button>
+        <span className="hidden text-plumo-muted sm:flex"><DashboardIcon name={activeChannels.length ? "sparkles" : "pause"} size={13} /></span>
+        <div className="min-w-0 flex-1"><p className="m-0 text-xs font-semibold leading-[18px]">{!integrations ? c.checking : activeChannels.length ? c.enabled : c.disabled}</p><p className="m-0 hidden text-xs leading-[18px] text-plumo-muted sm:block">{activeChannels.length ? `${c.activeChannels}: ${activeChannels.join(", ")}` : c.description}</p></div>
+        <button type="button" onClick={() => navigate("integrations")} className="min-h-[25px] shrink-0 cursor-pointer rounded-lg border border-solid border-plumo-ink/80 bg-plumo-ink px-2 py-1 font-[inherit] text-[11px] text-white shadow-sm hover:bg-plumo-ink/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue">{c.enable}</button>
       </header>
+      {logoutError && <p role="alert" className="m-0 border-0 border-b border-solid border-plumo-line bg-plumo-soft px-4 py-2 text-xs">{c.logoutFailed}</p>}
       <main id="workspace" tabIndex={-1} aria-label={title} className="flex min-h-0 flex-1 flex-col bg-plumo-line/15 focus:outline-none">
         <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-0 border-b border-solid border-plumo-line px-2.5 py-1 md:pl-3.5">
           <details className="relative z-20 md:hidden" onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
             <summary aria-label={c.menu} className={`${controlClass} list-none [&::-webkit-details-marker]:hidden`}><DashboardIcon name="menu" size={18} /></summary>
             <nav aria-label={c.menu} className="absolute left-0 top-9 max-h-[calc(100dvh-130px)] w-52 overflow-y-auto rounded-lg border border-solid border-plumo-line bg-white p-2 shadow-xl">
               {navigation(true)}
-              <div className="border-0 border-t border-solid border-plumo-line pt-1"><LanguageSwitch /></div>
+              <div className="border-0 border-t border-solid border-plumo-line pt-1">
+                <p className="mx-3 my-1 truncate text-[11px]" title={operator}>{business} · {operator}</p>
+                <button type="button" onClick={logout} disabled={leaving} className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-3 text-xs text-plumo-muted hover:bg-plumo-line/40 disabled:opacity-50"><DashboardIcon name="logout" size={16} />{c.logout}</button>
+                <LanguageSwitch />
+              </div>
             </nav>
           </details>
           <h1 className="m-0 text-xs font-normal text-plumo-muted">{title}</h1>
+          {session.ai_mode === "mock" && <span className="rounded bg-plumo-soft px-1.5 py-0.5 text-[9px] text-plumo-muted">{c.mock}</span>}
           {view === "chats" && <>
             <button type="button" onClick={() => setSoon(true)} className="flex cursor-pointer items-center gap-1.5 rounded border-0 bg-transparent p-1 text-[10px] text-plumo-muted hover:text-plumo-ink"><DashboardIcon name="calendar" size={13} />{c.period}</button>
             <div role="group" aria-label={locale === "ru" ? "Инструменты диалогов" : "Chat tools"} className="flex items-center gap-0.5 max-sm:order-last max-sm:w-full">
@@ -138,9 +175,10 @@ export function DashboardShell() {
           </>}
           <button type="button" aria-label={c.more} title={c.more} onClick={() => setSoon(true)} className={`${controlClass} ${view !== "chats" ? "ml-auto" : ""}`}><DashboardIcon name="more" size={14} /></button>
         </div>
-        <div className={view === "integrations" ? "min-h-0 flex-1" : "hidden"}><Integrations onDialogues={() => navigate("chats")} /></div>
+        <div className={view === "integrations" ? "min-h-0 flex-1" : "hidden"}><Integrations onDialogues={openInbox} onStateChange={setIntegrations} /></div>
         <div className={view === "chats" ? "min-h-0 flex-1" : "hidden"}>
-          {layout === "kanban" ? <ChatBoard onSoon={() => setSoon(true)} /> : <Dialogues />}
+          <div className={layout === "kanban" ? "h-full" : "hidden"}><ChatBoard onSoon={() => setSoon(true)} /></div>
+          <div className={layout === "list" ? "h-full" : "hidden"}><Dialogues active={view === "chats" && layout === "list"} /></div>
         </div>
         {view !== "integrations" && view !== "chats" && <div className="flex flex-1 items-center justify-center text-base text-plumo-muted">soon</div>}
       </main>

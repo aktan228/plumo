@@ -8,6 +8,7 @@ from app.api.deps import Services, get_services
 from app.api.mappers import agent_out
 from app.api.schemas import AgentResponseOut, ChannelEventOut, MessageIn
 from app.correlation import get_correlation_id, get_request_id
+from app.domain.errors import NotFound
 from app.domain.models import InboundMessage
 
 router = APIRouter(tags=["messages"])
@@ -43,8 +44,11 @@ async def post_message(body: MessageIn, services: Services = Depends(get_service
 @router.post(
     "/channels/{channel}/events",
     response_model=ChannelEventOut,
-    summary="Принять сырое событие канала и нормализовать его",
-    responses={503: {"description": "Адаптер канала не зарегистрирован"}},
+    summary="Mock-адаптеры каналов: только APP_ENV=development",
+    responses={
+        404: {"description": "Выключено на стенде: реальные каналы идут через /webhooks"},
+        503: {"description": "Адаптер канала не зарегистрирован"},
+    },
 )
 async def post_channel_event(
     channel: str,
@@ -60,6 +64,9 @@ async def post_channel_event(
     ),
     services: Services = Depends(get_services),
 ) -> ChannelEventOut:
+    if not services.runtime.settings.mock_channel_events_enabled:
+        # On a stand this would be a way around the providers' webhook authentication.
+        raise NotFound("mock channel events are disabled")
     payload = await services.channels.execute(channel, event)
     return ChannelEventOut(
         channel=payload["channel"],

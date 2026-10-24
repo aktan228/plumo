@@ -1,4 +1,5 @@
 import { PlumoIcon } from "@/components/ui/plumo-icon";
+import Logout01Icon from "@hugeicons/core-free-icons/Logout01Icon";
 import SidebarLeft01Icon from "@hugeicons/core-free-icons/SidebarLeft01Icon";
 import Chatting01Icon from "@hugeicons/core-free-icons/Chatting01Icon";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
@@ -38,7 +39,7 @@ import InformationCircleIcon from "@hugeicons/core-free-icons/InformationCircleI
 import DragDropVerticalIcon from "@hugeicons/core-free-icons/DragDropVerticalIcon";
 
 const icons = {
-  panel: SidebarLeft01Icon, chat: Chatting01Icon, back: ArrowLeft01Icon,
+  logout: Logout01Icon, panel: SidebarLeft01Icon, chat: Chatting01Icon, back: ArrowLeft01Icon,
   search: Search01Icon, send: SentIcon, user: UserIcon, close: Cancel01Icon,
   menu: Menu01Icon, plug: PlugSocketIcon, check: Tick02Icon, book: Book02Icon,
   testing: TestTube01Icon, edit: Edit02Icon, broadcast: Megaphone01Icon,

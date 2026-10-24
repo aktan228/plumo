@@ -32,6 +32,8 @@ from app.domain.events import (
 from app.domain.ports import HumanHandoffProvider, Router
 from app.infrastructure.ai.factory import AIProviderFactory
 from app.infrastructure.ai.openrouter_llm import OpenRouterLLMProvider
+from app.infrastructure.channels.credentials import CredentialStore
+from app.infrastructure.channels.gateway import ChannelGateway
 from app.infrastructure.channels.mock_adapters import mock_channels
 from app.infrastructure.database.repositories import (
     BusinessRepository,
@@ -65,6 +67,8 @@ class Runtime:
     validator: ResponseValidator
     context_builder: ContextBuilder
     owns_engine: bool = True
+    # Real Telegram/Instagram adapters; the mock `channels` above stay for local tests.
+    channel_gateway: ChannelGateway | None = None
 
 
 def build_runtime(settings: Settings, engine: AsyncEngine | None = None) -> Runtime:
@@ -96,6 +100,11 @@ def build_runtime(settings: Settings, engine: AsyncEngine | None = None) -> Runt
         validator=ResponseValidator(),
         context_builder=ContextBuilder(),
         owns_engine=owns_engine,
+        channel_gateway=ChannelGateway(
+            CredentialStore(settings.channel_credentials_file),
+            instagram_api_version=settings.instagram_api_version,
+            timeout_s=settings.channel_send_timeout_s,
+        ),
     )
 
 

@@ -1,5 +1,7 @@
 """FastAPI application."""
 
+import logging
+import os
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
@@ -9,13 +11,25 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.deps import require_api_key
-from app.api.routes import customers, messages, operations, telephony, voice
+from app.api.routes import auth, customers, dialogs, integrations, messages, operations, telephony, voice, webhooks
 from app.application.services.handoff_service import drain_notifications
 from app.config import Settings, get_settings
 from app.container import Runtime, build_runtime
 from app.correlation import correlation_id, request_id
 from app.domain.errors import AppError
 from app.infrastructure.logging.setup import setup_logging
+
+logger = logging.getLogger("plumo.api")
+
+
+def check_environment(settings: Settings) -> None:
+    """Refuse to start a stand that would be open to anyone."""
+
+    if settings.is_development:
+        return
+    missing = [name for name in ("PLUMO_API_KEY", "CHANNEL_SECRET_KEY") if not os.getenv(name, "").strip()]
+    if missing:
+        raise RuntimeError(f"APP_ENV={settings.app_env} needs {', '.join(missing)} in the environment")
 
 
 def create_app(settings: Settings | None = None, runtime: Runtime | None = None) -> FastAPI:
@@ -24,6 +38,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         setup_logging(settings.log_level)
+        check_environment(settings)
         app.state.runtime = runtime or build_runtime(settings)
         yield
         await drain_notifications()
@@ -36,12 +51,13 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
 
     app = FastAPI(
         title="Plumo AI Core",
-        version="0.1.0",
-        summary="Ядро AI-менеджера. Каналы и модели подключаются адаптерами.",
+        version="0.2.0",
+        summary="Ядро AI-менеджера, каналы Telegram/Instagram и API рабочего кабинета.",
         description=(
-            "Нормализованный контракт для WhatsApp, Telegram, Instagram и телефона. "
-            "Текст — через OpenRouter или mock. Речь и каналы пока mock. "
-            "POST /api/v1/messages принимает InboundMessage и возвращает AgentResponse."
+            "Каналы: Telegram-бот и Instagram Direct через /webhooks, ответы отправляет worker. "
+            "Кабинет: вход оператора (/auth), интеграции, диалоги — только данные его бизнеса. "
+            "Сервисные вызовы несут X-API-Key; маршруты кабинета — ещё и сессию оператора (Bearer). "
+            "Ошибки: {error, code, message, correlation_id}."
         ),
         lifespan=lifespan,
     )
@@ -72,14 +88,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
 
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError):
-        return JSONResponse(
-            status_code=exc.http_status,
-            content={
-                "error": exc.code,
-                "message": exc.message,
-                "correlation_id": correlation_id.get() or None,
-            },
-        )
+        return _error(exc.http_status, exc.code, exc.message)
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(request: Request, exc: RequestValidationError):
@@ -87,11 +96,18 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
             status_code=422,
             content={
                 "error": "invalid_message",
+                "code": "invalid_message",
                 "message": "request validation failed",
                 "correlation_id": correlation_id.get() or None,
                 "details": _safe_errors(exc),
             },
         )
+
+    @app.exception_handler(Exception)
+    async def unexpected_handler(request: Request, exc: Exception):
+        # No traceback, token or payload goes to the client; the log has the details.
+        logger.exception("unhandled_error", extra={"path": request.url.path})
+        return _error(500, "internal_error", "internal error; quote the correlation id to the team")
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
@@ -100,10 +116,28 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     protected = [Depends(require_api_key)]
     app.include_router(messages.router, prefix="/api/v1", dependencies=protected)
     app.include_router(voice.router, prefix="/api/v1", dependencies=protected)
+    # Dashboard routes: the service key of the Next.js server and an operator session.
+    app.include_router(auth.router, prefix="/api/v1", dependencies=protected)
     app.include_router(customers.router, prefix="/api/v1", dependencies=protected)
     app.include_router(operations.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(dialogs.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(integrations.router, prefix="/api/v1", dependencies=protected)
+    # Provider callbacks authenticate themselves (secret header, signature).
+    app.include_router(webhooks.router, prefix="/api/v1")
     app.include_router(telephony.router, prefix="/api/v1")
     return app
+
+
+def _error(status: int, code: str, message: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status,
+        content={
+            "error": code,
+            "code": code,
+            "message": message,
+            "correlation_id": correlation_id.get() or None,
+        },
+    )
 
 
 def _safe_errors(exc: RequestValidationError) -> list[dict]:
