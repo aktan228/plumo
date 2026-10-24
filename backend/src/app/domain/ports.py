@@ -78,8 +78,11 @@ class HumanHandoffProvider(Protocol):
 
 
 class KnowledgeRetriever(Protocol):
-    async def retrieve(self, business_id: UUID, query: str, limit: int = 5) -> list:
-        """Return ranked knowledge hits for one business. Shape is list[KnowledgeHit]."""
+    async def retrieve(self, business_id: UUID, query: str, limit: int = 5, recent: str = "") -> list:
+        """Return ranked knowledge hits for one business. Shape is list[KnowledgeHit].
+
+        `recent` is the last turns of the dialog: items already discussed stay in view.
+        """
 
 
 class ActionExecutor(Protocol):

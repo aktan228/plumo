@@ -88,7 +88,7 @@ DIALOGUES: list[tuple[str, list[Turn]]] = [
         "greeting_ky",
         [
             Turn(
-                "Салам",
+                "Саламатсызбы",
                 channel="telegram",
                 external="tg-ky-1",
                 expect=Expect(handoff=False, language="ky", contains=("Салам",)),
@@ -301,7 +301,7 @@ DIALOGUES: list[tuple[str, list[Turn]]] = [
         "mixed_language",
         [
             Turn(
-                "Салам, квартира еще продается?",
+                "Квартира еще продается, баасы канча?",
                 external="+996700100022",
                 expect=Expect(language="mixed"),
             )

@@ -4,7 +4,14 @@ import json
 import re
 
 from app.domain.models import AgentContext, QuestionAssessment, ValidationResult
-from app.domain.text_signals import analyze_message, compact_numbers, contains_any, find_phones, normalize_text
+from app.domain.text_signals import (
+    analyze_message,
+    compact_numbers,
+    contains_any,
+    find_phones,
+    money_numbers,
+    normalize_text,
+)
 
 _MEASURE = re.compile(r"(\d{1,4})\s*-?\s*(?:м²|м2|м\b|этаж|комнат)")
 # No calendar is connected: a booking is only a wish the manager confirms, and a
@@ -14,6 +21,10 @@ _FALSE_BOOKING = re.compile(
 )
 _FALSE_TRANSFER = re.compile(r"перевожу вас|соединяю вас|соединю вас|оставайтесь на линии|не отключайтесь")
 _INSTALLMENT_YES = re.compile(r"(есть|доступ|возмож|оформ)")
+# The customer naming their own budget: echoing it back ("в рамках 90 000") invents nothing.
+_BUDGET = ("бюджет", "до ", "в пределах", "в рамках", "максимум", "не больше", "не дороже", "рассчитыва", "ориентир", "чейин")
+# But a price the customer attributes to someone, or bargains for, must not pass as a fact.
+_CLAIM = ("сказал", "говорил", "обещал", "писал", "видел", "скин", "уступ", "за сколько", "стоит", "стоил")
 
 
 class ResponseValidator:
@@ -29,8 +40,8 @@ class ResponseValidator:
     def validate(self, response: str, context: AgentContext, extra: str = "") -> ValidationResult:
         allowed = f"{_corpus(context)}\n{extra}"
         allowed_norm = normalize_text(allowed)
-        allowed_numbers = set(compact_numbers(allowed))
-        for number in compact_numbers(response):
+        allowed_numbers = set(money_numbers(allowed)) | _budget_numbers(context)
+        for number in money_numbers(response):
             if number not in allowed_numbers:
                 return ValidationResult(False, "invented_number")
         for match in _MEASURE.finditer(normalize_text(response)):
@@ -112,6 +123,20 @@ def _corpus(context: AgentContext) -> str:
     if find_phones(context.current_message):
         parts.append(context.current_message)
     return "\n".join(parts)
+
+
+def _budget_numbers(context: AgentContext) -> set[str]:
+    """Amounts the customer gave as their own budget, in this turn or earlier."""
+
+    texts = [context.current_message] + [
+        message.text for message in context.recent_messages if str(message.role) == "user"
+    ]
+    numbers: set[str] = set()
+    for text in texts:
+        normalized = normalize_text(text)
+        if contains_any(normalized, _BUDGET) and not contains_any(normalized, _CLAIM):
+            numbers.update(money_numbers(normalized))
+    return numbers
 
 
 def _affirms_installment(text: str) -> bool:

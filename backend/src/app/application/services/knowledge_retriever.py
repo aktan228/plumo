@@ -50,8 +50,19 @@ class SimpleKnowledgeRetriever:
     def __init__(self, knowledge: KnowledgeStore) -> None:
         self.knowledge = knowledge
 
-    async def retrieve(self, business_id: UUID, query: str, limit: int = 5) -> list[KnowledgeHit]:
+    async def retrieve(self, business_id: UUID, query: str, limit: int = 5, recent: str = "") -> list[KnowledgeHit]:
         items = await self.knowledge.list_active(business_id)
+        hits = self._rank(items, query, limit)
+        # "скок стоит" after the agent named a listing: without it the model no
+        # longer sees that listing and disowns the price it just gave.
+        mentioned = [item for item in items if _mentioned(item, recent)]
+        if not mentioned:
+            return hits
+        shown = {hit.item.id for hit in hits}
+        extra = [KnowledgeHit(item=item, score=1.0) for item in mentioned if item.id not in shown]
+        return hits + extra[:2]
+
+    def _rank(self, items, query: str, limit: int) -> list[KnowledgeHit]:
         prepared = _PreparedQuery.from_text(query)
         if any(stem in prepared.normalized for stem in _CHEAPER):
             offers = [item for item in items if _offer(item) and _price(item) is not None]
@@ -126,6 +137,26 @@ def _score(query: _PreparedQuery, item) -> float:
         if "аренд" in hay and not query.rent:
             score -= 0.5
     return score
+
+
+# Words every listing title shares; they do not tell one listing from another.
+_GENERIC_TITLE = ("квартир", "однушк", "двушк", "трешк", "студи", "аренд", "комнат", "дом", "товар", "услуг")
+
+
+def _mentioned(item, recent: str) -> bool:
+    """The dialog's last turns name this item by a distinctive word of its title."""
+
+    if not recent or item.category not in OFFER_CATEGORIES:
+        return False
+    hay = normalize_text(recent)
+    for token in _TOKEN.findall(normalize_text(item.title)):
+        if len(token) < 3 or token in _STOPWORDS or any(token.startswith(word) for word in _GENERIC_TITLE):
+            continue
+        # "Филармонии" / "у Филармонии", "Джале" / "на Джал": compare the stem.
+        stem = token[:4] if len(token) >= 5 else token
+        if re.search(rf"(?<![а-яa-zңөү]){re.escape(stem)}", hay):
+            return True
+    return False
 
 
 def _offer(item) -> bool:

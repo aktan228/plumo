@@ -387,10 +387,28 @@ def system_parts(context: AgentContext) -> tuple[str, str]:
         f"Сейчас: {_now_line()} (Бишкек). Дни недели считай от этой даты.\n"
         f"Язык: {context.language}\n"
         f"Что помним: {summary}\n"
-        f"Уже знаем: {', '.join(known + facts) or '-'}\n\n"
+        f"Уже знаем: {', '.join(known + facts) or '-'}\n"
+        f"Ты уже спрашивал (не повторяй эти вопросы, даже другими словами): {_asked(context.recent_messages) or '-'}\n\n"
         f"# Переписка\n{history}"
     )
     return stable, turn
+
+
+_QUESTION = re.compile(r"[^.!?\n]*\?")
+
+
+def _asked(messages) -> str:
+    """The agent's own recent questions. Haiku re-asks an unanswered one unless it sees the list."""
+
+    asked: list[str] = []
+    for item in messages[-6:]:
+        if str(item.role) != "assistant":
+            continue
+        for match in _QUESTION.findall(item.text):
+            question = " ".join(match.split())
+            if question and question not in asked:
+                asked.append(question)
+    return " | ".join(asked[-4:])
 
 
 def _user_prompt(context: AgentContext, route: RouteDecision) -> str:

@@ -12,6 +12,7 @@ _YO = str.maketrans({"ё": "е", "Ё": "е"})
 KY_MARKERS = frozenset(
     {
         "салам",
+        "саламатсызбы",
         "рахмат",
         "жакшы",
         "кантип",
@@ -97,6 +98,10 @@ MEETING = (
     "записать",
     "запиш",
     "жолугу",
+    # Kyrgyz "can I see it", "show me", "to view". Not "көрө": "ойлонуп көрөйүн" is "I'll think it over".
+    "көрсө болобу",
+    "көрсөт",
+    "көрүүгө",
 )
 INSTALLMENT = ("рассроч", "ипотек", "кредит")
 MONEY = ("дорого", "скидк", "торг", "дешевле", "бюджет")
@@ -185,6 +190,26 @@ def compact_numbers(text: str) -> list[str]:
     return re.findall(r"\d{4,}", compact)
 
 
+# "90 тысяч", "90 тыс", "90к", "85 миң": amounts people type without zeros.
+# A bare "к" needs two digits written next to it: "1к", "2к" in listings mean a 1- or 2-room flat,
+# and "в 11 к вам" is a time.
+_THOUSANDS = re.compile(
+    r"(?<![\d.,])(?:(\d{1,3})\s*(?:тысяч|тыс|тыщ|миң)[а-яңөү.]*|(\d{2,3})[кk](?![а-яa-z]))"
+)
+
+
+def money_numbers(text: str) -> list[str]:
+    """`compact_numbers` plus amounts written in thousands: "до 90 тысяч" -> `90000`.
+
+    Only for checking replies. Routing and search keep `compact_numbers`, so a
+    budget the customer names does not turn into a factual question.
+    """
+
+    normalized = normalize_text(text)
+    expanded = [str(int(match.group(1) or match.group(2)) * 1000) for match in _THOUSANDS.finditer(normalized)]
+    return compact_numbers(_THOUSANDS.sub(" ", normalized)) + expanded
+
+
 def contains_any(text: str, needles: tuple[str, ...] | frozenset[str]) -> bool:
     hay = normalize_text(text)
     return any(needle in hay for needle in needles)
@@ -255,9 +280,16 @@ class MessageSignals:
         )
 
 
+# Greetings Russian speakers in Bishkek use too: alone they say nothing about the language.
+_SHARED_GREETING = frozenset({"салам", "алейкум", "алейкуме", "ассалам", "ассаламу"})
+
+
 def detect_language(text: str) -> str:
     normalized = normalize_text(text)
-    tokens = set(re.findall(r"[a-zа-я]+", normalized))
+    words = set(re.findall(r"[a-zа-я]+", normalized))
+    tokens = words - _SHARED_GREETING
+    if words and not tokens:
+        return "unknown"
     ky = bool(tokens & KY_MARKERS)
     ru_hit = bool(tokens & RU_MARKERS)
     if ky and ru_hit:
