@@ -4,6 +4,8 @@ Search and filters run in SQL over the whole business, not over a loaded page.
 Order is last activity, newest first, then id: stable while new messages arrive.
 """
 
+from __future__ import annotations
+
 import base64
 import json
 from dataclasses import dataclass
