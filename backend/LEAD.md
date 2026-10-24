@@ -2,9 +2,9 @@
 
 Документ для людей, которые принимают архитектуру и подключают каналы, кабинет и живые провайдеры. Здесь не «как запустить docker», а что сделано в ядре, зачем так, и что происходит с одним сообщением под капотом.
 
-Код: репозиторий [aktan228/plumo](https://github.com/aktan228/plumo), ветка `feature/ai-integration`, каталог `backend/`. Локальная рабочая копия — этот репозиторий. Интеграция адаптеров — `INTEGRATION.md`. Команды запуска — `README.md`.
+Код: репозиторий [aktan228/plumo](https://github.com/aktan228/plumo), каталог `backend/`. Интеграция адаптеров — `INTEGRATION.md`. Команды запуска — `README.md`. Приоритеты и план MVP (мессенджеры, телефония отложена) — [../README.md](../README.md#mvp).
 
-Автор ядра не трогает фронт, лендинг и прод-каналы. Контракт для них — REST `/api/v1`.
+Документ описывает ядро агента. Каналы Telegram и Instagram, worker и кабинет описаны в [../docs/dashboard-channels.md](../docs/dashboard-channels.md).
 
 ---
 
@@ -26,17 +26,19 @@ Plumo — **AI-менеджер по продажам недвижимости**
 | --- | --- |
 | Пайплайн сообщения (клиент → память → KB → роутер → LLM → валидатор → actions → лог) | Работает |
 | PostgreSQL, Alembic, репозитории | Работает |
-| Один клиент, merge по телефону, история по всем каналам | Работает |
-| Rule-based роутер small/big | Работает |
+| Карточка клиента по ключу канала; merge только явным вызовом после подтверждения | Работает; механизма подтверждения нет |
+| Rule-based роутер small/big | Размечает реплики; малой модели нет, отвечает большая |
 | Валидатор фактов + grounded fallback | Работает |
 | Handoff очередь PENDING → ACCEPTED → RESOLVED | Работает |
 | Встречи со статусом PROPOSED (без Google Calendar) | Работает |
 | REST + Swagger | Работает |
 | Claude Haiku 5.5 через OpenRouter (запасная Haiku 4.5); Gemini и другие — сменой env | Подключён адаптером: ретраи, смена отключённой модели, thinking выключен |
 | STT / TTS | Mock (`audio_id` → текст / текст → `audio_id`) |
-| WhatsApp / Telegram / Instagram SDK | Mock-адаптеры формы payload |
-| Кабинет менеджера / лендинг | Вне этого репозитория |
-| Эмбеддинги, ML-роутер, fine-tune Qwen | Не в этой поставке; порты уже есть |
+| Telegram, Instagram | Настоящие адаптеры: webhook, очередь, worker, отправка. Telegram проверен вживую, Instagram — на fixtures |
+| WhatsApp | Не подключён (только mock-адаптер); следующий канал MVP |
+| Кабинет менеджера, лендинг | В `frontend/` этого репозитория |
+| Голос (ElevenLabs) | Код есть, телефония отложена |
+| Эмбеддинги, ML-роутер, fine-tune Qwen | Не в MVP; порты уже есть |
 
 ---
 
@@ -47,11 +49,11 @@ Plumo — **AI-менеджер по продажам недвижимости**
 | Язык | Python 3.12+ |
 | HTTP | FastAPI, Uvicorn |
 | БД | PostgreSQL 16, SQLAlchemy 2 async, asyncpg |
-| Миграции | Alembic (`001_initial`) |
+| Миграции | Alembic, `001`–`006` |
 | Конфиг | pydantic-settings, `.env` (секреты не в Settings-логах) |
 | LLM HTTP | httpx → OpenRouter Chat Completions |
 | Тесты | pytest + pytest-asyncio |
-| Контейнеры | Docker Compose: `db` + `api` |
+| Контейнеры | Docker Compose: `db` + `api` + `worker` |
 | Стиль кода | Ports & adapters, composition root в `container.py` |
 
 Зависимости — `pyproject.toml`. Ключ `OPENROUTER_API_KEY` читает только `OpenRouterLLMProvider` из окружения, в structured logs поля с `key`/`secret`/`token` вычищаются.
@@ -245,9 +247,8 @@ Seed кладёт два объекта Demo Realty:
 
 - WhatsApp / голос: ключ — телефон в `external_user_id`.
 - Telegram / Instagram без номера: ключ `(channel, external_id)`, отдельная карточка.
-- Клиент в Telegram написал `+996…`, а WhatsApp с этим номером уже есть → **merge**. Выживает карточка с телефоном. Каналы, диалоги, сообщения, встречи, handoff и логи переезжают. Старая карточка: `status=merged`, `merged_into_id`.
-
-Историю в кабинете читать у **выжившего** `customer_id`: `GET /api/v1/customers/{id}/history`.
+- Клиент в Telegram написал `+996…` → номер сохраняется в `contact_phone` с пометкой «назвал сам», карточки **не** сливаются: номер может быть чужим. Слияние — только `merge_customers` после подтверждения владения номером или решения менеджера; механизм подтверждения ещё не реализован.
+- После merge выживает одна карточка: каналы, диалоги, сообщения, встречи, handoff и логи переезжают, старая получает `status=merged` и `merged_into_id`. Историю читать у **выжившего** `customer_id`: `GET /api/v1/customers/{id}/history`.
 
 ---
 
@@ -259,7 +260,7 @@ Seed кладёт два объекта Demo Realty:
 
 Встреча = `PROPOSED` локально. Google Calendar — другой executor с тем же `execute`, подмена в `build_agent`.
 
-Уведомление менеджеру в Telegram — порт `HumanHandoffProvider.notify`. Сейчас mock пишет лог.
+Уведомление менеджеру — порт `HumanHandoffProvider.notify`: `TelegramHandoffProvider` при `HANDOFF_PROVIDER=telegram`, иначе mock пишет лог. Пока уведомление уходит фоновой задачей процесса до commit; перевод на очередь заданий — первый пункт плана MVP.
 
 ---
 
@@ -343,7 +344,9 @@ Seed идемпотентен: бизнес Demo Realty, график 09:00–18
 
 Настоящее: клиенты, merge, память, KB, роутер, валидатор, handoff, встречи в Postgres, логи, метрики, REST, OpenRouter-адаптер.
 
-Mock: STT/TTS, детектор языка (словари), уведомление человеку, WhatsApp/Telegram SDK, календарь снаружи, скриптовый LLM при `AI_MODE=mock`.
+Настоящие также каналы Telegram и Instagram, worker и уведомление менеджеру через Telegram-бота.
+
+Mock: STT/TTS, детектор языка (словари), WhatsApp, календарь снаружи, скриптовый LLM при `AI_MODE=mock`.
 
 ---
 
@@ -352,8 +355,8 @@ Mock: STT/TTS, детектор языка (словари), уведомлен�
 - Поиск по KB лексический: «двушка у Филармонии» не найдёт объект без этих слов. Лечится эмбеддингами за тем же портом.
 - Роутер на словах: опечатки и редкие формулировки улетают в `big / no_confident_answer`.
 - Бесплатная модель медленная и иногда отдаёт safety-мусор — ядро это глушит, но тон ответов хуже, чем у Gemini с кредитами (~$5 на OpenRouter).
-- Голос и мессенджеры ещё не прод.
-- Fine-tune Qwen / LoRA — следующий этап, не часть текущего монолита.
+- Мессенджеры ещё не прод: нет постоянного стенда, Instagram не проверен вживую, WhatsApp не подключён. Голос отложен.
+- Fine-tune Qwen / LoRA — не в MVP.
 - Не коммитить `.env` и ключи.
 
 ---

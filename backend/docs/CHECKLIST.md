@@ -1,40 +1,42 @@
 # Что подключить: аккаунты, ключи, подписки
 
-Ключи и пароли кладём только в `.env`. В чат, git и issues не отправляем.
+Ключи и пароли кладём только в `.env`. В чат, git и issues не отправляем. Порядок соответствует плану MVP ([../../README.md](../../README.md#mvp)): мессенджеры, телефония отложена. Цены и условия провайдеров сверять с их официальными страницами перед оплатой.
 
-## Этап 1 — сейчас, локально (≈ $0)
+## Этап 1 — разработка (≈ $5–10)
 
-- [ ] **Gemini API key** — https://aistudio.google.com/apikey → Create API key. Бесплатный лимит хватит на разработку.
-      В `.env`: `GEMINI_API_KEY=…`, `AI_MODE=production`, `SMALL_MODEL_PROVIDER=none`, `BIG_MODEL_PROVIDER=gemini_big`.
-      Проверка: `python -m app.ping_llm --repeat 3` (модель, задержка, цена), затем `.\dev.cmd eval --provider gemini`.
-      Gemini 2.5 Flash отключается 20.10.2026 — по умолчанию стоит 3.8 Flash с запасными, см. [MODELS.md](MODELS.md).
+- [ ] **OpenRouter** — ключ и баланс $5–10. В `.env`: `AI_MODE=production`, `SMALL_MODEL_PROVIDER=none`, `BIG_MODEL_PROVIDER=openrouter_big`, `OPENROUTER_API_KEY=…`, модели — как в `.env.example` ([MODELS.md](MODELS.md)). Проверка: `python -m app.ping_llm --repeat 3`.
 - [ ] **Telegram-бот для менеджеров** — в Telegram @BotFather → `/newbot` → токен. Создать группу «Plumo менеджеры», добавить туда бота, написать любое сообщение, открыть `https://api.telegram.org/bot<ТОКЕН>/getUpdates` и взять `chat.id` (число с минусом).
       В `.env`: `HANDOFF_PROVIDER=telegram`, `TELEGRAM_BOT_TOKEN=…`, `TELEGRAM_MANAGER_CHAT_ID=-100…`.
-- [ ] **GitHub** — ссылка на репозиторий и доступ на запись, чтобы запушить `feature/voice-elevenlabs`.
-- [ ] *(по желанию)* **Supabase** — https://supabase.com → New project, регион Frankfurt (eu-central-1) → Connect → «Transaction pooler» → строку целиком в `DATABASE_URL`. Бесплатный проект засыпает после недели без запросов.
-- [ ] *(по желанию)* **OpenRouter** — пополнить на $10, чтобы сравнивать модели через `.\dev.cmd eval --provider openrouter --small … --big …`.
+- [ ] **Тестовый Telegram-бот бизнеса** — отдельный бот через @BotFather, подключается в кабинете ([../../docs/dashboard-channels.md](../../docs/dashboard-channels.md), раздел 4).
+- [ ] **Временный публичный HTTPS** — `cloudflared` или ngrok, чтобы Telegram и Meta доставляли webhook на локальный стенд.
 
-## Этап 2 — тест звонков (≈ $25–35 в месяц)
+## Этап 2 — постоянный стенд (≈ €5–10 в месяц)
 
-- [ ] **ngrok** — https://ngrok.com, бесплатный аккаунт → authtoken → `ngrok http 8000`. Даёт публичный HTTPS-адрес без сервера.
-- [ ] **ElevenLabs** — https://elevenlabs.io, тариф Creator ($22 в месяц, первый месяц со скидкой). Звонки ≈ $0.08 за минуту поверх тарифа — проверить на странице цен.
-      Настройка агента — 6 шагов в [VOICE.md](../VOICE.md). В `.env`: `ELEVENLABS_LLM_TOKEN` (придумать длинную случайную строку), `ELEVENLABS_WEBHOOK_SECRET` (из ElevenLabs), `VOICE_USD_PER_MINUTE=0.08`.
-      На первом шаге можно звонить агенту прямо из браузера в ElevenLabs, номер не нужен.
-- [ ] **Номер** — Zadarma (https://zadarma.com): городской номер Бишкека (312). Заранее спросить у них, какие документы нужны. Переадресация на ElevenLabs — в [VOICE.md](../VOICE.md), раздел «Номер». Альтернатива — Telnyx, если у них есть номера +996.
+- [ ] **Сервер** — VPS (например, Hetzner CX22 или аналог) + домен + HTTPS. Деплой — [FULLSTACK.md](../FULLSTACK.md), раздел 4. Сгенерировать `PLUMO_API_KEY` и `CHANNEL_SECRET_KEY`.
+- [ ] **Резервное копирование базы** и наблюдение за worker.
 
-## Этап 3 — пилот с реальными клиентами
+## Этап 3 — Meta: Instagram и WhatsApp (начать сразу)
 
-- [ ] **Биллинг Google Cloud** для Gemini (платный Tier 1). На бесплатном тарифе Google может использовать запросы для улучшения продуктов, с данными клиентов так нельзя.
-- [ ] **WhatsApp Cloud API** — Meta Business (https://business.facebook.com) → верификация бизнеса → приложение на https://developers.facebook.com с продуктом WhatsApp. Номер не должен быть занят обычным WhatsApp. С 1 октября 2026 ответы платные: проверить ставку для Кыргызстана. Адаптер канала ещё нужно написать (вебхук → `POST /api/v1/messages` → отправка ответа).
-- [ ] **Сервер** — VPS (Hetzner CX22 ≈ €5 в месяц или аналог) + домен + HTTPS. Деплой — [FULLSTACK.md](../FULLSTACK.md), раздел 4. Сгенерировать `PLUMO_API_KEY`.
-- [ ] **Юрист** — договор поручения обработки персональных данных с клиентом-бизнесом, текст предупреждения о записи разговора.
-- [ ] **Носитель кыргызского** — вычитать фразы в `src/app/domain/phrases.py`.
-- [ ] **50 записей звонков** с согласия — тест распознавания кыргызского (WER).
+Верификация и проверки Meta занимают дни, поэтому их запускаем параллельно с разработкой.
+
+- [ ] **Meta Business** (https://business.facebook.com) — бизнес-аккаунт и верификация бизнеса.
+- [ ] **Meta app** (https://developers.facebook.com) — одно приложение для Instagram и WhatsApp; роли тестировщиков; при необходимости App Review и режим Live. Что нужно для Instagram — [../../docs/dashboard-channels.md](../../docs/dashboard-channels.md), раздел 5.
+- [ ] **WhatsApp Cloud API** — продукт WhatsApp в приложении, тестовый номер. Проверить: можно ли подключить номер, уже работающий в приложении WhatsApp Business, или нужен отдельный; ставки для Кыргызстана; правила окна ответа и шаблонов. Адаптер канала ещё нужно написать.
+
+## Этап 4 — пилот с реальными клиентами
+
+- [ ] **Юрист** — договор поручения обработки персональных данных с клиентом-бизнесом, сроки хранения и удаления переписки.
+- [ ] **Носитель кыргызского** — вычитать фразы в `src/app/domain/phrases.py` и ответы модели из `app.bench`.
+- [ ] **Условия обработки данных** у OpenRouter и провайдера модели — допустимы ли для данных реальных клиентов.
+
+## Отложено: телефония
+
+ElevenLabs (тариф Creator), номер Zadarma или Telnyx, 50 записей звонков для проверки кыргызского распознавания — см. [VOICE.md](../VOICE.md). Не покупаем до решения вернуться к звонкам.
 
 ## Сколько стоит один диалог (оценка)
 
 | Что | Цена |
 | --- | --- |
-| Текст, Gemini Flash-Lite + Flash | ≈ $0.002–0.003 за диалог из 8–10 реплик |
-| Звонок, ElevenLabs | ≈ $0.08 за минуту + текст |
-| WhatsApp | по ставке Meta для KG, с октября 2026 |
+| Текст, Claude Haiku 5.5 через OpenRouter | ≈ $0.0003 за реплику, ≈ $0.003 за диалог из 8–10 реплик (замер 9 октября, [MODELS.md](MODELS.md)) |
+| WhatsApp | по ставке Meta для KG — проверить |
+| Telegram, Instagram Direct | плата канала за сообщения не ожидается — подтвердить по официальным условиям |

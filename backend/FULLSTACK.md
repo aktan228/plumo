@@ -104,7 +104,7 @@ curl -X POST https://api.example.com/api/v1/messages \
   -d '{"channel":"whatsapp","external_user_id":"+996555123456","text":"Еще продается?","message_id":"wamid.HBg..."}'
 ```
 
-`channel` — `whatsapp | telegram | instagram | voice`. Для WhatsApp и звонков `external_user_id` — телефон, это ключ клиента. Для Telegram и Instagram — id в канале; когда клиент назовёт номер, карточки склеятся сами.
+`channel` — `whatsapp | telegram | instagram | voice`. Для WhatsApp и звонков `external_user_id` — телефон, это ключ клиента. Для Telegram и Instagram — id в канале. Номер, который клиент написал в тексте, сохраняется как контакт для обратной связи и карточки **не** объединяет.
 
 В ответе важно:
 
@@ -129,12 +129,13 @@ curl -X POST https://api.example.com/api/v1/messages \
 
 ## 4. Деплой
 
-1. VPS с публичным IP или доменом и HTTPS: Caddy или nginx + Let's Encrypt перед портом 8000. ElevenLabs без HTTPS не работает.
-2. `.env` с `PLUMO_API_KEY`, `AI_MODE=production`, ключами.
-3. `docker compose up -d --build`, затем `docker compose run --rm api python -m app.seed` для демо.
-4. URL `https://<домен>/api/v1/telephony/elevenlabs/...` вписать в ElevenLabs (шаги в [VOICE.md](VOICE.md)).
+1. VPS с публичным IP, домен и HTTPS: Caddy или nginx + Let's Encrypt перед портом 8000. Webhook Telegram и Meta без HTTPS не работают.
+2. `.env` с `APP_ENV=stand`, `PLUMO_API_KEY`, `CHANNEL_SECRET_KEY`, `PUBLIC_BASE_URL`, `AI_MODE=production`, ключами модели.
+3. `docker compose up -d --build` — поднимает базу, API и worker; затем `docker compose run --rm api python -m app.seed` для демо.
+4. Оператор кабинета: `docker compose run --rm api python -m app.operators create ...`. Подключение каналов — [../docs/dashboard-channels.md](../docs/dashboard-channels.md).
+5. Резервное копирование базы и наблюдение за worker — до работы с реальными клиентами.
 
-Для локальной отладки звонков хватит `ngrok http 8000`.
+Для локальной отладки webhook хватит временного туннеля (`cloudflared` или `ngrok http 8000`). Телефония отложена; её настройка — [VOICE.md](VOICE.md).
 
 ## 5. Что где в коде
 
