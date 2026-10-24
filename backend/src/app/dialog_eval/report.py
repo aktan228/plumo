@@ -41,6 +41,7 @@ def summary_row(dialogs: list[Dialog]) -> dict[str, Any]:
         "meeting": _pct(sum(c["meeting"] for c in checks), len(dialogs)),
         "left": _pct(sum(c["end"] in ("declined", "left") for c in checks), len(dialogs)),
         "repeats": sum(len(c["repeated_questions"]) for c in checks),
+        "verbatim": _pct(sum(len(c.get("verbatim_repeats", [])) for c in checks), len(turns)),
         "avg_chars": _avg([c["avg_chars"] for c in checks if c["agent_turns"]], 0),
         "long_share": _pct(sum(c["long_replies"] for c in checks), len(turns)),
         "wrong_language": _pct(sum(len(c["wrong_language"]) for c in checks), len(turns)),
@@ -79,13 +80,13 @@ def write_report(out: Path, dialogs: list[Dialog], configs: list[str], meta: dic
         "",
         "## Итог по конфигурациям",
         "",
-        "| Конфигурация | Диалогов | Телефон | Встреча | Ушёл | Повторы вопросов | Ср. длина | > 3 предл. | Не тот язык | Подмены ядра | Чужие суммы | Не тот тип сделки | Нет нужной передачи | Лишняя передача | p50 | p90 | $/диалог | Ошибки |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Конфигурация | Диалогов | Телефон | Встреча | Ушёл | Повторы вопросов | Реплика дословно повторена | Ср. длина | > 3 предл. | Не тот язык | Подмены ядра | Чужие суммы | Не тот тип сделки | Нет нужной передачи | Лишняя передача | p50 | p90 | $/диалог | Ошибки |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     rows = {config: summary_row([item for item in dialogs if item.config == config]) for config in configs}
     for config, r in rows.items():
         lines.append(
-            f"| {config} | {r['dialogs']} | {r['phone']} | {r['meeting']} | {r['left']} | {r['repeats']} | {r['avg_chars']} | "
+            f"| {config} | {r['dialogs']} | {r['phone']} | {r['meeting']} | {r['left']} | {r['repeats']} | {r['verbatim']} | {r['avg_chars']} | "
             f"{r['long_share']} | {r['wrong_language']} | {r['substituted']} | {r['invented']} | {r['wrong_offer']} | "
             f"{r['missing_handoff']} | {r['unwarranted_handoff']} | {r['p50']} мс | {r['p90']} мс | {r['cost']} | {r['errors']} |"
         )
@@ -131,6 +132,8 @@ def _dialog_block(dialog: Dialog) -> list[str]:
         flags.append("чужие суммы: " + ", ".join(f"{item['number']} (#{item['turn']})" for item in checks["invented_numbers"]))
     if checks.get("repeated_questions"):
         flags.append(f"повторы вопросов: {len(checks['repeated_questions'])}")
+    if checks.get("verbatim_repeats"):
+        flags.append(f"дословные повторы реплик: {len(checks['verbatim_repeats'])}")
     if checks.get("missing_handoff"):
         flags.append("нет нужной передачи")
     if checks.get("unwarranted_handoffs"):
@@ -155,7 +158,7 @@ def _dialog_block(dialog: Dialog) -> list[str]:
         if turn.handoff:
             marks.append(f"передача: {turn.handoff}")
         if turn.substituted:
-            marks.append("подмена ядра: " + ", ".join(step for step in turn.steps if step.startswith(("grounded", "fallback", "validator", "empty"))))
+            marks.append("подмена ядра: " + ", ".join(step for step in turn.steps if step.startswith(("grounded", "fallback", "validator", "empty", "human_phrase"))))
         tail = f" _({'; '.join(marks)}; {turn.latency_ms} мс)_" if marks else f" _({turn.latency_ms} мс)_"
         lines.append(f"   **Plumo:** {turn.agent or '(нет ответа)'}{tail}")
     if dialog.error:

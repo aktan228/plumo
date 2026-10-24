@@ -61,6 +61,15 @@ def check_dialog(dialog: Dialog, persona: Persona, allowed_numbers: set[str] | N
                 repeated.append({"turn": index, "question": question})
         asked.extend(mine)
 
+    # The same reply word for word: a loop the customer notices at once.
+    seen: set[str] = set()
+    verbatim = []
+    for index, text in replies:
+        key = normalize_text(text)
+        if key in seen:
+            verbatim.append(index)
+        seen.add(key)
+
     lengths = [len(text) for _, text in replies]
     counts = [len(sentences(text)) for _, text in replies]
     wrong_language = [
@@ -91,6 +100,7 @@ def check_dialog(dialog: Dialog, persona: Persona, allowed_numbers: set[str] | N
     return {
         "agent_turns": len(replies),
         "repeated_questions": repeated,
+        "verbatim_repeats": verbatim,
         "avg_chars": round(sum(lengths) / len(lengths)) if lengths else 0,
         "avg_sentences": round(sum(counts) / len(counts), 1) if counts else 0,
         "long_replies": sum(count > LONG_SENTENCES for count in counts),

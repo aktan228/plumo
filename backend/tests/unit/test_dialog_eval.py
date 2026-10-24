@@ -86,6 +86,12 @@ def test_language_mismatch_for_kyrgyz_persona():
     assert check_dialog(dialog, BY_ID["kyrgyz"])["wrong_language"] == [1]
 
 
+def test_verbatim_loop_is_caught():
+    loop = "Хорошо, зову менеджера. Он уже видит, о чём мы говорили, и скоро ответит."
+    dialog = _dialog("haggler", [("скиньте", loop), ("менеджер может опустить?", loop), ("ну так что?", loop)])
+    assert check_dialog(dialog, BY_ID["haggler"])["verbatim_repeats"] == [2, 3]
+
+
 def test_similar_questions():
     assert similar("Для себя или под инвестицию?", "А для себя или под инвестицию смотрите?")
     assert not similar("Какой бюджет?", "Посмотрите в субботу?")

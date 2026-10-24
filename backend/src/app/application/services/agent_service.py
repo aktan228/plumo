@@ -240,6 +240,7 @@ class AgentService:
         )
         if signals.human_request:
             response_text = human_phrase(language, message.channel, seed)
+            steps.append("human_phrase")
         elif assessment.factual and not assessment.answerable and (
             not context.knowledge or assessment.topic == "installment"
         ):

@@ -14,7 +14,8 @@ from app.infrastructure.database.repositories import CustomerRepository
 from app.seed import DEMO_BUSINESS_ID
 
 # Steps in AgentResponse.logs where the core replaced the model's text with its own.
-SUBSTITUTION_STEPS = ("grounded_fallback", "fallback:", "validator:", "empty_draft_fallback")
+# human_phrase: the model's text dropped for the fixed "зову менеджера" line.
+SUBSTITUTION_STEPS = ("grounded_fallback", "fallback:", "validator:", "empty_draft_fallback", "human_phrase")
 
 
 @dataclass(slots=True)
@@ -31,7 +32,8 @@ class Turn:
 
     @property
     def substituted(self) -> bool:
-        return any(step.startswith(SUBSTITUTION_STEPS) for step in self.steps)
+        # rules:fixed_reply: the model was not asked at all (human request, greeting, farewell).
+        return self.model == "rules:fixed_reply" or any(step.startswith(SUBSTITUTION_STEPS) for step in self.steps)
 
 
 @dataclass(slots=True)

@@ -4,6 +4,7 @@
     python -m app.dialog_eval --config haiku                  # 10 personas x 3 repeats
     python -m app.dialog_eval --config haiku sonnet --persona family haggler --repeat 1
     python -m app.dialog_eval --config haiku --repeat 2 --turns 8 --yes
+    python -m app.dialog_eval --rejudge work/dialog_eval/<time>   # grade again only dialogs the judge failed on
 
 A cheap model (Haiku) plays the customer from a persona card; the agent is the
 real core (build_agent -> process_message, Telegram channel, demo business);
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import random
 import sys
 import time
@@ -31,7 +33,7 @@ from app.dialog_eval.configs import JUDGE_MODEL, MODELS, PRICES, SIMULATOR_MODEL
 from app.dialog_eval.judge import MockJudge, ModelJudge
 from app.dialog_eval.personas import BY_ID, PERSONAS
 from app.dialog_eval.report import write_report
-from app.dialog_eval.runner import Dialog, run_dialog
+from app.dialog_eval.runner import Dialog, Turn, run_dialog
 from app.dialog_eval.simulator import MockSimulator, ModelSimulator
 from app.seed import seed
 
@@ -94,6 +96,37 @@ async def run_eval(
     return list(await asyncio.gather(*jobs))
 
 
+def load_dialogs(data: dict) -> list[Dialog]:
+    dialogs = []
+    for raw in data["dialogs"]:
+        turns = [Turn(**turn) for turn in raw.pop("turns")]
+        dialogs.append(Dialog(**raw, turns=turns))
+    return dialogs
+
+
+async def rejudge(folder: Path) -> int:
+    """Grade again the dialogs whose verdict failed; the dialogs themselves are not rerun."""
+
+    from app.bench.run import judge_catalog
+
+    data = json.loads((folder / "results.json").read_text(encoding="utf-8"))
+    dialogs = load_dialogs(data)
+    failed = [item for item in dialogs if "scores" not in item.judge]
+    print(f"Без оценки судьи: {len(failed)} из {len(dialogs)}. Оценка стоимости: ~${len(failed) * _usd(JUDGE_MODEL, JUDGE_TOKENS):.2f}")
+    if not failed:
+        return 0
+    judge = ModelJudge(JUDGE_MODEL, judge_catalog())
+    try:
+        await asyncio.gather(*(judge.grade(item, BY_ID[item.persona]) for item in failed))
+    finally:
+        await judge.aclose()
+    meta = data["meta"]
+    meta["judge_cost"] = meta.get("judge_cost", 0.0) + judge.cost
+    write_report(folder, dialogs, meta["configs"], meta)
+    print(f"Оценено заново: {sum('scores' in item.judge for item in failed)}, потрачено ~${judge.cost:.3f}. Отчёт: {folder / 'report.md'}")
+    return 0
+
+
 async def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Стенд оценки диалогов Plumo")
     parser.add_argument("--config", nargs="+", default=["haiku"], choices=list(MODELS), help="конфигурации агента")
@@ -104,8 +137,11 @@ async def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mock", action="store_true", help="без сети: mock-модель агента, клиент по скрипту, mock-судья")
     parser.add_argument("--yes", action="store_true", help="не спрашивать подтверждение расхода")
     parser.add_argument("--out", default="work/dialog_eval")
+    parser.add_argument("--rejudge", metavar="FOLDER", help="папка прошлого прогона: оценить заново диалоги без оценки")
     args = parser.parse_args(argv)
     load_dotenv()
+    if args.rejudge:
+        return await rejudge(Path(args.rejudge))
 
     personas = [BY_ID[name] for name in args.persona] if args.persona else list(PERSONAS)
     configs = ["mock"] if args.mock else list(dict.fromkeys(args.config))

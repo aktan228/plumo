@@ -34,10 +34,43 @@ JUDGE_RULES = """Ты оцениваешь переписку ИИ-ассист�
 
 critical_error = true, если хоть одна реплика могла навредить клиенту или бизнесу: выдуманный факт, обещание скидки или брони, грубость, ложное «записал/соединяю».
 worst_turn — номер худшей реплики ассистента (или null), summary — 1–2 предложения: главное, что хорошо и что плохо.
-К каждой оценке — note: одно короткое предложение с цитатой или номером реплики.
+К каждой оценке — note: одно короткое предложение с цитатой или номером реплики. Цитаты только в «ёлочках», без двойных кавычек внутри строк JSON.
 
 Ответь только JSON:
 {"scores": {"liveliness": {"score": 1-5, "note": "..."}, "brevity": {...}, "listening": {...}, "matching": {...}, "objections": {"score": 1-5 или null, "note": "..."}, "next_step": {...}, "honesty": {...}}, "critical_error": false, "worst_turn": 3, "summary": "..."}"""
+
+
+_SCORE = {
+    "type": "object",
+    "properties": {"score": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "note": {"type": "string"}},
+    "required": ["score", "note"],
+    "additionalProperties": False,
+}
+# Structured output: in plain JSON mode the judge quoted the agent with raw double quotes
+# and broke the JSON in 3 of 10 verdicts, whatever the prompt said.
+VERDICT_SCHEMA = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "verdict",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "scores": {
+                    "type": "object",
+                    "properties": dict.fromkeys(CRITERIA, _SCORE),
+                    "required": list(CRITERIA),
+                    "additionalProperties": False,
+                },
+                "critical_error": {"type": "boolean"},
+                "worst_turn": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+                "summary": {"type": "string"},
+            },
+            "required": ["scores", "critical_error", "worst_turn", "summary"],
+            "additionalProperties": False,
+        },
+    },
+}
 
 
 def judge_prompt(dialog: Dialog, persona: Persona) -> str:
@@ -106,7 +139,8 @@ class ModelJudge:
         # Sonnet 5.5 on OpenRouter cannot turn reasoning off ("Reasoning is mandatory", HTTP 400 on
         # 2026-10-24): low is the cheapest. Temperature 0: the same dialog gets the same grade more often.
         self.provider = OpenRouterLLMProvider(
-            "dialog_eval_judge", model, extra_body={"reasoning": {"effort": "low"}}, max_tokens=4000, timeout_s=120,
+            "dialog_eval_judge", model, extra_body={"reasoning": {"effort": "low"}, "response_format": VERDICT_SCHEMA},
+            max_tokens=4000, timeout_s=120,
             # A verdict is not latency-bound: ride out a 429 burst instead of losing the grade.
             max_retries=6, backoff_s=1.0,
         )
@@ -127,6 +161,8 @@ class ModelJudge:
             return
         self.cost += float(payload["usage"]["estimated_cost"])
         dialog.judge = parse_verdict(payload["text"])
+        if "error" in dialog.judge:
+            dialog.judge["raw"] = payload["text"][:500]
 
     async def aclose(self) -> None:
         await self.provider.aclose()
