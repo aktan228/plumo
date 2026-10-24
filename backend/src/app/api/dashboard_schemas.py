@@ -47,6 +47,41 @@ class RegisterIn(BaseModel):
         return value
 
 
+class RegisterOut(BaseModel):
+    status: Literal["verification_required"] = "verification_required"
+    email: str
+    email_delivery: Literal["sent", "unavailable"]
+
+
+class EmailRequestIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr = Field(max_length=254)
+    locale: Literal["ru", "en"] = "ru"
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def clean_email(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
+
+
+class AccountTokenIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=43, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class ResetPasswordIn(AccountTokenIn):
+    password: str = Field(min_length=10, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def nonblank_password(cls, value):
+        return RegisterIn.nonblank_password(value)
+
+
+class AcceptedOut(BaseModel):
+    status: Literal["accepted"] = "accepted"
+
+
 class BusinessBriefOut(BaseModel):
     id: UUID
     name: str

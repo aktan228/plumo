@@ -36,8 +36,11 @@ class OperatorRepository:
         row = await self.session.get(OperatorRow, operator_id)
         return _operator(row) if row else None
 
-    async def get_with_hash(self, email: str) -> tuple[Operator, str] | None:
-        row = await self.session.scalar(select(OperatorRow).where(OperatorRow.email == email.strip().lower()))
+    async def get_with_hash(self, email: str, *, lock: bool = False) -> tuple[Operator, str] | None:
+        stmt = select(OperatorRow).where(OperatorRow.email == email.strip().lower())
+        if lock:
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
+        row = await self.session.scalar(stmt)
         return (_operator(row), row.password_hash) if row else None
 
     async def add(self, *, business_id: UUID, email: str, password_hash: str, display_name: str = "") -> Operator:
@@ -47,6 +50,7 @@ class OperatorRepository:
             business_id=business_id,
             email=email.strip().lower(),
             password_hash=password_hash,
+            email_verified_at=now,
             display_name=display_name.strip()[:100],
             active=True,
             created_at=now,
@@ -61,7 +65,7 @@ class OperatorRepository:
         stmt = (
             insert(OperatorRow)
             .values(id=uuid4(), business_id=business_id, email=email.strip().lower(), password_hash=password_hash,
-                    display_name=display_name, active=True, created_at=now, updated_at=now)
+                    display_name=display_name, active=True, email_verified_at=None, created_at=now, updated_at=now)
             .on_conflict_do_nothing(index_elements=[OperatorRow.email])
             .returning(OperatorRow)
         )
@@ -539,6 +543,7 @@ def _operator(row: OperatorRow) -> Operator:
         email=row.email,
         display_name=row.display_name or "",
         active=row.active,
+        email_verified=row.email_verified_at is not None,
         created_at=row.created_at,
     )
 

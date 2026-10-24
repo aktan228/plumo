@@ -111,6 +111,16 @@ class Unauthorized(AppError):
     http_status = 401
 
 
+class InvalidAccountToken(AppError):
+    code = "invalid_account_token"
+    http_status = 400
+
+
+class EmailNotVerified(AppError):
+    code = "email_not_verified"
+    http_status = 403
+
+
 class NotAuthenticated(AppError):
     """No valid operator session: sign in again."""
 

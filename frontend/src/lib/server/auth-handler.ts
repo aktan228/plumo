@@ -1,12 +1,12 @@
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { isSameOriginWrite } from "@/lib/api/routes";
-import { registrationIssue } from "@/lib/auth/registration";
+import { registrationIssue, passwordIssue } from "@/lib/auth/registration";
 import { SESSION_COOKIE, backendFetch, json, unavailable } from "./backend";
 
 const MAX_AUTH_BYTES = 4096;
 
-export async function handleAuth(request: NextRequest, mode: "login" | "register") {
+export async function handleAuth(request: NextRequest, mode: "login" | "register" | "verify-email" | "forgot-password" | "reset-password" | "resend-verification") {
   if (!isSameOriginWrite("POST", request.headers.get("origin"), request.headers.get("host"), request.headers.get("x-plumo-request"))) {
     return json(403, { code: "forbidden", message: "cross-site request" });
   }
@@ -38,14 +38,21 @@ export async function handleAuth(request: NextRequest, mode: "login" | "register
     body = parsed as Record<string, unknown>;
   } catch { return json(422, { code: "invalid_message", message: "invalid body" }); }
 
-  if (mode === "register") {
-    const issue = registrationIssue(body);
-    if (issue) return json(422, { code: "invalid_registration", field: issue, message: "invalid registration fields" });
-  } else if (typeof body.email !== "string" || typeof body.password !== "string" || body.email.length > 254 || body.password.length > 200) {
-    return json(422, { code: "invalid_message", message: "email and password are required" });
+  let payload: Record<string, unknown>;
+  if (mode === "verify-email" || mode === "reset-password") {
+    if (typeof body.token !== "string" || !/^[A-Za-z0-9_-]{43,128}$/.test(body.token) || (mode === "reset-password" && passwordIssue(body.password))) {
+      return json(422, { code: "invalid_message", message: "invalid token or password" });
+    }
+    payload = { token: body.token, ...(mode === "reset-password" ? { password: body.password } : {}) };
+  } else {
+    if (mode === "register") {
+      const issue = registrationIssue(body);
+      if (issue) return json(422, { code: "invalid_registration", field: issue, message: "invalid registration fields" });
+    } else if (typeof body.email !== "string" || body.email.length > 254 || (mode === "login" && (typeof body.password !== "string" || body.password.length > 200))) {
+      return json(422, { code: "invalid_message", message: "invalid email or password" });
+    }
+    payload = { email: String(body.email).trim().toLowerCase(), ...(mode === "login" || mode === "register" ? { password: body.password } : { locale: body.locale ?? "ru" }), ...(mode === "register" ? { name: String(body.name).trim(), locale: body.locale ?? "ru" } : {}) };
   }
-
-  const payload = { email: String(body.email).trim().toLowerCase(), password: body.password, ...(mode === "register" ? { name: String(body.name).trim(), locale: body.locale ?? "ru" } : {}) };
   // Vercel's forwarded client address is sent under our server key, never from a form field.
   const clientIp = (request.headers.get("x-forwarded-for")?.split(",")[0].trim() || request.headers.get("x-real-ip") || "unknown").slice(0, 64);
   let response: Response;
@@ -53,6 +60,10 @@ export async function handleAuth(request: NextRequest, mode: "login" | "register
   catch { return unavailable(); }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) return json(response.status, data);
+  if (mode !== "login" && mode !== "verify-email") {
+    if (mode === "reset-password") (await cookies()).delete(SESSION_COOKIE);
+    return json(mode === "register" ? 201 : 200, data);
+  }
   if (!data || typeof data !== "object" || typeof data.token !== "string" || !data.token || typeof data.expires_at !== "string" || !Number.isFinite(Date.parse(data.expires_at))) return unavailable();
   const { token, expires_at: expiresAt, ...session } = data;
   (await cookies()).set({
@@ -60,5 +71,5 @@ export async function handleAuth(request: NextRequest, mode: "login" | "register
     secure: request.nextUrl.protocol === "https:" || request.headers.get("x-forwarded-proto") === "https",
     expires: new Date(expiresAt),
   });
-  return json(mode === "register" ? 201 : 200, { ...session, expires_at: expiresAt });
+  return json(200, { ...session, expires_at: expiresAt });
 }

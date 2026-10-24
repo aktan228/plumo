@@ -1,4 +1,4 @@
-"""Self-service account, workspace, setup draft and session in one request transaction."""
+"""Pending account, workspace and setup draft in one request transaction; verify email before issuing a session."""
 
 import asyncio
 import hashlib
@@ -6,9 +6,9 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.services.auth_service import AuthService, LoginLimiter, LoginResult, hash_password
+from app.application.services.auth_service import AuthService, LoginLimiter, hash_password
 from app.domain.errors import RegistrationConflict
-from app.domain.models import Business, utcnow
+from app.domain.models import Business, Operator, utcnow
 from app.infrastructure.database.channel_repositories import OperatorRepository
 from app.infrastructure.database.models import OnboardingDraftRow
 from app.infrastructure.database.repositories import BusinessRepository
@@ -23,7 +23,7 @@ class RegistrationService:
         self.session = session
         self.auth = auth
 
-    async def register(self, *, name: str, email: str, password: str, locale: str, client_ip: str) -> LoginResult:
+    async def register(self, *, name: str, email: str, password: str, locale: str, client_ip: str) -> Operator:
         key = hashlib.sha256(client_ip.encode()).hexdigest()
         REGISTRATION_LIMITER.check(key)
         REGISTRATION_LIMITER.failed(key)
@@ -53,4 +53,4 @@ class RegistrationService:
             raise RegistrationConflict("Account could not be created. Try signing in or use another email.")
         self.session.add(OnboardingDraftRow(business_id=business.id, step=0, data={}, created_at=now, updated_at=now))
         await self.session.flush()
-        return await self.auth.issue_session(operator)
+        return operator

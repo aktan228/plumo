@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID
 
-from app.domain.errors import NotAuthenticated, TooManyRequests
+from app.domain.errors import EmailNotVerified, NotAuthenticated, TooManyRequests
 from app.domain.models import Operator, utcnow
 
 _N, _R, _P = 2**14, 8, 1
@@ -100,7 +100,7 @@ class AuthService:
     async def login(self, email: str, password: str) -> LoginResult:
         key = email.strip().lower()
         self.limiter.check(key)
-        found = await self.operators.get_with_hash(key)
+        found = await self.operators.get_with_hash(key, lock=True)
         if found is None:
             verify_password(password, _dummy_hash())
             self.limiter.failed(key)
@@ -110,6 +110,8 @@ class AuthService:
             self.limiter.failed(key)
             raise NotAuthenticated("wrong email or password")
         self.limiter.succeeded(key)
+        if not operator.email_verified:
+            raise EmailNotVerified("Confirm your email before signing in.")
         return await self.issue_session(operator)
 
     async def issue_session(self, operator: Operator) -> LoginResult:
@@ -125,6 +127,8 @@ class AuthService:
         if found is None:
             raise NotAuthenticated("the session has expired; sign in again")
         session, operator = found
+        if not operator.email_verified:
+            raise EmailNotVerified("Confirm your email before signing in.")
         return OperatorContext(
             operator_id=operator.id,
             business_id=operator.business_id,
