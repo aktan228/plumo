@@ -524,3 +524,44 @@ async def test_prompt_lists_questions_the_agent_already_asked():
         SimpleNamespace(role="assistant", text="Понял. На сколько человек? Для себя ищете или под инвестицию?"),
     ]
     assert _asked(history) == "Для себя ищете или под инвестицию? | На сколько человек?"
+
+
+def test_unconfirmed_booking_words_are_caught_but_saved_numbers_are_not():
+    from app.application.services.response_validator import ResponseValidator
+    from app.bench.run import build_context
+    from app.bench.scenarios import SCENARIOS
+    import asyncio
+
+    context = asyncio.run(build_context(SCENARIOS[0]))
+    validator = ResponseValidator()
+    for bad in ("Записал. Суббота, 11:00.", "Записала вас на субботу.", "Подтвердил время на 18:30.", "Подтверждаю встречу на завтра."):
+        assert validator.validate(bad, context).safe is False, bad
+    for good in ("Записал ваш номер, менеджер свяжется.", "Передам менеджеру время, он подтвердит."):
+        assert validator.validate(good, context).safe is True, good
+
+
+async def test_quote_knowledge_does_not_offer_a_rental_to_a_buyer():
+    from app.application.services.grounded_reply import quote_knowledge
+    from app.bench.run import build_context
+    from app.bench.scenarios import SCENARIOS
+
+    context = await build_context(SCENARIOS[0])
+    rent = _knowledge_hit("Аренда на Токтогула", "1-комнатная квартира в аренду, 38 м². Аренда 450 USD в месяц.")
+    sale = _knowledge_hit("Квартира на Чуй", "2-комнатная квартира, 58 м², цена 85000 USD.")
+    context.knowledge = [rent, sale]
+    context.current_message = "а что подешевле, мне нужна квартира для семьи"
+    context.recent_messages = []
+    text = quote_knowledge(context)
+    assert "Токтогула" not in text and "Чуй" in text
+    context.current_message = "хочу снять квартиру"
+    assert "Токтогула" in quote_knowledge(context)
+
+
+def _knowledge_hit(title: str, content: str):
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from app.domain.models import KnowledgeHit, KnowledgeItem
+
+    now = datetime.now(UTC)
+    return KnowledgeHit(item=KnowledgeItem(uuid4(), uuid4(), "property", title, content, {}, True, now, now), score=2.0)

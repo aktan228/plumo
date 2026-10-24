@@ -68,7 +68,17 @@ class SimpleKnowledgeRetriever:
             offers = [item for item in items if _offer(item) and _price(item) is not None]
             if offers:
                 offers.sort(key=_price)
-                return [KnowledgeHit(item=item, score=3.0) for item in offers[:limit]]
+                # "Бюджет до 90к, а комиссия какая?": the cheapest offers must not push out the FAQ
+                # entry the question names, or the agent says the fact is missing.
+                named = [
+                    KnowledgeHit(item=item, score=_score(prepared, item))
+                    for item in items
+                    if item.category not in OFFER_CATEGORIES and _score(prepared, item) >= 2
+                ]
+                named.sort(key=lambda hit: hit.score, reverse=True)
+                named = named[:2]
+                cheapest = [KnowledgeHit(item=item, score=3.0) for item in offers[: limit - len(named)]]
+                return cheapest + named
         ranked = [KnowledgeHit(item=item, score=_score(prepared, item)) for item in items]
         ranked.sort(key=lambda hit: hit.score, reverse=True)
         hits = [hit for hit in ranked if hit.score >= 1][:limit]
