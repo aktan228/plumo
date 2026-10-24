@@ -39,7 +39,7 @@ from app.seed import seed
 # the customer's card and dialog, the judge's rubric, catalog and dialog.
 AGENT_TOKENS = (3000, 200)
 SIMULATOR_TOKENS = (1200, 80)
-JUDGE_TOKENS = (5000, 900)
+JUDGE_TOKENS = (5000, 1500)
 
 
 def _usd(model: str, tokens: tuple[int, int]) -> float:

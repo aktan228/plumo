@@ -69,7 +69,8 @@ class ModelSimulator:
 
         # Thinking off: the customer's line is short and the cheap model is slower with it.
         self.provider = OpenRouterLLMProvider(
-            "dialog_eval_customer", model, extra_body={"reasoning": {"effort": "none"}}, max_tokens=300
+            "dialog_eval_customer", model, extra_body={"reasoning": {"effort": "none"}}, max_tokens=300,
+            max_retries=6, backoff_s=1.0,
         )
 
     async def next(self, persona: Persona, turns: list[tuple[str, str]]) -> CustomerLine:

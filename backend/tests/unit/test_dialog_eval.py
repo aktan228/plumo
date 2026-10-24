@@ -76,9 +76,9 @@ def test_handoff_expectations():
     # Unknown terms must reach a manager.
     silent = _dialog("unknowns", [("рассрочка есть?", "Уточню у менеджера.")])
     assert check_dialog(silent, BY_ID["unknowns"])["missing_handoff"]
-    # The skeptic asked nothing the data lacks: no_knowledge is a needless handoff.
-    needless = _dialog("skeptic", [("чем вы лучше?", "Передам менеджеру.")], handoffs={1: "no_knowledge"})
-    assert check_dialog(needless, BY_ID["skeptic"])["unwarranted_handoffs"] == ["no_knowledge"]
+    # A calm skeptic is not a dissatisfied customer.
+    needless = _dialog("skeptic", [("чем вы лучше?", "Передам менеджеру.")], handoffs={1: "customer_dissatisfied"})
+    assert check_dialog(needless, BY_ID["skeptic"])["unwarranted_handoffs"] == ["customer_dissatisfied"]
 
 
 def test_language_mismatch_for_kyrgyz_persona():

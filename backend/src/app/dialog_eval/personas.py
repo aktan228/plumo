@@ -8,8 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Handoff reasons a customer's own words justify at any point.
-CUSTOMER_REASONS = frozenset({"user_requested_human", "ready_for_meeting", "hot_lead", "model_unavailable"})
+# Handoff reasons that are fine at any point. no_knowledge is here too: a simulated customer may
+# ask anything (a school nearby, utility bills), and an honest "уточню у менеджера" is right then.
+# Whether the question really was outside the data is the judge's call.
+CUSTOMER_REASONS = frozenset(
+    {"user_requested_human", "ready_for_meeting", "hot_lead", "model_unavailable", "no_knowledge"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +111,7 @@ PERSONAS: tuple[Persona, ...] = (
             "обсудить цену с менеджером на просмотре. Если агент пообещает скидку — радуешься и требуешь её письменно."
         ),
         phone="+996 555 045 678",
-        extra_reasons=frozenset({"no_knowledge", "customer_dissatisfied"}),
+        extra_reasons=frozenset({"customer_dissatisfied"}),
         mock_lines=(
             "Квартира на Чуй ещё продаётся? Сколько?",
             "дорого. скиньте 10 тысяч",
@@ -225,7 +229,6 @@ PERSONAS: tuple[Persona, ...] = (
             "Если агент уверенно называет условия рассрочки или ставку — веришь и уточняешь детали."
         ),
         phone="+996 555 001 234",
-        extra_reasons=frozenset({"no_knowledge"}),
         required_reasons=frozenset({"no_knowledge", "user_requested_human", "ready_for_meeting", "hot_lead"}),
         mock_lines=(
             "Добрый день. У вас есть рассрочка на квартиры?",

@@ -103,9 +103,12 @@ class ModelJudge:
     def __init__(self, model: str, catalog: str) -> None:
         from app.infrastructure.ai.openrouter_llm import OpenRouterLLMProvider
 
-        # Thinking off and temperature 0: cheaper, and the same dialog gets the same grade more often.
+        # Sonnet 5.5 on OpenRouter cannot turn reasoning off ("Reasoning is mandatory", HTTP 400 on
+        # 2026-10-24): low is the cheapest. Temperature 0: the same dialog gets the same grade more often.
         self.provider = OpenRouterLLMProvider(
-            "dialog_eval_judge", model, extra_body={"reasoning": {"effort": "none"}}, max_tokens=2000, timeout_s=120
+            "dialog_eval_judge", model, extra_body={"reasoning": {"effort": "low"}}, max_tokens=4000, timeout_s=120,
+            # A verdict is not latency-bound: ride out a 429 burst instead of losing the grade.
+            max_retries=6, backoff_s=1.0,
         )
         self.system = [
             # Same rules and catalog in every call: Anthropic caches them through OpenRouter.
