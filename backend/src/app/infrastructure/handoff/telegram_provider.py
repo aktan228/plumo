@@ -1,7 +1,8 @@
 """Telegram notification to the manager when a dialog needs a human.
 
-The handoff row is already stored when this runs. A Telegram outage must not
-break the customer's reply, so failures are logged, not raised.
+Runs in the worker from a `notify_handoff` job, after the handoff is committed. A failure
+is raised so the job retries: ProviderTransientError for a network error, 429 or 5xx,
+ProviderUnavailable for any other refusal (wrong chat id, revoked token).
 """
 
 import html
@@ -10,7 +11,7 @@ import os
 
 import httpx
 
-from app.domain.errors import ProviderUnavailable
+from app.domain.errors import ProviderTransientError, ProviderUnavailable
 from app.domain.models import HandoffRequest
 
 logger = logging.getLogger("plumo.handoff")
@@ -53,10 +54,14 @@ class TelegramHandoffProvider:
         }
         try:
             response = await self._client.post(url, json=body)
-            if response.status_code >= 400:
-                logger.warning("telegram_notify_failed", extra={"status": response.status_code, "handoff_id": str(handoff.id)})
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
             logger.warning("telegram_unreachable", extra={"handoff_id": str(handoff.id)})
+            raise ProviderTransientError("Telegram is unreachable") from exc
+        if response.status_code >= 400:
+            logger.warning("telegram_notify_failed", extra={"status": response.status_code, "handoff_id": str(handoff.id)})
+            if response.status_code == 429 or response.status_code >= 500:
+                raise ProviderTransientError(f"Telegram answered {response.status_code}")
+            raise ProviderUnavailable(f"Telegram refused the notification: {response.status_code}")
 
     async def aclose(self) -> None:
         await self._client.aclose()

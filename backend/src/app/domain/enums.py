@@ -133,3 +133,4 @@ class JobStatus(StrEnum):
 class JobKind(StrEnum):
     process_inbound = "process_inbound"
     send_outbound = "send_outbound"
+    notify_handoff = "notify_handoff"

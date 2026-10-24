@@ -4,7 +4,7 @@ import asyncio
 import logging
 from uuid import uuid4
 
-from app.domain.enums import HandoffPriority, HandoffStatus
+from app.domain.enums import HandoffPriority, HandoffStatus, JobKind
 from app.domain.errors import HandoffNotFound, InvalidState
 from app.domain.events import HANDOFF_REQUESTED, DomainEvent
 from app.domain.models import (
@@ -18,7 +18,7 @@ from app.domain.models import (
     ValidationResult,
     utcnow,
 )
-from app.domain.ports import CustomerStore, EventBus, HandoffStore, HumanHandoffProvider
+from app.domain.ports import CustomerStore, EventBus, HandoffStore, HumanHandoffProvider, JobEnqueuer
 from app.domain.text_signals import MessageSignals
 
 logger = logging.getLogger("plumo.handoff")
@@ -94,11 +94,14 @@ class HandoffService:
         customers: CustomerStore,
         provider: HumanHandoffProvider,
         events: EventBus,
+        jobs: JobEnqueuer | None = None,
     ) -> None:
         self.handoffs = handoffs
         self.customers = customers
         self.provider = provider
         self.events = events
+        # The caller's transaction: the notification job commits or rolls back with the handoff.
+        self.jobs = jobs
 
     async def request(
         self,
@@ -135,11 +138,7 @@ class HandoffService:
             customer.status = status
             customer.updated_at = now
             await self.customers.save(customer)
-        # Telegram can take seconds; a caller on the line must not wait for it.
-        # The provider logs its own failures, and the row above is the record.
-        task = asyncio.create_task(self._notify(handoff))
-        _PENDING.add(task)
-        task.add_done_callback(_PENDING.discard)
+        await self._queue_notification(handoff, conversation, customer)
         await self.events.publish(
             DomainEvent(
                 HANDOFF_REQUESTED,
@@ -152,6 +151,25 @@ class HandoffService:
             )
         )
         return handoff
+
+    async def _queue_notification(self, handoff: HandoffRequest, conversation: Conversation, customer: Customer) -> None:
+        """One `notify_handoff` job in this transaction; the worker sends it after the commit."""
+
+        business_id = conversation.business_id or customer.business_id
+        if self.jobs is not None and business_id is not None:
+            await self.jobs.enqueue(
+                kind=JobKind.notify_handoff,
+                business_id=business_id,
+                ordering_key=f"notify:{handoff.id}",
+                handoff_id=handoff.id,
+                max_attempts=6,
+            )
+            return
+        # No queue or a dialog without a business (old rows): send in the background as before.
+        logger.warning("handoff_notify_not_queued", extra={"handoff_id": str(handoff.id)})
+        task = asyncio.create_task(self._notify(handoff))
+        _PENDING.add(task)
+        task.add_done_callback(_PENDING.discard)
 
     async def _notify(self, handoff: HandoffRequest) -> None:
         try:

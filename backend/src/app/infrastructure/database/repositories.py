@@ -635,6 +635,7 @@ class HandoffRepository:
         row.updated_at = handoff.updated_at
         row.summary = handoff.summary
         row.priority = handoff.priority
+        row.notified_at = handoff.notified_at
         await self.session.flush()
         return _handoff(row)
 
@@ -1068,6 +1069,7 @@ def _handoff(row: HandoffRequestRow) -> HandoffRequest:
         status=row.status,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        notified_at=row.notified_at,
     )
 
 

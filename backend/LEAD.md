@@ -260,7 +260,7 @@ Seed кладёт два объекта Demo Realty:
 
 Встреча = `PROPOSED` локально. Google Calendar — другой executor с тем же `execute`, подмена в `build_agent`.
 
-Уведомление менеджеру — порт `HumanHandoffProvider.notify`: `TelegramHandoffProvider` при `HANDOFF_PROVIDER=telegram`, иначе mock пишет лог. Пока уведомление уходит фоновой задачей процесса до commit; перевод на очередь заданий — первый пункт плана MVP.
+Уведомление менеджеру — порт `HumanHandoffProvider.notify`: `TelegramHandoffProvider` при `HANDOFF_PROVIDER=telegram`, иначе mock пишет лог. Уведомление — задание `notify_handoff` в очереди, поставленное в одной транзакции с передачей; отправляет worker, с повторами и защитой от дублей (миграция 007). Без запущенного worker менеджер уведомления не получит.
 
 ---
 
