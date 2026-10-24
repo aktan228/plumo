@@ -2,7 +2,7 @@ import { emptyDraft, sourceFits, sourceUrl, type AgentDraft, type Source } from 
 import type { PricingRequest } from "@/components/landing/pricing";
 
 export type Snapshot = { step: number; settings: AgentDraft; sources: Source[]; channel: number; pricing: PricingRequest | null; entry: { kind: Source["kind"]; value: string; question: string } };
-export type SavedWizard = { business_id: string; step: number; data: Omit<Snapshot, "step"> | null; version: number; completed_at: string | null; updated_at: string };
+export type SavedWizard = { business_id: string; step: number; data: Omit<Snapshot, "step"> | null; version: number; completed_at: string | null; published?: boolean; knowledge_count?: number; updated_at: string };
 export const GUEST_KEY = "plumo-wizard-guest-v1";
 export const MAX_WIZARD_BODY_BYTES = 2_000_000;
 
@@ -28,6 +28,7 @@ export function guestSnapshot(raw: string | null): Snapshot | null {
     if (!value || !Number.isInteger(value.step) || value.step < 0 || value.step > 5 || !Number.isInteger(value.channel) || value.channel < 0 || value.channel > 4 || !d) return null;
     const bounds = { company: 200, description: 3000, audience: 2000, logoName: 255, name: 60, greeting: 1000, goal: 1500, fallback: 1000 } as const;
     for (const [key, max] of Object.entries(bounds)) if (typeof d[key as keyof typeof bounds] !== "string" || Array.from(d[key as keyof typeof bounds]).length > max) return null;
+    if (d.handoffRules !== undefined && (typeof d.handoffRules !== "string" || Array.from(d.handoffRules).length > 1500)) return null;
     if (!["sales", "support"].includes(d.purpose) || !["friendly", "formal"].includes(d.tone) || !["ru", "en"].includes(d.language) || !/^#[0-9a-f]{6}$/i.test(d.color)) return null;
     if (typeof d.logo !== "string" || d.logo.length > 1_333_400 || (d.logo && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(d.logo))) return null;
     if (!Array.isArray(value.sources) || new Set(value.sources.map(source => source.id)).size !== value.sources.length) return null;

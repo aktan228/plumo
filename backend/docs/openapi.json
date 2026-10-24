@@ -2393,6 +2393,12 @@
             "maxLength": 1000,
             "title": "Fallback",
             "default": ""
+          },
+          "handoffRules": {
+            "type": "string",
+            "maxLength": 1500,
+            "title": "Handoffrules",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -4899,6 +4905,16 @@
           "version": {
             "type": "integer",
             "title": "Version"
+          },
+          "published": {
+            "type": "boolean",
+            "title": "Published",
+            "default": false
+          },
+          "knowledge_count": {
+            "type": "integer",
+            "title": "Knowledge Count",
+            "default": 0
           },
           "completed_at": {
             "anyOf": [

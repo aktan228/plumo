@@ -54,6 +54,12 @@ class MockLLMProvider:
             )
         if signals.human_request:
             return self._out(human_phrase(context.language), 0.97, prompt=prompt)
+        for hit in context.knowledge:
+            metadata = hit.item.metadata or {}
+            if metadata.get("origin") == "plumo-onboarding-v1" and metadata.get("question") and normalize_text(metadata["question"]) == normalize_text(prompt):
+                answer = hit.item.content.partition("\nОтвет: ")[2]
+                if answer:
+                    return self._out(answer, 0.95, prompt=prompt)
         if signals.meeting and not signals.installment:
             return self._meeting(context, prompt)
         if signals.hours and context.business.working_hours:

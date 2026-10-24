@@ -12,6 +12,7 @@ export function useWizardStorage(mode: WizardMode) {
   const [status, setStatus] = useState<Status>("loading");
   const [ready, setReady] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [knowledgeCount, setKnowledgeCount] = useState(0);
   const [guest, setGuest] = useState<Snapshot | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const latest = useRef(snapshot);
@@ -47,7 +48,7 @@ export function useWizardStorage(mode: WizardMode) {
       if (!mounted.current || epoch !== loadEpoch.current) return;
       const value = row ? restoredSnapshot(row) : savedGuest ?? blankSnapshot();
       latest.current = value; acknowledged.current = JSON.stringify(value); version.current = row?.version ?? 0;
-      setSnapshot(value); setCompleted(Boolean(row?.completed_at)); setGuest(row && !row.data ? savedGuest : null);
+      setKnowledgeCount(row?.knowledge_count ?? 0); setSnapshot(value); setCompleted(Boolean(row?.completed_at) && row?.published === true); setGuest(row && !row.data ? savedGuest : null);
       readyRef.current = true; setReady(true); setState("saved");
     } catch (error) {
       if (!mounted.current || epoch !== loadEpoch.current) return;
@@ -118,6 +119,7 @@ export function useWizardStorage(mode: WizardMode) {
       setState("saving");
       const row = await api<SavedWizard>("onboarding/complete", { method: "POST", body: { version: version.current } });
       version.current = row.version;
+      setKnowledgeCount(row.knowledge_count ?? 0);
       latest.current = { ...latest.current, step: row.step };
       acknowledged.current = JSON.stringify(latest.current);
       setSnapshot(latest.current); setCompleted(true); setState("saved");
@@ -129,5 +131,5 @@ export function useWizardStorage(mode: WizardMode) {
     } finally { completing.current = false; setFinishing(false); }
   }
 
-  return { finishing, snapshot, change, status, failure, ready, completed, guest, importGuest, flush, reload: load, complete };
+  return { knowledgeCount, finishing, snapshot, change, status, failure, ready, completed, guest, importGuest, flush, reload: load, complete };
 }

@@ -15,6 +15,7 @@ from app.application.services.handoff_service import evaluate_handoff
 from app.application.services.memory_service import MemoryService, read_unclear_count, write_unclear_count
 from app.application.services.response_validator import ResponseValidator
 from app.correlation import get_correlation_id, get_request_id
+from app.domain.agent_settings import configured_text, published_settings
 from app.domain.enums import PHONE_CHANNELS, ActionType, Channel, ConversationMode, InboundKind, MessageRole, RouteModel
 from app.domain.errors import (
     BusinessNotFound,
@@ -154,7 +155,7 @@ class AgentService:
         business = await self._business(message.business_id)
         customer = await self.resolver.resolve_customer(message, business.id)
         customer = await self.resolver.remember_contact_phone(customer, message.text)
-        language = await self._language(message)
+        language = await self._language(message, business)
         customer = await self.memory.update_language(customer, language)
         steps.append(f"customer:{customer.id}")
 
@@ -240,13 +241,14 @@ class AgentService:
         if signals.human_request:
             response_text = human_phrase(language, message.channel, seed)
         elif assessment.factual and not assessment.answerable and (
-            not context.knowledge or assessment.topic == "installment"
+            not context.knowledge or assessment.topic == "installment" or configured_text(business.profile, "fallback")
         ):
-            response_text = unknown_phrase(assessment.topic, language, seed)
+            response_text = self._unknown_reply(context, assessment.topic, language, seed)
         else:
             response_text = generation.text
         wants_listings = bool(
             context.knowledge
+            and not (assessment.factual and not assessment.answerable and configured_text(business.profile, "fallback"))
             and (
                 assessment.factual
                 or signals.money
@@ -299,7 +301,7 @@ class AgentService:
             steps.append("grounded_fallback")
         if not validation.safe:
             if assessment.factual:
-                response_text = unknown_phrase(assessment.topic, language, seed)
+                response_text = self._unknown_reply(context, assessment.topic, language, seed)
             else:
                 response_text = fallback_phrase(intent, language, seed)
             steps.append(f"validator:{validation.reason}")
@@ -307,7 +309,7 @@ class AgentService:
         if not response_text.strip():
             # Model down or out of time and no listing to quote: never send silence.
             if assessment.factual:
-                response_text = unknown_phrase(assessment.topic, language, seed)
+                response_text = self._unknown_reply(context, assessment.topic, language, seed)
             else:
                 response_text = fallback_phrase(intent, language, seed)
             steps.append("empty_draft_fallback")
@@ -545,6 +547,14 @@ class AgentService:
             text = unsupported_phrase(language)
         else:
             text = fallback_phrase("greeting", language, str(conversation.id))
+            greeting = configured_text(business.profile, "greeting", 1000)
+            if greeting and not said_before and message.channel != Channel.voice:
+                customer = await self._reload_customer(customer_id)
+                context = self.context_builder.build(business=business, customer=customer,
+                    knowledge=await self.retriever.retrieve(business.id, message.text), summary=None,
+                    recent_messages=history, current_message=message.text, language=language, channel=message.channel)
+                if self.validator.validate(greeting, context).safe:
+                    text = greeting
         if not said_before:
             text = with_ai_disclosure(text, language, assistant_name(business), business.name)
         now = utcnow()
@@ -588,6 +598,12 @@ class AgentService:
         generations: list[LLMGeneration],
         deadline: float,
     ) -> tuple[LLMGeneration, RouteDecision]:
+        if route.reason == "greeting" and context.channel != Channel.voice and not any(
+            item.role == MessageRole.assistant for item in context.recent_messages
+        ):
+            greeting = configured_text(context.business.profile, "greeting", 1000)
+            if greeting and self.validator.validate(greeting, context).safe:
+                return LLMGeneration(greeting, [], False, None, 1.0, "rules:business_greeting", 0, 0, 0.0), route
         if route.reason == "human_request" or (
             route.reason in FIXED_REPLY_REASONS
             and getattr(context, "channel", None) == Channel.voice
@@ -703,16 +719,23 @@ class AgentService:
         message.metadata = metadata
         return message
 
-    async def _language(self, message: InboundMessage) -> str:
+    def _unknown_reply(self, context, topic, language, seed):
+        fallback = configured_text(context.business.profile, "fallback", 1000)
+        if fallback and self.validator.validate(fallback, context).safe:
+            return fallback
+        return unknown_phrase(topic, language, seed)
+
+    async def _language(self, message: InboundMessage, business=None) -> str:
         detected = await self.language_detector.detect(message.text)
         hint = (message.language_hint or "").strip().lower()
         if detected == "mixed":
             return "mixed"
         if detected != "unknown":
             return detected
-        if hint in ("ru", "ky", "mixed"):
+        if hint in ("ru", "ky", "en", "mixed"):
             return hint
-        return self.default_language
+        configured = published_settings(business.profile) if business else {}
+        return configured.get("language", self.default_language)
 
     async def _replay(self, seen: Message, customer_id: UUID, language: str, correlation_id: str, started: float) -> AgentResponse:
         reply = await self.messages.reply_after(seen)

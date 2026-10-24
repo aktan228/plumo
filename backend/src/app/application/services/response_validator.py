@@ -56,7 +56,10 @@ class ResponseValidator:
         if signals.installment:
             return "рассроч" in allowed_norm or "ипотек" in allowed_norm
         if signals.hours:
-            return bool(context.business.working_hours.strip())
+            return bool(context.business.working_hours.strip()) or any(
+                hit.item.category == "faq" and contains_any(f"{hit.item.title} {hit.item.content}", ("работ", "график", "час", "hours", "open"))
+                for hit in context.knowledge
+            )
         if signals.address:
             return bool((context.business.contacts or {}).get("address")) or "адрес" in allowed_norm
         if signals.contacts:

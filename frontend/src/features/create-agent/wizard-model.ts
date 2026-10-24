@@ -4,12 +4,12 @@ export type AgentDraft = {
   company: string; description: string; audience: string;
   color: string; logo: string; logoName: string;
   name: string; tone: "friendly" | "formal"; language: "ru" | "en";
-  greeting: string; goal: string; fallback: string;
+  greeting: string; goal: string; fallback: string; handoffRules: string;
 };
 export const MAX_SOURCE_BYTES = 100_000;
 export const MAX_TOTAL_BYTES = 200_000;
 export const MAX_SOURCES = 10;
-export const emptyDraft: AgentDraft = { purpose: "sales", company: "", description: "", audience: "", color: "#2b55ff", logo: "", logoName: "", name: "Plumo", tone: "friendly", language: "ru", greeting: "", goal: "", fallback: "" };
+export const emptyDraft: AgentDraft = { purpose: "sales", company: "", description: "", audience: "", color: "#2b55ff", logo: "", logoName: "", name: "Plumo", tone: "friendly", language: "ru", greeting: "", goal: "", fallback: "", handoffRules: "" };
 
 export function sourceUrl(value: string, instagram = false): string | null {
   try {
