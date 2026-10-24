@@ -260,6 +260,8 @@ export function CreateAgentWizard({ mode = "guest" }: { mode?: WizardMode }) {
                 <Field title={c.greeting}><textarea required value={draft.greeting} onChange={e => update("greeting", e.target.value)} rows={3} maxLength={1000} className={input} /></Field>
                 <Field title={c.goal}><textarea required value={draft.goal} onChange={e => update("goal", e.target.value)} rows={3} maxLength={1500} className={input} /></Field>
                 <Field title={c.fallback}><textarea required value={draft.fallback} onChange={e => update("fallback", e.target.value)} rows={3} maxLength={1000} className={input} /></Field>
+                <Field title={c.handoffRules}><textarea value={draft.handoffRules} onChange={e => update("handoffRules", e.target.value)} rows={3} maxLength={1500} placeholder={c.handoffPlaceholder} className={input} /></Field>
+                <p className="m-0 text-[12px] leading-relaxed text-plumo-muted">{c.publishNote}</p>
                 <p className="m-0 text-[12px] leading-relaxed text-plumo-muted">{c.scriptNote}</p>
               </>}
             </div>
@@ -297,7 +299,7 @@ export function CreateAgentWizard({ mode = "guest" }: { mode?: WizardMode }) {
               <div><span className="text-[11px] text-plumo-muted">{c.ready}</span><h2 className="mb-0 mt-3 break-words text-[22px] font-medium">{draft.company}</h2><p className="mb-0 mt-3 text-[13px] leading-relaxed text-plumo-muted">{draft.purpose === "sales" ? c.sales : c.support} · {c.knowledge}: {sources.length}</p></div>
               <Field title={c.channel}><select value={channel} onChange={e => { setChannel(Number(e.target.value)); setDownloaded(false); }} className={input}>{c.channels.map((name, index) => <option key={name} value={index}>{name}</option>)}</select></Field>
               <p className="m-0 text-[12px] leading-relaxed text-plumo-muted">{c.launchHint}</p>
-              {mode === "account" && <><button type="button" onClick={() => void storage.complete()} disabled={storage.finishing || storage.status === "conflict" || storage.status === "expired" || reading} className={primary}>{storage.finishing ? c.savingDraft : storage.completed ? c.completedDraft : c.completeDraft}</button>{storage.completed && <p className="m-0 text-[13px] leading-relaxed text-plumo-muted" role="status">{c.completionNote}</p>}</>}
+              {mode === "account" && <><button type="button" onClick={() => void storage.complete()} disabled={storage.finishing || storage.status === "conflict" || storage.status === "expired" || reading} className={primary}>{storage.finishing ? c.savingDraft : storage.completed ? c.completedDraft : c.completeDraft}</button>{storage.completed && <p className="m-0 text-[13px] leading-relaxed text-plumo-muted" role="status">{storage.knowledgeCount ? c.completionNote : c.noPublishedMaterials}</p>}</>}
               <button type="button" onClick={() => { setMailReady(false); setContact(true); }} aria-haspopup="dialog" className={primary}>{c.discuss} →</button>
               <button type="button" onClick={download} className={secondary}>{downloaded ? c.downloaded : c.download}</button>
               <p className="m-0 text-[11px] leading-relaxed text-plumo-muted">{note}</p>

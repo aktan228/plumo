@@ -93,6 +93,9 @@ DEFAULT_MEETING = "встреча, визит или звонок менедже
 DEFAULT_QUALIFY = ("что именно нужно и для чего", "бюджет", "когда нужно")
 
 
+from app.domain.agent_settings import published_settings, settings_prompt
+
+
 def agent_instructions(
     business_name: str = "компании",
     assistant_name: str = DEFAULT_ASSISTANT_NAME,
@@ -106,11 +109,16 @@ def agent_instructions(
     """
 
     profile = profile or {}
-    offering = _text(profile.get("offering"), DEFAULT_OFFERING)
+    configured = published_settings(profile)
+    role = "ассистент поддержки" if configured.get("purpose") == "support" else "менеджер по продажам"
+    identity = "Говори от первого лица." if configured else "Говоришь о себе в мужском роде."
+    offering = _text(configured.get("description"), _text(profile.get("offering"), DEFAULT_OFFERING))
     meeting = _text(profile.get("meeting"), DEFAULT_MEETING)
     raw_qualify = profile.get("qualify")
     qualify = [str(item).strip() for item in raw_qualify if str(item).strip()] if isinstance(raw_qualify, list) else []
     questions = ", ".join(qualify or DEFAULT_QUALIFY)
+    tone = "деловой, спокойный, уважительный" if configured.get("tone") == "formal" else "тёплый, спокойный, уверенный, по делу"
+    objective = _text(configured.get("goal"), f"Понять, что нужно человеку, подобрать 1–2 подходящих варианта из данных и довести до следующего шага: {meeting}.")
     if channel == "voice":
         # The call opens with the platform greeting that already says who is speaking.
         intro_rule = "Звонок уже начался с приветствия, где ты назвал себя ИИ-ассистентом: не здоровайся и не представляйся снова."
@@ -118,13 +126,13 @@ def agent_instructions(
         intro_rule = f"В первом ответе разговора представься: «Здравствуйте! Я {assistant_name}, ИИ-ассистент компании «{business_name}».»"
 
     return f"""# Кто ты
-Ты {assistant_name}, менеджер по продажам компании «{business_name}». Говоришь о себе в мужском роде.
+Ты {assistant_name}, {role} компании «{business_name}». {identity}
 Что мы предлагаем: {offering}.
-Тон: тёплый, спокойный, уверенный, по делу. Без заискивания и без давления.
+Тон: {tone}. Без заискивания и без давления.
 Ты ИИ-ассистент, и человек должен это знать (это требование закона). {intro_rule} Никогда не выдавай себя за человека. Спросят «вы бот?» — честно скажи да и предложи живого менеджера.
 
 # Цель
-Понять, что нужно человеку, подобрать 1–2 подходящих варианта из данных и довести до следующего шага: {meeting}. Скидки, торг, оплату и сделку ведёт живой менеджер.
+{objective} Скидки, торг, оплату и сделку ведёт живой менеджер.
 Ход разговора — бери только шаги, которых ещё нет в истории:
 1. Выясни потребность, по одному вопросу: {questions}.
 2. Предложи 1–2 подходящих варианта с ценой из данных.
@@ -139,6 +147,7 @@ def agent_instructions(
 - Не здоровайся и не представляйся повторно. Клиент вернулся после паузы — покажи, что помнишь, о чём говорили.
 - Без канцелярита: никаких «данный товар», «ваш запрос», «обращайтесь», «чем ещё могу помочь», «уважаемый клиент», «база знаний», «в базе», «в карточке».
 
+{settings_prompt(profile)}
 {_channel_style(channel)}
 
 # Трудные ситуации
@@ -201,6 +210,8 @@ AGENT_INSTRUCTIONS = agent_instructions()
 
 
 def unknown_phrase(topic: str | None, language: str, seed: str = "") -> str:
+    if language == "en":
+        return "I do not have a confirmed answer. I will pass the question to our team."
     if language == "ky":
         return _pick(UNKNOWN_FACT_KY, seed)
     if topic == "installment":
@@ -215,6 +226,12 @@ def fallback_phrase(intent: str, language: str, seed: str = "") -> str:
     greeting, or anything else (off-topic redirect).
     """
 
+    if language == "en":
+        return {"greeting": "Hello! How can I help?", "farewell": "Goodbye! Feel free to message us again.",
+                "meeting_ask": "What day and time would you prefer? Our team will confirm availability.",
+                "meeting_set": "I have passed your preferred time to our team. They will confirm availability.",
+                "contact": "Thank you. Our team will contact you to confirm the details.",
+                "continue": "Understood. What matters most to you?"}.get(intent, "I can help with our company's services. What would you like to know?")
     ky = language == "ky"
     if intent == "meeting_ask":
         return _pick(MEETING_ASK_KY if ky else MEETING_ASK_RU, seed)
@@ -237,6 +254,8 @@ def role_phrase(language: str, seed: str = "") -> str:
 
 
 def human_phrase(language: str, channel: str = "whatsapp", seed: str = "") -> str:
+    if language == "en":
+        return "I will pass this to a team member so they can follow up with you."
     if language == "ky":
         return _pick(HUMAN_KY, seed)
     return _pick(HUMAN_VOICE_RU if channel == "voice" else HUMAN_CHAT_RU, seed)
@@ -319,6 +338,8 @@ def with_ai_disclosure(text: str, language: str, assistant_name: str, business_n
     body = _LEADING_GREETING.sub("", text, count=1).strip()
     if language == "ky":
         intro = f"Саламатсызбы! Мен {assistant_name}, «{business_name}» компаниясынын ИИ-жардамчысымын."
+    elif language == "en":
+        intro = f"Hello! I am {assistant_name}, the AI assistant for {business_name}."
     else:
         intro = f"Здравствуйте! Я {assistant_name}, ИИ-ассистент компании «{business_name}»."
     return f"{intro} {body}".strip()

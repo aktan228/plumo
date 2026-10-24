@@ -191,3 +191,5 @@ Next.js публикует одноимённые `/api/auth/*` только д�
 
 Названия бизнесов не уникальны; `app.operators create` и `app.import_knowledge` принимают `--business-id UUID`.
 `--business` работает только при однозначном названии. Сохранение шагов мастера подключено: [../docs/onboarding-persistence.md](../docs/onboarding-persistence.md).
+
+Публикация материалов и параметры агента (пункт 4): [../docs/business-agent-settings.md](../docs/business-agent-settings.md).

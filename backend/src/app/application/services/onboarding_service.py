@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.api.onboarding_schemas import WizardData
+from app.application.services.publish_knowledge import publish_knowledge
 from app.domain.errors import BusinessNotFound, InvalidMessage, VersionConflict
 from app.domain.models import utcnow
 from app.infrastructure.database.models import BusinessRow, OnboardingDraftRow
@@ -42,7 +43,15 @@ class OnboardingService:
 
     async def complete(self, business_id, version):
         row = await self.get(business_id, lock=True)
-        if row.completed_at is not None and version in (row.version, row.version - 1):
+        business = await self.session.scalar(select(BusinessRow).where(BusinessRow.id == business_id).with_for_update())
+        if business is None:
+            raise BusinessNotFound("business not found")
+        publication = (business.profile or {}).get("onboarding_publication", {})
+        if (
+            row.completed_at is not None
+            and publication.get("draft_version") == row.version
+            and version in (row.version, row.version - 1)
+        ):
             return row
         if row.version != version:
             raise VersionConflict("The setup changed in another tab. Load its current version before completing.")
@@ -65,9 +74,7 @@ class OnboardingService:
             or data.entry.question.strip()
         ):
             raise InvalidMessage("Add sources and fill in business, agent and script fields before completing.")
-        business = await self.session.scalar(select(BusinessRow).where(BusinessRow.id == business_id).with_for_update())
-        if business is None:
-            raise BusinessNotFound("business not found")
+        knowledge_count = await publish_knowledge(self.session, business_id, data)
         now = utcnow()
         business.name = settings.company.strip()
         business.description = settings.description.strip()
@@ -76,6 +83,8 @@ class OnboardingService:
         business.profile = {
             **(business.profile or {}),
             "onboarding": data.model_dump(exclude_none=True, exclude={"settings": {"logo"}}),
+            "agent_settings": settings.model_dump(exclude={"logo", "logoName", "color"}),
+            "onboarding_publication": {"draft_version": row.version + 1, "knowledge_count": knowledge_count},
         }
         business.updated_at = now
         row.step, row.completed_at, row.updated_at = 5, now, now

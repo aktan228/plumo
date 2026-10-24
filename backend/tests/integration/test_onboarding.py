@@ -147,7 +147,7 @@ async def test_completion_is_explicit_atomic_and_preserves_existing_business_dat
         assert business.profile["onboarding"]["sources"][0]["question"] == "Когда открыты?"
         assert "logo" not in business.profile["onboarding"]["settings"]
         assert (await session.get(BusinessRow, wizard.ids[1])).name == "Before 1"
-        assert await session.scalar(select(func.count()).select_from(KnowledgeItemRow)) == 0
+        assert await session.scalar(select(func.count()).select_from(KnowledgeItemRow)) == 2
     changed = payload(2, 5)
     changed["data"]["settings"]["company"] = "Unpublished change"
     response = await wizard.http.patch("/api/v1/onboarding", json=changed)

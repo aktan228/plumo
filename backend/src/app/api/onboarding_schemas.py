@@ -47,6 +47,7 @@ class AgentSettings(StrictModel):
     greeting: str = Field(default="", max_length=1000)
     goal: str = Field(default="", max_length=1500)
     fallback: str = Field(default="", max_length=1000)
+    handoffRules: str = Field(default="", max_length=1500)
 
     @field_validator("logo")
     @classmethod
@@ -157,5 +158,7 @@ class WizardOut(BaseModel):
     step: int
     data: WizardData | None
     version: int
+    published: bool = False
+    knowledge_count: int = 0
     completed_at: datetime | None
     updated_at: datetime
