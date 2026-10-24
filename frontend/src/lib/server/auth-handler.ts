@@ -57,7 +57,7 @@ export async function handleAuth(request: NextRequest, mode: "login" | "register
   const clientIp = (request.headers.get("x-forwarded-for")?.split(",")[0].trim() || request.headers.get("x-real-ip") || "unknown").slice(0, 64);
   let response: Response;
   try { response = await backendFetch(`auth/${mode}`, { method: "POST", body: JSON.stringify(payload), clientIp }); }
-  catch { return unavailable(); }
+  catch (error) { return unavailable(error); }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) return json(response.status, data);
   if (mode !== "login" && mode !== "verify-email") {
