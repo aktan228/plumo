@@ -43,3 +43,10 @@ test('polling backs off after failures and caps at a minute', () => {
   assert.equal(nextPollDelay(4000, 1), 8000);
   assert.equal(nextPollDelay(4000, 10), 60000);
 });
+
+
+test('test chat proxy only permits authenticated sandbox route shapes', () => {
+  const ident = '12345678-1234-1234-1234-123456789abc';
+  for (const [method, path] of [['GET', 'testing/sessions'], ['POST', 'testing/sessions'], ['GET', `testing/sessions/${ident}`], ['POST', `testing/sessions/${ident}/messages`]]) assert.equal(isAllowedRoute(method, path), true);
+  for (const [method, path] of [['POST', `testing/sessions/${ident}`], ['GET', `testing/sessions/${ident}/messages`], ['PATCH', 'testing/sessions'], ['POST', 'messages'], ['GET', 'testing/sessions/not-an-id']]) assert.equal(isAllowedRoute(method, path), false);
+});

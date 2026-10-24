@@ -429,3 +429,36 @@ class ConversationReadRow(Base):
     conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"), primary_key=True)
     last_read_seq: Mapped[int] = mapped_column(BigInteger, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TestBudgetRow(Base):
+    __tablename__ = "test_chat_budgets"
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[str] = mapped_column(String(10))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    sessions: Mapped[int] = mapped_column(Integer, default=0)
+    charged: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=0)
+
+
+class TestSessionRow(Base):
+    __tablename__ = "test_chat_sessions"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    publication_version: Mapped[int] = mapped_column(Integer)
+    state: Mapped[dict] = mapped_column(JSONB)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    pending_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TestTurnRow(Base):
+    __tablename__ = "test_chat_turns"
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("test_chat_sessions.id", ondelete="CASCADE"), primary_key=True)
+    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16))
+    error: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    result: Mapped[dict] = mapped_column(JSONB, default=dict)
+    day: Mapped[str] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

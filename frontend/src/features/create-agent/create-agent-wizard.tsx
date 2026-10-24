@@ -11,6 +11,7 @@ import { pricingRequestLabel, type PricingRequest } from "@/components/landing/p
 import { demoReply, example, makeScript, MAX_SOURCE_BYTES, sourceFits, sourceUrl, type AgentDraft, type Source } from "./wizard-model";
 import { useWizardStorage, type WizardMode } from "./use-wizard-storage";
 import type { Snapshot } from "./wizard-persistence";
+import { AgentTestChat } from "./agent-test-chat";
 import { wizardCopy } from "./wizard-copy";
 
 const input = "w-full min-w-0 rounded-xl border border-solid border-plumo-line bg-white px-3.5 py-3 font-[inherit] text-[16px] leading-6 text-plumo-ink placeholder:text-plumo-muted/65 focus:border-plumo-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue";
@@ -223,7 +224,7 @@ export function CreateAgentWizard({ mode = "guest" }: { mode?: WizardMode }) {
         </div>
       </div>
       {storage.guest && <div className="mb-5 rounded-2xl border border-solid border-plumo-line bg-plumo-soft p-5"><p className="mt-0 text-[14px] leading-6">{c.importGuestNote}</p><button type="button" className={secondary} onClick={() => void storage.importGuest()}>{c.importGuest}</button></div>}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-[12px] text-plumo-muted"><span>{c.step} {step + 1} {c.of} 6 · {c.steps[step]}</span><span className="rounded-full border border-solid border-plumo-line bg-white px-3 py-1.5">{c.demoMode}</span></div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-[12px] text-plumo-muted"><span>{c.step} {step + 1} {c.of} 6 · {c.steps[step]}</span><span className="rounded-full border border-solid border-plumo-line bg-white px-3 py-1.5">{mode === "account" ? c.accountMode : c.demoMode}</span></div>
       <motion.div key={step} initial={reduced ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className={`overflow-hidden rounded-[24px] border border-solid border-plumo-line bg-white ${step < 5 ? "grid lg:min-h-[600px] lg:grid-cols-2" : ""}`}>
         {step < 5 ? <>
           <form onSubmit={next} className="flex flex-col p-6 md:p-10">
@@ -285,7 +286,7 @@ export function CreateAgentWizard({ mode = "guest" }: { mode?: WizardMode }) {
         </> : <div className="p-5 md:p-8">
           <div className="mb-7 flex flex-wrap items-start justify-between gap-4"><div><h1 ref={heading} tabIndex={-1} className="m-0 text-[28px] font-medium tracking-tight outline-none">{c.titles[5]}</h1><p className="mb-0 mt-3 max-w-[550px] text-[14px] leading-relaxed text-plumo-muted">{c.intros[5]}</p></div><button type="button" onClick={() => setStep(0)} className={secondary}>{c.edit}</button></div>
           <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-            <div className="min-w-0 overflow-hidden rounded-[20px] border border-solid border-plumo-line">
+            {mode === "account" ? <AgentTestChat prepare={storage.complete} /> : <div className="min-w-0 overflow-hidden rounded-[20px] border border-solid border-plumo-line">
               <div className="flex items-center gap-3 border-0 border-b border-solid border-plumo-line p-4"><Mark draft={draft} size={40} /><div className="min-w-0 flex-1"><p className="m-0 truncate text-[15px] font-semibold">{draft.name} · {draft.company}</p><p className="mb-0 mt-1 text-[11px] text-plumo-muted">{c.demoMode}</p></div><button type="button" onClick={() => { setMessages([]); setHandedOff(false); setChatInput(""); }} className="cursor-pointer border-0 bg-transparent p-2 font-[inherit] text-[11px] text-plumo-muted underline">{c.restart}</button></div>
               <div ref={transcript} role="log" aria-label={c.test} aria-live="polite" className="flex h-[340px] flex-col gap-4 overflow-y-auto bg-plumo-line/10 p-4">
                 <p className="m-0 max-w-[90%] self-start rounded-2xl rounded-tl-sm border border-solid border-plumo-line bg-white px-4 py-3 text-[14px] leading-relaxed">{greeting}</p>
@@ -295,6 +296,7 @@ export function CreateAgentWizard({ mode = "guest" }: { mode?: WizardMode }) {
                 {handedOff ? <p role="status" className="m-0 rounded-xl bg-plumo-soft p-3 text-[13px] leading-relaxed text-plumo-ink">{c.paused}</p> : <form onSubmit={e => { e.preventDefault(); send(chatInput); }} className="flex gap-2"><input aria-label={c.placeholder} value={chatInput} onChange={e => setChatInput(e.target.value)} maxLength={1000} placeholder={c.placeholder} className={input} /><button type="submit" disabled={!chatInput.trim()} className={primary} aria-label={c.send}>↑</button></form>}
               </div>
             </div>
+            }
             <aside className="flex min-w-0 flex-col gap-5 rounded-[20px] bg-plumo-line/20 p-5">
               <div><span className="text-[11px] text-plumo-muted">{c.ready}</span><h2 className="mb-0 mt-3 break-words text-[22px] font-medium">{draft.company}</h2><p className="mb-0 mt-3 text-[13px] leading-relaxed text-plumo-muted">{draft.purpose === "sales" ? c.sales : c.support} · {c.knowledge}: {sources.length}</p></div>
               <Field title={c.channel}><select value={channel} onChange={e => { setChannel(Number(e.target.value)); setDownloaded(false); }} className={input}>{c.channels.map((name, index) => <option key={name} value={index}>{name}</option>)}</select></Field>
