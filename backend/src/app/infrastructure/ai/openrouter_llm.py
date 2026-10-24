@@ -125,6 +125,11 @@ class OpenRouterLLMProvider:
             temperature=0,
         )
 
+    async def chat(self, messages: list[dict[str, Any]], *, temperature: float = 0.0) -> dict[str, Any]:
+        """One JSON-mode reply for tooling (dialog eval): {"text", "usage", "model"}. Not used by AgentService."""
+
+        return await self._chat(messages, temperature=temperature)
+
     async def generate_response(self, context: AgentContext, route: RouteDecision) -> LLMGeneration:
         payload = await self._chat(
             [
