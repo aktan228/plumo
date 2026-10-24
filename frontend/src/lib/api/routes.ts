@@ -8,6 +8,8 @@ const allowed: Record<string, RegExp[]> = {
   GET: [
     /^auth\/me$/,
     /^onboarding$/,
+    /^testing\/sessions$/,
+    new RegExp(`^testing/sessions/${id}$`),
     /^integrations$/,
     /^conversations$/,
     new RegExp(`^conversations/${id}$`),
@@ -17,6 +19,8 @@ const allowed: Record<string, RegExp[]> = {
   ],
   POST: [
     /^onboarding\/complete$/,
+    /^testing\/sessions$/,
+    new RegExp(`^testing/sessions/${id}/messages$`),
     /^integrations\/(telegram|instagram)\/connect$/,
     new RegExp(`^integrations/${id}/(check|disconnect)$`),
     new RegExp(`^conversations/${id}/(takeover|resume|messages|read)$`),

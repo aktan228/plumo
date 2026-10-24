@@ -8,6 +8,7 @@ import { DashboardIcon, type DashboardIconName } from "./dashboard-icon";
 import { Dialogues } from "./dialogues";
 import { Integrations } from "./integrations";
 import { ChatBoard } from "./chat-board";
+import { AgentTestChat } from "@/features/create-agent/agent-test-chat";
 import { SoonDialog } from "./soon-dialog";
 import type { IntegrationsResponse, Session } from "@/lib/api/types";
 
@@ -181,7 +182,8 @@ export function DashboardShell({ session }: { session: Session }) {
           <div className={layout === "kanban" ? "h-full" : "hidden"}><ChatBoard onSoon={() => setSoon(true)} /></div>
           <div className={layout === "list" ? "h-full" : "hidden"}><Dialogues active={view === "chats" && layout === "list"} /></div>
         </div>
-        {view !== "integrations" && view !== "chats" && <div className="flex flex-1 items-center justify-center text-base text-plumo-muted">soon</div>}
+        {view === "testing" && <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6"><div className="mx-auto max-w-[900px]"><AgentTestChat /></div></div>}
+        {view !== "integrations" && view !== "chats" && view !== "testing" && <div className="flex flex-1 items-center justify-center text-base text-plumo-muted">soon</div>}
       </main>
     </div>
     <SoonDialog open={soon} onClose={() => setSoon(false)} />
