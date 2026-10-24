@@ -205,6 +205,32 @@ def test_two_people_is_not_a_human_request():
     assert analyze_message("менеджерди чакырыңыз").human_request is True
 
 
+def test_talking_about_the_manager_is_not_calling_one():
+    # Found by the dialog eval: these used to get "зову менеджера" instead of an answer, again and again.
+    for text in (
+        "а менеджер может скинуть цену?",
+        "ну так что, менеджер может цену опустить или нет?",
+        "если менеджер звонить не будет, скиньте телефон агентства",
+        "что скажет менеджер про рассрочку",
+        "менеджер сказал 80 тысяч",
+        "менеджер отвечает или нет",
+    ):
+        assert analyze_message(text).human_request is False, text
+    for text in (
+        "позовите менеджера",
+        "Позовите менеджера, пожалуйста",
+        "соедините с оператором",
+        "переключите меня на менеджера",
+        "хочу поговорить с менеджером",
+        "мне нужен живой менеджер",
+        "менеджера позовите",
+        "подключите оператора",
+        "передайте менеджеру мой вопрос",
+        "менеджерди чакырыңыз",
+    ):
+        assert analyze_message(text).human_request is True, text
+
+
 def test_products_greeting_is_a_catalog_question():
     signals = analyze_message("привет, подскажи какие товары у вас есть")
     assert signals.greeting is True

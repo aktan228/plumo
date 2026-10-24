@@ -239,8 +239,9 @@ class AgentService:
             signals, slot_named, mid_dialog=bool(context.recent_messages), phone_given=bool(find_phones(message.text))
         )
         if signals.human_request:
-            response_text = human_phrase(language, message.channel, seed)
-            steps.append("human_phrase")
+            already_open = await self.handoffs.find_open(conversation.id, "user_requested_human") is not None
+            response_text = human_phrase(language, message.channel, seed, again=already_open)
+            steps.append("human_phrase_again" if already_open else "human_phrase")
         elif assessment.factual and not assessment.answerable and (
             not context.knowledge or assessment.topic == "installment"
         ):

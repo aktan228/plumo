@@ -61,9 +61,9 @@ GREETING = ("здравствуйте", "привет", "приветствую"
 FAREWELL = ("до свидания", "пока", "всего доброго", "жакшы калыныз", "подумаю", "ойлонуп")
 CLEAR_CONFIRM = frozenset({"да", "нет", "ок", "хорошо", "ооба", "жок"})
 UNCLEAR_CONFIRM = frozenset({"ну", "угу", "ага", "хм", "эм"})
+# Phrases that ask for a live person on their own. The words "менеджер" and "оператор" are not here:
+# "а менеджер может скинуть цену?" talks about the manager, it does not call one (see asks_for_person).
 HUMAN = (
-    "менеджер",
-    "оператор",
     "позовите человека",
     "живой оператор",
     "живой человек",
@@ -78,6 +78,21 @@ HUMAN = (
     "адамга туташтыр",
     "адамды чакыр",
 )
+_PERSON = r"(?:менеджер|оператор|администратор)\w*"
+# Verbs of calling, connecting or handing over, within three words of the role, either order.
+_CALL = r"(?:позов|зов[иеу]|соедин|переключ|подключ|передай|передат|свяж|связат|поговор|пообща|побесед|нужен|нужна|чакыр|туташтыр|байланыштыр|сүйлөш|суйлош)\w*"
+_ASKS_FOR_PERSON = re.compile(
+    rf"(?<!\w){_CALL}(?:\W+\w+){{0,3}}?\W+{_PERSON}|(?<!\w){_PERSON}(?:\W+\w+){{0,3}}?\W+{_CALL}"
+)
+
+
+def asks_for_person(text: str) -> bool:
+    """The customer wants a live person now: "позовите менеджера", not "менеджер может скинуть цену?"."""
+
+    normalized = normalize_text(text)
+    return contains_any(normalized, HUMAN) or bool(_ASKS_FOR_PERSON.search(normalized))
+
+
 MEETING = (
     "встреч",
     "встретиться",
@@ -310,7 +325,7 @@ def analyze_message(text: str) -> MessageSignals:
         farewell=contains_word(normalized, FAREWELL),
         clear_confirmation=token in CLEAR_CONFIRM,
         unclear_confirmation=token in UNCLEAR_CONFIRM,
-        human_request=contains_any(normalized, HUMAN),
+        human_request=asks_for_person(normalized),
         meeting=contains_any(normalized, MEETING),
         installment=contains_any(normalized, INSTALLMENT),
         money=contains_any(normalized, MONEY),

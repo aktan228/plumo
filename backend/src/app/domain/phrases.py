@@ -38,7 +38,12 @@ ROLE_PHRASE_KY = (
 )
 HUMAN_CHAT_RU = (
     "Конечно, подключаю менеджера — он увидит нашу переписку, повторять ничего не придётся.",
-    "Хорошо, зову менеджера. Он уже видит, о чём мы говорили, и скоро ответит.",
+    "Хорошо, зову менеджера. Он увидит, о чём мы говорили, и ответит вам сам.",
+)
+# The customer asks again while the handoff is open: no second "зову", no promise about the time.
+HUMAN_AGAIN_RU = (
+    "Менеджер уже получил ваш запрос и всю переписку. Когда он ответит, точно сказать не могу. Пока могу помочь сама, если есть вопрос.",
+    "Запрос менеджеру уже передан, он видит нашу переписку. Если есть вопрос, на который могу ответить, спрашивайте.",
 )
 HUMAN_VOICE_RU = (
     "Конечно, передаю менеджеру — он перезвонит вам в ближайшее время.",
@@ -83,7 +88,10 @@ FAREWELL_KY = (
     "Макул, ойлонуп көрүңүз. Суроолоруңуз болсо — жазыңыз.",
 )
 HUMAN_KY = (
-    "Макул, менеджерге берем — ал сиз менен жакында байланышат.",
+    "Макул, менеджерге берем — ал жазышууңузду көрүп, өзү жооп берет.",
+)
+HUMAN_AGAIN_KY = (
+    "Суранычыңыз менеджерге берилди, ал жазышууңузду көрүп жатат. Суроо болсо, мен жооп берейин.",
 )
 
 
@@ -263,9 +271,13 @@ def role_phrase(language: str, seed: str = "") -> str:
     return _pick(ROLE_PHRASE_KY if language == "ky" else ROLE_PHRASE_RU, seed)
 
 
-def human_phrase(language: str, channel: str = "whatsapp", seed: str = "") -> str:
+def human_phrase(language: str, channel: str = "whatsapp", seed: str = "", again: bool = False) -> str:
+    """`again`: the customer asks for a person while a handoff for it is already open."""
+
     if language == "ky":
-        return _pick(HUMAN_KY, seed)
+        return _pick(HUMAN_AGAIN_KY if again else HUMAN_KY, seed)
+    if again and channel != "voice":
+        return _pick(HUMAN_AGAIN_RU, seed)
     return _pick(HUMAN_VOICE_RU if channel == "voice" else HUMAN_CHAT_RU, seed)
 
 
