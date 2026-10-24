@@ -2,12 +2,33 @@
 
 from fastapi import APIRouter, Depends, Request, Response
 
-from app.api.dashboard_schemas import BusinessBriefOut, LoginIn, LoginOut, OperatorOut, SessionOut
+from app.api.dashboard_schemas import BusinessBriefOut, LoginIn, LoginOut, OperatorOut, RegisterIn, SessionOut
 from app.api.deps import Services, bearer_token, current_operator, get_services
 from app.application.services.auth_service import OperatorContext
+from app.application.services.registration_service import RegistrationService
 from app.domain.errors import NotAuthenticated
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post(
+    "/register", response_model=LoginOut, status_code=201, summary="Создать аккаунт и рабочее пространство",
+    responses={409: {"description": "Аккаунт не создан: войдите или используйте другую почту"},
+               429: {"description": "Слишком много попыток"}},
+)
+async def register(body: RegisterIn, request: Request, services: Services = Depends(get_services)) -> LoginOut:
+    result = await RegistrationService(services.session, services.auth).register(
+        name=body.name, email=str(body.email), password=body.password, locale=body.locale,
+        client_ip=request.headers.get("x-plumo-client-ip") or (request.client.host if request.client else "unknown"),
+    )
+    business = await services.businesses.get(result.operator.business_id)
+    await services.session.commit()
+    return LoginOut(
+        token=result.token, expires_at=result.expires_at,
+        operator=OperatorOut(id=result.operator.id, email=result.operator.email, display_name=result.operator.display_name,
+                             business=BusinessBriefOut(id=business.id, name=business.name)),
+        ai_mode=services.runtime.settings.ai_mode,
+    )
 
 
 @router.post(

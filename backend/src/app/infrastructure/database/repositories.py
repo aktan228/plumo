@@ -551,8 +551,10 @@ class BusinessRepository:
         return _business(row) if row else None
 
     async def get_by_name(self, name: str) -> Business | None:
-        row = await self.session.scalar(select(BusinessRow).where(BusinessRow.name == name))
-        return _business(row) if row else None
+        rows = (await self.session.scalars(select(BusinessRow).where(BusinessRow.name == name).limit(2))).all()
+        if len(rows) > 1:
+            raise InvalidState("Several businesses have this name; use --business-id to select the workspace.")
+        return _business(rows[0]) if rows else None
 
     async def list_all(self) -> list[Business]:
         rows = (await self.session.scalars(select(BusinessRow).order_by(BusinessRow.name.asc()))).all()

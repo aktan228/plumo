@@ -152,3 +152,23 @@ curl -X POST https://api.example.com/api/v1/messages \
 Работаем по git flow: ветка `feature/<что-делаем>` от `develop`, PR в `develop`. В `develop` и `main` напрямую не пушим.
 
 Тесты: `pytest tests/unit` — без базы; `pytest` — нужен Postgres. Worker: `.\dev.cmd worker` (или `python -m app.worker`), в отдельном окне рядом с API.
+
+
+## Самостоятельная регистрация MVP
+
+`/register` → Next.js `POST /api/auth/register` → backend `POST /api/v1/auth/register`.
+Тело: `{ "name": "Айжан", "email": "owner@example.com", "password": "example-passphrase", "locale": "ru" }`.
+Имя после обрезки пробелов — 1–100 символов без управляющих символов, почта валидируется и приводится к нижнему регистру,
+пароль — 10–128 символов, не только пробелы. Поля `business_id` и другие дополнительные поля backend отклоняет.
+Сервер создаёт бизнес «Мой бизнес» / «My business», оператора, `onboarding_drafts` (step=0, data={}) и сессию одной транзакцией.
+Ответ backend: 201 с форматом `LoginOut`; Next.js убирает token из JSON и ставит HttpOnly/SameSite cookie (Secure на HTTPS).
+Ошибки: 422 — поля, 409 — аккаунт не создан (повторная почта), 429 — лимит 10 попыток за час на адрес клиента.
+Лимит пока в памяти одного API-процесса, сбрасывается при рестарте. В production нужен общий limiter до масштабирования.
+`x-plumo-client-ip` передаёт сервер Next.js под сервисным ключом; браузер не выбирает его в форме.
+Двойное нажатие блокируется формой; уникальная почта в PostgreSQL защищает от конкурентных запросов без лишних бизнесов.
+
+При деплое сначала обновить backend и применить миграцию `007_self_service_registration` (`alembic upgrade head`), затем frontend.
+Новых переменных окружения не требуется: прежние `DATABASE_URL` на backend, `PLUMO_API_URL` и совпадающий `PLUMO_API_KEY` на Next.js.
+Названия бизнесов больше не уникальны; административные команды `app.operators create` и `app.import_knowledge` принимают `--business-id UUID`.
+`--business` работает только при однозначном названии, чтобы импорт не попал в чужой бизнес.
+Подтверждение почты/сброс пароля и сохранение шагов мастера — следующие отдельные этапы; регистрация пока сразу выдаёт сессию.

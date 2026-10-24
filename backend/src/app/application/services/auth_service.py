@@ -1,4 +1,4 @@
-"""Team sign-in for the dashboard. No public registration: operators are created on the server.
+"""Account sessions for the dashboard and self-service registration.
 
 Passwords: scrypt from the standard library. Sessions: a random token in an
 HttpOnly cookie set by the Next.js server; the database keeps only its sha256.
@@ -110,6 +110,9 @@ class AuthService:
             self.limiter.failed(key)
             raise NotAuthenticated("wrong email or password")
         self.limiter.succeeded(key)
+        return await self.issue_session(operator)
+
+    async def issue_session(self, operator: Operator) -> LoginResult:
         token = secrets.token_urlsafe(32)
         expires_at = utcnow() + self.session_ttl
         await self.operators.add_session(operator.id, token_hash(token), expires_at)

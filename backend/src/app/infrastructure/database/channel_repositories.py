@@ -56,6 +56,18 @@ class OperatorRepository:
         await self.session.flush()
         return _operator(row)
 
+    async def add_registered(self, *, business_id: UUID, email: str, password_hash: str, display_name: str) -> Operator | None:
+        now = utcnow()
+        stmt = (
+            insert(OperatorRow)
+            .values(id=uuid4(), business_id=business_id, email=email.strip().lower(), password_hash=password_hash,
+                    display_name=display_name, active=True, created_at=now, updated_at=now)
+            .on_conflict_do_nothing(index_elements=[OperatorRow.email])
+            .returning(OperatorRow)
+        )
+        row = (await self.session.scalars(stmt)).one_or_none()
+        return _operator(row) if row else None
+
     async def set_password(self, operator_id: UUID, password_hash: str) -> None:
         row = await self.session.get(OperatorRow, operator_id)
         if row is not None:

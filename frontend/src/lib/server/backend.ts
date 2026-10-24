@@ -13,11 +13,12 @@ export function backendUrl(path: string): string {
   return `${base}/api/v1/${path}`;
 }
 
-export async function backendFetch(path: string, init: { method?: string; body?: string; token?: string | null } = {}): Promise<Response> {
+export async function backendFetch(path: string, init: { method?: string; body?: string; token?: string | null; clientIp?: string } = {}): Promise<Response> {
   const headers: Record<string, string> = { accept: "application/json" };
   if (init.body !== undefined) headers["content-type"] = "application/json";
   const key = process.env.PLUMO_API_KEY;
   if (key) headers["x-api-key"] = key;
+  if (init.clientIp) headers["x-plumo-client-ip"] = init.clientIp;
   if (init.token) headers.authorization = `Bearer ${init.token}`;
   return fetch(backendUrl(path), { method: init.method ?? "GET", body: init.body, headers, cache: "no-store", signal: AbortSignal.timeout(30_000) });
 }

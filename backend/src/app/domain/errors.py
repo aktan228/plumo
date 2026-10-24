@@ -59,6 +59,10 @@ class InvalidState(AppError):
     http_status = 409
 
 
+class RegistrationConflict(InvalidState):
+    code = "registration_conflict"
+
+
 class CustomerConflict(InvalidState):
     """A concurrent request created the same customer first."""
 

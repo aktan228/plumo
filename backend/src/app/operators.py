@@ -1,4 +1,4 @@
-"""Dashboard operators. There is no public registration: the team creates accounts here.
+"""Administrative operator tools. Clients can also register through /register.
 
     python -m app.operators create --email azamat@example.kg --business "Demo Realty" --name "Азамат"
     python -m app.operators password --email azamat@example.kg
@@ -13,6 +13,7 @@ import asyncio
 import getpass
 import os
 import sys
+from uuid import UUID
 
 from sqlalchemy import select
 
@@ -56,7 +57,8 @@ async def _run(args) -> None:
                     print(f"{email}\t{name or '-'}\t{business}\t{'active' if active else 'disabled'}")
                 return
             if args.command == "create":
-                business = await BusinessRepository(session).get_by_name(args.business)
+                repo = BusinessRepository(session)
+                business = await repo.get(args.business_id) if args.business_id else await repo.get_by_name(args.business)
                 if business is None:
                     sys.exit(f"Бизнес «{args.business}» не найден. Сначала: python -m app.seed")
                 if await operators.get_with_hash(args.email):
@@ -86,7 +88,9 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     create = sub.add_parser("create")
     create.add_argument("--email", required=True)
-    create.add_argument("--business", required=True, help="название бизнеса, как в базе")
+    workspace = create.add_mutually_exclusive_group(required=True)
+    workspace.add_argument("--business", help="уникальное название бизнеса")
+    workspace.add_argument("--business-id", type=UUID, help="ID бизнеса, если названия повторяются")
     create.add_argument("--name", default="", help="имя, которое видно в истории диалога")
     password = sub.add_parser("password")
     password.add_argument("--email", required=True)
