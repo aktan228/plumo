@@ -1,14 +1,59 @@
-export function DashboardIcon({ name, size = 20 }: { name: "panel" | "chat" | "back" | "search" | "send" | "user" | "close" | "menu" | "plug" | "check"; size?: number }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    {name === "panel" && <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" /></>}
-    {name === "chat" && <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-2 2V11.5a9.5 9.5 0 0 1 19 0Z" />}
-    {name === "back" && <path d="M19 12H5m6-6-6 6 6 6" />}
-    {name === "search" && <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></>}
-    {name === "send" && <><path d="m3 3 18 9-18 9 4-9-4-9Z" /><path d="M7 12h14" /></>}
-    {name === "user" && <><circle cx="12" cy="8" r="4" /><path d="M4 21v-2a8 8 0 0 1 16 0v2" /></>}
-    {name === "close" && <path d="m6 6 12 12M6 18 18 6" />}
-    {name === "menu" && <path d="M4 6h16M4 12h16M4 18h16" />}
-    {name === "plug" && <><path d="M9 3v5m6-5v5M6 8h12v3a6 6 0 0 1-12 0V8Zm6 9v4" /></>}
-    {name === "check" && <path d="m5 12 4 4L19 6" />}
-  </svg>;
+import { PlumoIcon } from "@/components/ui/plumo-icon";
+import SidebarLeft01Icon from "@hugeicons/core-free-icons/SidebarLeft01Icon";
+import Chatting01Icon from "@hugeicons/core-free-icons/Chatting01Icon";
+import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
+import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
+import SentIcon from "@hugeicons/core-free-icons/SentIcon";
+import UserIcon from "@hugeicons/core-free-icons/UserIcon";
+import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
+import Menu01Icon from "@hugeicons/core-free-icons/Menu01Icon";
+import PlugSocketIcon from "@hugeicons/core-free-icons/PlugSocketIcon";
+import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
+import Book02Icon from "@hugeicons/core-free-icons/Book02Icon";
+import TestTube01Icon from "@hugeicons/core-free-icons/TestTube01Icon";
+import Edit02Icon from "@hugeicons/core-free-icons/Edit02Icon";
+import Megaphone01Icon from "@hugeicons/core-free-icons/Megaphone01Icon";
+import FlashIcon from "@hugeicons/core-free-icons/FlashIcon";
+import Settings01Icon from "@hugeicons/core-free-icons/Settings01Icon";
+import Analytics01Icon from "@hugeicons/core-free-icons/Analytics01Icon";
+import UserGroupIcon from "@hugeicons/core-free-icons/UserGroupIcon";
+import Share08Icon from "@hugeicons/core-free-icons/Share08Icon";
+import PuzzleIcon from "@hugeicons/core-free-icons/PuzzleIcon";
+import Wrench01Icon from "@hugeicons/core-free-icons/Wrench01Icon";
+import Call02Icon from "@hugeicons/core-free-icons/Call02Icon";
+import HelpCircleIcon from "@hugeicons/core-free-icons/HelpCircleIcon";
+import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
+import Calendar03Icon from "@hugeicons/core-free-icons/Calendar03Icon";
+import FilterHorizontalIcon from "@hugeicons/core-free-icons/FilterHorizontalIcon";
+import AddCircleIcon from "@hugeicons/core-free-icons/AddCircleIcon";
+import GitBranchIcon from "@hugeicons/core-free-icons/GitBranchIcon";
+import PaintBoardIcon from "@hugeicons/core-free-icons/PaintBoardIcon";
+import UserAdd01Icon from "@hugeicons/core-free-icons/UserAdd01Icon";
+import DashboardSquare01Icon from "@hugeicons/core-free-icons/DashboardSquare01Icon";
+import ListViewIcon from "@hugeicons/core-free-icons/ListViewIcon";
+import MoreHorizontalIcon from "@hugeicons/core-free-icons/MoreHorizontalIcon";
+import PauseIcon from "@hugeicons/core-free-icons/PauseIcon";
+import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
+import InformationCircleIcon from "@hugeicons/core-free-icons/InformationCircleIcon";
+import DragDropVerticalIcon from "@hugeicons/core-free-icons/DragDropVerticalIcon";
+
+const icons = {
+  panel: SidebarLeft01Icon, chat: Chatting01Icon, back: ArrowLeft01Icon,
+  search: Search01Icon, send: SentIcon, user: UserIcon, close: Cancel01Icon,
+  menu: Menu01Icon, plug: PlugSocketIcon, check: Tick02Icon, book: Book02Icon,
+  testing: TestTube01Icon, edit: Edit02Icon, broadcast: Megaphone01Icon,
+  bolt: FlashIcon, settings: Settings01Icon, statistics: Analytics01Icon,
+  customers: UserGroupIcon, integrations: Share08Icon, extensions: PuzzleIcon,
+  tools: Wrench01Icon, voice: Call02Icon, help: HelpCircleIcon,
+  chevron: ArrowDown01Icon, calendar: Calendar03Icon, filter: FilterHorizontalIcon,
+  add: AddCircleIcon, branch: GitBranchIcon, appearance: PaintBoardIcon,
+  userAdd: UserAdd01Icon, kanban: DashboardSquare01Icon, list: ListViewIcon,
+  more: MoreHorizontalIcon, pause: PauseIcon, sparkles: SparklesIcon,
+  info: InformationCircleIcon, drag: DragDropVerticalIcon,
+};
+
+export type DashboardIconName = keyof typeof icons;
+
+export function DashboardIcon({ name, size = 20 }: { name: DashboardIconName; size?: number }) {
+  return <PlumoIcon icon={icons[name]} size={size} />;
 }

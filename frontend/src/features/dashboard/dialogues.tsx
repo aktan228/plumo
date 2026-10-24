@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useLanguage } from "@/lib/i18n";
 import { DashboardIcon } from "./dashboard-icon";
-import { exampleConversations, updateConversations, type Channel, type Mode, type Conversation } from "./dialogue-model";
+import { updateConversations, type Channel, type Mode, type Conversation } from "./dialogue-model";
 
 const labels = {
   ru: {
@@ -38,12 +38,18 @@ function ChannelBadge({ channel }: { channel: Channel }) {
   return <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium ${channelColors[channel]}`}><span className="size-1.5 rounded-full bg-current" />{channel}</span>;
 }
 
-export function Dialogues() {
+/** Empty by default; callers can supply conversations when a data source is ready. */
+export function Dialogues({ initialConversations = [] }: { initialConversations?: Conversation[] }) {
+  if (!initialConversations.length) return <div className="flex h-full items-center justify-center text-base text-plumo-muted">soon</div>;
+  return <ConversationInbox initialConversations={initialConversations} />;
+}
+
+function ConversationInbox({ initialConversations }: { initialConversations: Conversation[] }) {
   const { locale } = useLanguage();
   const c = labels[locale];
-  // Keep Russian customer content when switching the UI language.
-  const [conversations, setConversations] = useState(() => exampleConversations(false));
-  const [selectedId, setSelectedId] = useState("aibek-wa");
+  // Keep conversation content when switching the UI language.
+  const [conversations, setConversations] = useState(() => initialConversations);
+  const [selectedId, setSelectedId] = useState(initialConversations[0].id);
   const [channel, setChannel] = useState<Channel | "all">("all");
   const [mode, setMode] = useState<Mode | "all">("all");
   const [search, setSearch] = useState("");
