@@ -14,8 +14,30 @@ async function proxy(request: NextRequest, params: Promise<{ path: string[] }>) 
   }
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return json(401, { error: "not_authenticated", code: "not_authenticated", message: "sign in to continue" });
-  const body = method === "GET" ? undefined : await request.text();
-  if (body !== undefined && body.length > 100_000) return json(413, { error: "invalid_message", code: "invalid_message", message: "body is too large" });
+  let body: string | undefined;
+  if (method !== "GET") {
+    const maximum = path === "onboarding" ? 2_000_000 : 100_000;
+    const reader = request.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      if (reader) while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        total += chunk.value.byteLength;
+        if (total > maximum) {
+          await reader.cancel();
+          return json(413, { code: "invalid_message", message: "body is too large" });
+        }
+        chunks.push(chunk.value);
+      }
+      const joined = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) { joined.set(chunk, offset); offset += chunk.byteLength; }
+      body = new TextDecoder("utf-8", { fatal: true }).decode(joined);
+    } catch { return json(422, { code: "invalid_message", message: "invalid request body" }); }
+    finally { reader?.releaseLock(); }
+  }
   let response: Response;
   try {
     response = await backendFetch(`${path}${method === "GET" ? forwardQuery(request.nextUrl.searchParams) : ""}`, { method, body, token });

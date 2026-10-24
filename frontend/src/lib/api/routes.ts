@@ -7,6 +7,7 @@ const id = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const allowed: Record<string, RegExp[]> = {
   GET: [
     /^auth\/me$/,
+    /^onboarding$/,
     /^integrations$/,
     /^conversations$/,
     new RegExp(`^conversations/${id}$`),
@@ -15,12 +16,13 @@ const allowed: Record<string, RegExp[]> = {
     new RegExp(`^customers/${id}(/history)?$`),
   ],
   POST: [
+    /^onboarding\/complete$/,
     /^integrations\/(telegram|instagram)\/connect$/,
     new RegExp(`^integrations/${id}/(check|disconnect)$`),
     new RegExp(`^conversations/${id}/(takeover|resume|messages|read)$`),
     new RegExp(`^outbound-messages/${id}/resolve$`),
   ],
-  PATCH: [new RegExp(`^integrations/${id}$`)],
+  PATCH: [/^onboarding$/, new RegExp(`^integrations/${id}$`)],
 };
 
 export function isAllowedRoute(method: string, path: string): boolean {

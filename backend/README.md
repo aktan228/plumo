@@ -184,6 +184,7 @@ Plumo > У меня нет информации о рассрочке. Я пер
 | POST | `/api/v1/channels/{channel}/events` | сырое mock-событие канала (только `APP_ENV=development`) |
 | POST | `/api/v1/webhooks/telegram/{connection_id}` | Telegram Bot API, проверка `X-Telegram-Bot-Api-Secret-Token` |
 | GET · POST | `/api/v1/webhooks/instagram` | Meta: `hub.challenge` и события с `X-Hub-Signature-256` |
+| GET · PATCH · POST | `/api/v1/onboarding` · `/onboarding/complete` | черновик мастера и завершение настройки своего бизнеса; [контракт](../docs/onboarding-persistence.md) |
 | POST | `/api/v1/auth/register` · `/verify-email` · `/resend-verification` · `/forgot-password` · `/reset-password` · `/login` · `/logout`, GET `/auth/me` | регистрация, почта, пароль и вход кабинета; [настройка писем](../docs/account-auth.md) |
 | GET · POST · PATCH | `/api/v1/integrations…` | подключения Telegram/Instagram бизнеса |
 | GET | `/api/v1/conversations` | список диалогов: поиск, фильтры, курсор |

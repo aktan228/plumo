@@ -508,6 +508,107 @@
         }
       }
     },
+    "/api/v1/onboarding": {
+      "get": {
+        "tags": [
+          "onboarding"
+        ],
+        "summary": "Загрузить настройки мастера своего бизнеса",
+        "operationId": "get_draft_api_v1_onboarding_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WizardOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "onboarding"
+        ],
+        "summary": "Сохранить шаги и материалы мастера",
+        "operationId": "save_draft_api_v1_onboarding_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveWizardIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WizardOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/onboarding/complete": {
+      "post": {
+        "tags": [
+          "onboarding"
+        ],
+        "summary": "Завершить настройку и сохранить карточку бизнеса",
+        "operationId": "complete_draft_api_v1_onboarding_complete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteWizardIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WizardOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/customers/{customer_id}": {
       "get": {
         "tags": [
@@ -2204,6 +2305,100 @@
           }
         ]
       },
+      "AgentSettings": {
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "sales",
+              "support"
+            ],
+            "title": "Purpose",
+            "default": "sales"
+          },
+          "company": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Company",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 3000,
+            "title": "Description",
+            "default": ""
+          },
+          "audience": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Audience",
+            "default": ""
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "title": "Color",
+            "default": "#2b55ff"
+          },
+          "logo": {
+            "type": "string",
+            "maxLength": 1333400,
+            "title": "Logo",
+            "default": ""
+          },
+          "logoName": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Logoname",
+            "default": ""
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 60,
+            "title": "Name",
+            "default": "Plumo"
+          },
+          "tone": {
+            "type": "string",
+            "enum": [
+              "friendly",
+              "formal"
+            ],
+            "title": "Tone",
+            "default": "friendly"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "ru",
+              "en"
+            ],
+            "title": "Language",
+            "default": "ru"
+          },
+          "greeting": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Greeting",
+            "default": ""
+          },
+          "goal": {
+            "type": "string",
+            "maxLength": 1500,
+            "title": "Goal",
+            "default": ""
+          },
+          "fallback": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Fallback",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AgentSettings"
+      },
       "BusinessBriefOut": {
         "properties": {
           "id": {
@@ -2370,6 +2565,22 @@
           "requirements"
         ],
         "title": "ChannelIntegrationOut"
+      },
+      "CompleteWizardIn": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "maximum": 2000000000.0,
+            "minimum": 0.0,
+            "title": "Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "CompleteWizardIn"
       },
       "ConnectIn": {
         "properties": {
@@ -4063,6 +4274,48 @@
         ],
         "title": "OperatorOut"
       },
+      "PricingChoice": {
+        "properties": {
+          "choice": {
+            "type": "string",
+            "enum": [
+              "start",
+              "business",
+              "custom",
+              "demo"
+            ],
+            "title": "Choice"
+          },
+          "volume": {
+            "type": "integer",
+            "multipleOf": 500.0,
+            "maximum": 10000.0,
+            "minimum": 1000.0,
+            "title": "Volume"
+          },
+          "billing": {
+            "type": "string",
+            "enum": [
+              "quarter",
+              "month"
+            ],
+            "title": "Billing"
+          },
+          "voice": {
+            "type": "boolean",
+            "title": "Voice"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "choice",
+          "volume",
+          "billing",
+          "voice"
+        ],
+        "title": "PricingChoice"
+      },
       "ReadIn": {
         "properties": {
           "seq": {
@@ -4263,6 +4516,33 @@
         ],
         "title": "ResolveDeliveryIn"
       },
+      "SaveWizardIn": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "maximum": 2000000000.0,
+            "minimum": 0.0,
+            "title": "Version"
+          },
+          "step": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Step"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WizardData"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "step",
+          "data"
+        ],
+        "title": "SaveWizardIn"
+      },
       "SessionOut": {
         "properties": {
           "operator": {
@@ -4286,6 +4566,37 @@
           "ai_mode"
         ],
         "title": "SessionOut"
+      },
+      "SourceEntry": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "website",
+              "instagram",
+              "text",
+              "file",
+              "faq"
+            ],
+            "title": "Kind",
+            "default": "website"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 100000,
+            "title": "Value",
+            "default": ""
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Question",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SourceEntry"
       },
       "SummaryOut": {
         "properties": {
@@ -4525,6 +4836,153 @@
           "response"
         ],
         "title": "VoiceRespondOut"
+      },
+      "WizardData": {
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/AgentSettings"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/WizardSource"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Sources"
+          },
+          "channel": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "title": "Channel",
+            "default": 0
+          },
+          "pricing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PricingChoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entry": {
+            "$ref": "#/components/schemas/SourceEntry"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WizardData"
+      },
+      "WizardOut": {
+        "properties": {
+          "business_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Business Id"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WizardData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "business_id",
+          "step",
+          "data",
+          "version",
+          "completed_at",
+          "updated_at"
+        ],
+        "title": "WizardOut"
+      },
+      "WizardSource": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "website",
+              "instagram",
+              "text",
+              "file",
+              "faq"
+            ],
+            "title": "Kind"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Content"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "content"
+        ],
+        "title": "WizardSource"
       }
     }
   }
