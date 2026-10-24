@@ -101,6 +101,7 @@ export function DashboardShell({ session }: { session: Session }) {
   }, []);
 
   function navigate(next: View) {
+    if (next === "settings") { window.location.assign("/create/wizard"); return; }
     setView(next);
     window.location.hash = next;
   }

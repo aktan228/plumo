@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     mock_channel_events: bool = True
     # Operator session lifetime in the dashboard.
     session_ttl_hours: float = 12.0
+    # Frontend origin for account links; distinct from API/webhook PUBLIC_BASE_URL.
+    auth_public_url: str = ""
+    auth_email_from: str = ""
     # Days the raw webhook copy of a customer message keeps its text; the dialog history stays.
     # 0 = keep forever.
     inbound_retention_days: int = 30

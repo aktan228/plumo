@@ -7,7 +7,7 @@ from datetime import datetime as DateTime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.api.schemas import CustomerOut, HandoffOut, SummaryOut
 
@@ -15,6 +15,71 @@ from app.api.schemas import CustomerOut, HandoffOut, SummaryOut
 class LoginIn(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=200)
+
+
+class RegisterIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    email: EmailStr = Field(max_length=254)
+    password: str = Field(min_length=10, max_length=128)
+    locale: Literal["ru", "en"] = "ru"
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def clean_name(cls, value):
+        if isinstance(value, str):
+            if any(ord(char) < 32 or ord(char) == 127 for char in value):
+                raise ValueError("name contains control characters")
+            value = value.strip()
+        return value
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def clean_email(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @field_validator("password")
+    @classmethod
+    def nonblank_password(cls, value):
+        if not value.strip():
+            raise ValueError("password must not be blank")
+        return value
+
+
+class RegisterOut(BaseModel):
+    status: Literal["verification_required"] = "verification_required"
+    email: str
+    email_delivery: Literal["sent", "unavailable"]
+
+
+class EmailRequestIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr = Field(max_length=254)
+    locale: Literal["ru", "en"] = "ru"
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def clean_email(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
+
+
+class AccountTokenIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=43, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class ResetPasswordIn(AccountTokenIn):
+    password: str = Field(min_length=10, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def nonblank_password(cls, value):
+        return RegisterIn.nonblank_password(value)
+
+
+class AcceptedOut(BaseModel):
+    status: Literal["accepted"] = "accepted"
 
 
 class BusinessBriefOut(BaseModel):

@@ -469,6 +469,7 @@ class Operator:
     display_name: str
     active: bool
     created_at: datetime
+    email_verified: bool = True
 
 
 @dataclass(slots=True)
