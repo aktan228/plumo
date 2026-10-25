@@ -3,6 +3,8 @@ FROM python:3.12-slim
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+# MVP: API and the reliable queue worker share this container. May be disabled for a dedicated worker.
+ENV CHANNEL_WORKER_ENABLED=true
 
 COPY pyproject.toml README.md alembic.ini ./
 COPY src ./src

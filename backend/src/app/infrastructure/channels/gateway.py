@@ -46,6 +46,11 @@ class ChannelGateway:
         return found
 
     def token(self, connection: ChannelConnection) -> str:
+        if connection.auth_method == "bot_token":
+            from app.infrastructure.channels.token_crypto import decrypt_token
+            if not connection.encrypted_token:
+                raise ChannelError("auth", "credential_missing", "Stored bot token is missing; enter it again")
+            return decrypt_token(connection.encrypted_token, connection.business_id, connection.id)
         secret = self.credential(connection).secret()
         if not secret:
             raise ChannelError("auth", "credential_empty", "server credential has no token")

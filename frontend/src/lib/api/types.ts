@@ -10,6 +10,7 @@ export type IntegrationChannel = "telegram" | "instagram";
 
 export type Account = { external_id: string; display_name: string; username: string | null; link: string | null };
 export type Connection = {
+  verification?: { state: string; link: string | null; expires_at: string | null; verified_at: string | null; error: string | null } | null;
   id: string;
   channel: IntegrationChannel;
   status: ConnectionStatus;

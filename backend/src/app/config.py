@@ -111,6 +111,7 @@ class Settings(BaseSettings):
     test_chat_session_messages: int = Field(default=20, ge=1, le=50)
     test_chat_daily_budget_usd: float = Field(default=1.0, gt=0, le=100)
     test_chat_turn_reserve_usd: float = Field(default=0.05, gt=0, le=10)
+    channel_worker_enabled: bool = False
     worker_concurrency: int = 4
     worker_poll_interval_s: float = 0.5
 
