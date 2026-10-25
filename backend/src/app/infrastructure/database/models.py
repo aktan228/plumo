@@ -321,6 +321,7 @@ class ChannelConnectionRow(Base):
     business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
     channel: Mapped[str] = mapped_column(String(16))
     credential_ref: Mapped[str] = mapped_column(String(64))
+    encrypted_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     auth_method: Mapped[str] = mapped_column(String(32), default="server_credential")
     external_account_id: Mapped[str] = mapped_column(String(64))
     display_name: Mapped[str] = mapped_column(String(200), default="")

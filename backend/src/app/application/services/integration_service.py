@@ -13,6 +13,11 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from app.infrastructure.database.models import BusinessRow
+from app.infrastructure.channels.token_crypto import encrypt_token
+from app.application.services.telegram_verification import new_verification
 from app.domain.enums import ConnectionStatus
 from app.domain.errors import (
     ChannelLimit,
@@ -84,18 +89,33 @@ class IntegrationService:
 
     # ---- connect ----------------------------------------------------------------------
 
-    async def connect_telegram(self, business_id: UUID, credential_ref: str, replace_webhook: bool = False) -> ChannelConnection:
+    async def connect_telegram(self, business_id: UUID, credential_ref: str, replace_webhook: bool = False, *, raw_token: str | None = None) -> ChannelConnection:
         base = self._public_base()
         if not channel_secret_key():
             raise NotConfigured("CHANNEL_SECRET_KEY is not set on the server", code="secret_key_missing")
-        token = self._token(business_id, "telegram", credential_ref)
+        token = raw_token or self._token(business_id, "telegram", credential_ref)
         client = self.gateway.telegram(token)
         try:
             try:
                 account = await client.get_me()
             except ChannelError as exc:
                 raise _app_error(exc) from None
+            if raw_token and (not account.details.get("is_bot") or not account.username):
+                raise ChannelLimit("Telegram did not confirm a bot account", code="invalid_credential")
+            # Serialize connection attempts for this business before committing provider work.
+            await self.session.execute(select(BusinessRow.id).where(BusinessRow.id == business_id).with_for_update())
+            active = await self.connections.active(business_id, "telegram")
+            if active and active.status == ConnectionStatus.connecting and active.updated_at > utcnow() - timedelta(seconds=90):
+                raise IntegrationConflict("Connection is already being configured", code="integration_busy")
             connection = await self._claim(business_id, "telegram", credential_ref, account)
+            if raw_token:
+                connection.auth_method = "bot_token"
+                connection.encrypted_token = encrypt_token(raw_token, business_id, connection.id)
+                connection.agent_enabled = False
+                connection.details = {**connection.details, "telegram_verification": new_verification()}
+            else:
+                connection.encrypted_token = None
+                connection.auth_method = "server_credential"
             connection.webhook_nonce = secrets.token_hex(16)
             connection = await self._save_and_commit(connection)
 
@@ -257,6 +277,18 @@ class IntegrationService:
         _ok(connection)
         await self._save_and_commit(connection)
 
+    async def restart_verification(self, connection_id, business_id):
+        connection = await self.connections.lock(connection_id)
+        if not connection or connection.business_id != business_id:
+            raise IntegrationNotFound("Integration not found")
+        if connection.channel != "telegram" or connection.auth_method != "bot_token" or connection.status != ConnectionStatus.connected:
+            raise InvalidState("Reconnect the bot first", code="integration_not_ready")
+        if connection.agent_enabled:
+            raise InvalidState("Disable agent replies before restarting the test", code="agent_is_enabled")
+        connection.details = {**connection.details, "telegram_verification": new_verification()}
+        connection.version += 1
+        return await self._save_and_commit(connection)
+
     async def set_agent(self, connection_id: UUID, business_id: UUID, enabled: bool, version: int | None) -> ChannelConnection:
         connection = await self.connections.lock(connection_id)
         if connection is None or connection.business_id != business_id:
@@ -265,6 +297,12 @@ class IntegrationService:
             raise VersionConflict("the integration was changed meanwhile; reload")
         if connection.status == ConnectionStatus.disconnected:
             raise InvalidState("the integration is disconnected", code="integration_disconnected")
+        if enabled and connection.channel == "telegram" and connection.auth_method == "bot_token":
+            if connection.status != ConnectionStatus.connected or (connection.details.get("telegram_verification") or {}).get("state") != "verified":
+                raise InvalidState("Complete the Telegram test message first", code="telegram_test_required")
+            business = await self.session.get(BusinessRow, business_id)
+            if not business or not (business.profile or {}).get("onboarding_publication"):
+                raise InvalidState("Complete your business setup first", code="test_setup_required")
         if connection.agent_enabled != enabled:
             connection.agent_enabled = enabled
             connection.version += 1
@@ -286,6 +324,8 @@ class IntegrationService:
         connection.status = ConnectionStatus.disconnected
         connection.agent_enabled = False
         connection.webhook_nonce = None
+        connection.encrypted_token = None
+        connection.details = {key: value for key, value in connection.details.items() if key != "telegram_verification"}
         connection.disconnected_at = now
         connection.version += 1
         connection.details = {**connection.details, "disconnect_warning": warning}
@@ -367,8 +407,12 @@ class IntegrationService:
         return connection
 
     async def _save_and_commit(self, connection: ChannelConnection) -> ChannelConnection:
-        saved = await self.connections.save(connection)
-        await self.session.commit()
+        try:
+            saved = await self.connections.save(connection)
+            await self.session.commit()
+        except IntegrityError:
+            await self.session.rollback()
+            raise IntegrationConflict("The bot is already being connected", code="integration_busy") from None
         return saved
 
     async def _problem(self, connection, status: str, code: str, message: str, details: dict | None = None) -> None:
@@ -410,7 +454,7 @@ class IntegrationService:
     def _requirements(self, channel: str) -> dict[str, bool]:
         ready = {
             "public_url": self.settings.webhook_base_url.startswith("https://"),
-            "credentials_file": self.gateway.credentials.configured,
+            **({"credentials_file": self.gateway.credentials.configured} if channel != "telegram" else {}),
         }
         if channel == "telegram":
             ready["secret_key"] = bool(channel_secret_key())

@@ -7,7 +7,8 @@ from datetime import datetime as DateTime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator, model_validator
+import re
 
 from app.api.schemas import CustomerOut, HandoffOut, SummaryOut
 
@@ -120,7 +121,16 @@ class ErrorStateOut(BaseModel):
     at: DateTime | None = None
 
 
+class TelegramVerificationOut(BaseModel):
+    state: str
+    link: str | None = None
+    expires_at: DateTime | None = None
+    verified_at: DateTime | None = None
+    error: str | None = None
+
+
 class ConnectionOut(BaseModel):
+    verification: TelegramVerificationOut | None = None
     id: UUID
     channel: str
     status: Literal["not_connected", "connecting", "connected", "action_required", "error", "disconnected"]
@@ -156,6 +166,21 @@ class ChannelIntegrationOut(BaseModel):
 class IntegrationsOut(BaseModel):
     channels: list[ChannelIntegrationOut]
     ai_mode: str
+
+
+class TelegramConnectIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: SecretStr | None = Field(default=None, max_length=160)
+    credential_ref: str | None = Field(default=None, min_length=1, max_length=64)
+    replace_webhook: bool = False
+
+    @model_validator(mode="after")
+    def validate_source(self):
+        if (self.token is None) == (self.credential_ref is None):
+            raise ValueError("Choose a bot token or a prepared credential")
+        if self.token is not None and not re.fullmatch(r"[0-9]{5,20}:[A-Za-z0-9_-]{20,128}", self.token.get_secret_value().strip()):
+            raise ValueError("Invalid Telegram bot token format")
+        return self
 
 
 class ConnectIn(BaseModel):

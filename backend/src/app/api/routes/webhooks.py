@@ -23,6 +23,7 @@ from app.infrastructure.channels.base import ChannelEvent
 from app.infrastructure.channels.gateway import channel_secret_key, telegram_webhook_secret
 from app.infrastructure.channels.instagram import parse_entry, valid_signature
 from app.infrastructure.channels.telegram import parse_update
+from app.application.services.telegram_verification import verification_data
 
 logger = logging.getLogger("plumo.webhooks")
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -102,6 +103,7 @@ async def instagram_webhook(request: Request, services: Services = Depends(get_s
 async def _store(services: Services, connection: ChannelConnection, event: ChannelEvent) -> bool:
     """Save the event once per (connection, external id); queue the agent if it is a customer message."""
 
+    verification = verification_data(event) if connection.channel == "telegram" else None
     actionable = event.kind in _ACTIONABLE and bool(event.sender_id)
     inbound = InboundEvent(
         id=uuid4(),
@@ -114,18 +116,18 @@ async def _store(services: Services, connection: ChannelConnection, event: Chann
         received_at=utcnow(),
         sender_id=event.sender_id,
         provider_message_id=event.provider_message_id,
-        text=event.text if actionable else None,
+        text=None if verification else event.text if actionable else None,
         # An ignored update keeps only its type: no names or text of people we will not answer.
-        data=event.data if actionable else {"update_type": event.data.get("update_type")},
+        data=verification if verification else event.data if actionable else {"update_type": event.data.get("update_type")},
         provider_time=event.provider_time,
     )
     created = await services.inbound_events.add_if_new(inbound)
     if created and actionable:
         await services.jobs.enqueue(
-            kind=JobKind.process_inbound,
+            kind=JobKind.verify_telegram if verification else JobKind.process_inbound,
             business_id=connection.business_id,
             # One customer's messages are handled one after another, in arrival order.
-            ordering_key=f"in:{connection.id}:{event.sender_id}",
+            ordering_key=f"verify:{connection.id}" if verification else f"in:{connection.id}:{event.sender_id}",
             inbound_event_id=inbound.id,
         )
     await services.connections.touch_event(connection.id)

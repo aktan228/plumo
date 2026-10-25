@@ -49,7 +49,9 @@ def connection_out(connection: ChannelConnection) -> ConnectionOut:
             message=connection.last_error_message or "",
             at=connection.last_error_at,
         )
+    from app.application.services.telegram_verification import verification_out
     return ConnectionOut(
+        verification=verification_out(connection) if connection.channel == "telegram" and connection.auth_method == "bot_token" else None,
         id=connection.id,
         channel=connection.channel,
         status=connection.status,

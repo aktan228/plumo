@@ -31,7 +31,7 @@ export function statusTone(status: ConnectionStatus): "ok" | "warn" | "error" | 
  */
 export function cardStatus(item: ChannelIntegration): ConnectionStatus {
   if (item.connection && item.connection.status !== "disconnected") return item.connection.status;
-  if (!item.credentials.length || missingRequirements(item).length) return "action_required";
+  if ((item.channel !== "telegram" && !item.credentials.length) || missingRequirements(item).length) return "action_required";
   return item.connection ? "disconnected" : "not_connected";
 }
 
@@ -41,7 +41,7 @@ export function missingRequirements(item: ChannelIntegration): string[] {
 }
 
 export function canConnect(item: ChannelIntegration): boolean {
-  return item.credentials.length > 0 && missingRequirements(item).length === 0;
+  return (item.channel === "telegram" || item.credentials.length > 0) && missingRequirements(item).length === 0;
 }
 
 /** Live connection = connected now; the agent switch and the last check are shown separately. */

@@ -52,6 +52,9 @@ class Worker:
             return True
         if job.kind == JobKind.process_inbound:
             await self.inbound.run(job, self.worker_id)
+        elif job.kind == JobKind.verify_telegram:
+            from app.application.services.telegram_verification import TelegramVerificationWorker
+            await TelegramVerificationWorker(self.runtime.session_factory, self.runtime.channel_gateway).run(job, self.worker_id)
         elif job.kind == JobKind.send_outbound:
             await self.delivery.run(job, self.worker_id)
         else:

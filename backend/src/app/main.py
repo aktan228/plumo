@@ -1,6 +1,8 @@
 """FastAPI application."""
 
 import logging
+import asyncio
+from contextlib import suppress
 import os
 from contextlib import asynccontextmanager
 from uuid import uuid4
@@ -40,7 +42,22 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
         setup_logging(settings.log_level)
         check_environment(settings)
         app.state.runtime = runtime or build_runtime(settings)
-        yield
+        worker_stop = asyncio.Event()
+        worker_task = None
+        if settings.channel_worker_enabled:
+            from app.worker import Worker
+            worker_task = asyncio.create_task(Worker(app.state.runtime).run_forever(worker_stop, max(1, min(2, settings.worker_concurrency)), settings.worker_poll_interval_s))
+        try:
+            yield
+        finally:
+            worker_stop.set()
+            if worker_task:
+                try:
+                    await asyncio.wait_for(worker_task, timeout=30)
+                except TimeoutError:
+                    worker_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await worker_task
         await drain_notifications()
         await app.state.runtime.providers.aclose()
         close = getattr(app.state.runtime.handoff_provider, "aclose", None)

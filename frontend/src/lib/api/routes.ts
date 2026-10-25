@@ -22,7 +22,7 @@ const allowed: Record<string, RegExp[]> = {
     /^testing\/sessions$/,
     new RegExp(`^testing/sessions/${id}/messages$`),
     /^integrations\/(telegram|instagram)\/connect$/,
-    new RegExp(`^integrations/${id}/(check|disconnect)$`),
+    new RegExp(`^integrations/${id}/(check|disconnect|verification)$`),
     new RegExp(`^conversations/${id}/(takeover|resume|messages|read)$`),
     new RegExp(`^outbound-messages/${id}/resolve$`),
   ],

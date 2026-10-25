@@ -499,6 +499,7 @@ class ChannelConnection:
     version: int
     created_at: datetime
     updated_at: datetime
+    encrypted_token: str | None = field(default=None, repr=False)
     auth_method: str = "server_credential"
     webhook_nonce: str | None = None
     last_check_at: datetime | None = None

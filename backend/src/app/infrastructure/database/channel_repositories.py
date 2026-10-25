@@ -193,6 +193,7 @@ class ConnectionRepository:
         row.channel = connection.channel
         row.credential_ref = connection.credential_ref
         row.auth_method = connection.auth_method
+        row.encrypted_token = connection.encrypted_token
         row.external_account_id = connection.external_account_id
         row.display_name = connection.display_name[:200]
         row.username = (connection.username or None) and connection.username[:100]
@@ -563,6 +564,7 @@ def _connection(row: ChannelConnectionRow) -> ChannelConnection:
         created_at=row.created_at,
         updated_at=row.updated_at,
         auth_method=row.auth_method or "server_credential",
+        encrypted_token=row.encrypted_token,
         webhook_nonce=row.webhook_nonce,
         last_check_at=row.last_check_at,
         last_check_ok=row.last_check_ok,
