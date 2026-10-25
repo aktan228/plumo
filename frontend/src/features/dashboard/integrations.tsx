@@ -163,7 +163,7 @@ export function Integrations({ onDialogues, onStateChange }: { onDialogues: () =
   }
 
   async function connectTelegram(token: string, replace: boolean) {
-    const done = await run("connect:telegram", "telegram", () => api("integrations/telegram/connect", { method: "POST", body: { token, replace_webhook: replace } }), c.connectedOk);
+    const done = await run("connect:telegram", "telegram", () => api("integrations/telegram/connect", { method: "POST", body: { token, replace_webhook: replace } }), locale === "ru" ? "Бот подключён. Откройте проверочную ссылку на карточке Telegram." : "Bot connected. Open the verification link on its Telegram card.");
     if (done) { setActive(null); focusTitle(); }
     return done;
   }
@@ -217,7 +217,7 @@ export function Integrations({ onDialogues, onStateChange }: { onDialogues: () =
       {cardNotice && <p role="status" className={`mb-0 mt-3 text-xs leading-5 ${cardNotice.tone === "ok" ? "text-emerald-700" : "text-red-700"}`}>{cardNotice.text}</p>}
       {connection?.channel === "telegram" && connection.verification && <div className="mt-4 rounded-xl bg-plumo-soft/70 p-4 text-[13px] leading-6">
         <p className="m-0 font-medium">{locale === "ru" ? "Проверка подключения" : "Connection verification"}</p>
-        <p className="mb-0 mt-2">{connection.verification.state === "verified" ? (locale === "ru" ? "Контрольное сообщение принято Telegram. Можно включить ответы агента." : "Telegram accepted the control message. You can enable agent replies.") : (locale === "ru" ? "Откройте бота по ссылке, нажмите «Запустить» и дождитесь контрольного сообщения. Затем обновите проверку." : "Open the bot link, press Start and wait for the control message. Then refresh the check.")}</p>
+        <p className="mb-0 mt-2">{connection.verification.state === "verified" ? (locale === "ru" ? "Контрольное сообщение принято Telegram. Подключение проверено." : "Telegram accepted the control message. Connection verified.") : (locale === "ru" ? "Откройте бота по ссылке, нажмите «Запустить» и дождитесь контрольного сообщения. Затем обновите проверку." : "Open the bot link, press Start and wait for the control message. Then refresh the check.")}</p>
         {connection.status === "connected" && connection.verification.link && <a href={connection.verification.link} target="_blank" rel="noreferrer" className="mt-3 inline-block text-plumo-blue underline">{locale === "ru" ? "Открыть бота для проверки" : "Open bot to verify"}</a>}
         {connection.verification.state === "sending" && <p role="status" className="mb-0 mt-2">{locale === "ru" ? "Отправляем контрольное сообщение…" : "Sending the control message…"}</p>}
         {["unknown", "failed", "expired", "required"].includes(connection.verification.state) && <><p className="mb-0 mt-2">{locale === "ru" ? "Проверка не завершена. Получите новую ссылку и повторите её." : "Verification is incomplete. Get a new link and retry."}</p><button type="button" disabled={busy !== null || connection.status !== "connected"} className={`${secondary} mt-3`} onClick={() => run(`verification:${connection.id}`, "telegram", () => api(`integrations/${connection.id}/verification`, { method: "POST" }))}>{locale === "ru" ? "Новая проверочная ссылка" : "New verification link"}</button></>}

@@ -65,10 +65,15 @@ async def connect_telegram(
     try:
         async with asyncio.timeout(25):
             connection = await services.integrations.connect_telegram(
-                operator.business_id, body.credential_ref or "stored", body.replace_webhook, raw_token=body.token.get_secret_value().strip() if body.token else None
+                operator.business_id,
+                body.credential_ref or "stored",
+                body.replace_webhook,
+                raw_token=body.token.get_secret_value().strip() if body.token else None,
             )
     except TimeoutError:
-        raise ChannelUnavailable("Telegram setup timed out. Check the connection before retrying.", code="telegram_timeout") from None
+        raise ChannelUnavailable(
+            "Telegram setup timed out. Check the connection before retrying.", code="telegram_timeout"
+        ) from None
     return connection_out(connection)
 
 
@@ -87,8 +92,14 @@ async def connect_instagram(
     return connection_out(connection)
 
 
-@router.post("/{connection_id}/verification", response_model=ConnectionOut, summary="Получить новую проверочную ссылку Telegram")
-async def restart_verification(connection_id: UUID, operator: OperatorContext = Depends(current_operator), services: Services = Depends(get_services)):
+@router.post(
+    "/{connection_id}/verification", response_model=ConnectionOut, summary="Получить новую проверочную ссылку Telegram"
+)
+async def restart_verification(
+    connection_id: UUID,
+    operator: OperatorContext = Depends(current_operator),
+    services: Services = Depends(get_services),
+):
     return connection_out(await services.integrations.restart_verification(connection_id, operator.business_id))
 
 
@@ -114,7 +125,9 @@ async def patch_integration(
     return connection_out(connection)
 
 
-@router.post("/{connection_id}/disconnect", response_model=ConnectionOut, summary="Отключить канал (история сохраняется)")
+@router.post(
+    "/{connection_id}/disconnect", response_model=ConnectionOut, summary="Отключить канал (история сохраняется)"
+)
 async def disconnect_integration(
     connection_id: UUID,
     operator: OperatorContext = Depends(current_operator),

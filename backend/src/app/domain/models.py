@@ -484,7 +484,7 @@ class OperatorSession:
 class ChannelConnection:
     """One Telegram bot or Instagram account linked to one business.
 
-    The secret is not here: `credential_ref` names a server-side credential.
+    Plaintext is never stored here: an encrypted token or a legacy server credential reference is used.
     """
 
     id: UUID

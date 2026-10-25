@@ -17,7 +17,7 @@ test('a card is connected only when the server says so', () => {
   assert.equal(cardStatus(integration({ connection: connection('disconnected') })), 'disconnected');
 });
 
-test('without prepared access the channel needs action, not a button that pretends to connect', () => {
+test('Telegram accepts a client token; Instagram still needs prepared access', () => {
   const noCredential = integration({ credentials: [] });
   assert.equal(cardStatus(noCredential), 'not_connected');
   assert.equal(canConnect(noCredential), true);
