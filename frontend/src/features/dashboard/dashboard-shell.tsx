@@ -9,6 +9,7 @@ import { Dialogues } from "./dialogues";
 import { Integrations } from "./integrations";
 import { ChatBoard } from "./chat-board";
 import { AgentTestChat } from "@/features/create-agent/agent-test-chat";
+import { ReadinessPanel } from "./readiness-panel";
 import { SoonDialog } from "./soon-dialog";
 import type { IntegrationsResponse, Session } from "@/lib/api/types";
 
@@ -178,9 +179,10 @@ export function DashboardShell({ session }: { session: Session }) {
           <button type="button" aria-label={c.more} title={c.more} onClick={() => setSoon(true)} className={`${controlClass} ${view !== "chats" ? "ml-auto" : ""}`}><DashboardIcon name="more" size={14} /></button>
         </div>
         <div className={view === "integrations" ? "min-h-0 flex-1" : "hidden"}><Integrations onDialogues={openInbox} onStateChange={setIntegrations} /></div>
-        <div className={view === "chats" ? "min-h-0 flex-1" : "hidden"}>
-          <div className={layout === "kanban" ? "h-full" : "hidden"}><ChatBoard onSoon={() => setSoon(true)} /></div>
-          <div className={layout === "list" ? "h-full" : "hidden"}><Dialogues active={view === "chats" && layout === "list"} /></div>
+        <div className={view === "chats" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+          {view === "chats" && <ReadinessPanel onTesting={() => navigate("testing")} onIntegrations={() => navigate("integrations")} />}
+          <div className={layout === "kanban" ? "min-h-0 flex-1" : "hidden"}><ChatBoard onSoon={() => setSoon(true)} /></div>
+          <div className={layout === "list" ? "min-h-0 flex-1" : "hidden"}><Dialogues active={view === "chats" && layout === "list"} /></div>
         </div>
         {view === "testing" && <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6"><div className="mx-auto max-w-[900px]"><AgentTestChat /></div></div>}
         {view !== "integrations" && view !== "chats" && view !== "testing" && <div className="flex flex-1 items-center justify-center text-base text-plumo-muted">soon</div>}

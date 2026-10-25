@@ -1,7 +1,7 @@
 """Connect, check, switch and disconnect a business's Telegram bot and Instagram account.
 
-Secrets are prepared on the server (CHANNEL_CREDENTIALS_FILE); the dashboard
-chooses one by name. A saved form never means "connected": only a verified
+Telegram clients submit a token stored encrypted in their connection. Legacy
+server credentials and Instagram still use CHANNEL_CREDENTIALS_FILE. A saved form never means "connected": only a verified
 account with a working webhook or subscription does.
 """
 

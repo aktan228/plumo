@@ -29,4 +29,6 @@ def decrypt_token(value, business_id, connection_id):
             raise ValueError("version")
         return cipher(business_id, connection_id).decrypt(value[3:].encode()).decode()
     except (InvalidToken, ValueError, UnicodeError):
-        raise ChannelError("auth", "credential_decryption_failed", "Stored bot token cannot be opened; enter it again") from None
+        raise ChannelError(
+            "auth", "credential_decryption_failed", "Stored bot token cannot be opened; enter it again"
+        ) from None

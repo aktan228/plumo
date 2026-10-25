@@ -50,3 +50,13 @@ test('test chat proxy only permits authenticated sandbox route shapes', () => {
   for (const [method, path] of [['GET', 'testing/sessions'], ['POST', 'testing/sessions'], ['GET', `testing/sessions/${ident}`], ['POST', `testing/sessions/${ident}/messages`]]) assert.equal(isAllowedRoute(method, path), true);
   for (const [method, path] of [['POST', `testing/sessions/${ident}`], ['GET', `testing/sessions/${ident}/messages`], ['PATCH', 'testing/sessions'], ['POST', 'messages'], ['GET', 'testing/sessions/not-an-id']]) assert.equal(isAllowedRoute(method, path), false);
 });
+
+
+test('readiness is read-only and Telegram verification uses scoped connection IDs', () => {
+  const ident = '12345678-1234-1234-1234-123456789abc';
+  assert.equal(isAllowedRoute('GET', 'dashboard/readiness'), true);
+  assert.equal(isAllowedRoute('POST', 'dashboard/readiness'), false);
+  assert.equal(isAllowedRoute('POST', `integrations/${ident}/verification`), true);
+  assert.equal(isAllowedRoute('GET', `integrations/${ident}/verification`), false);
+  assert.equal(isAllowedRoute('POST', 'integrations/other-business/verification'), false);
+});

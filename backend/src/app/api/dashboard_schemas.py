@@ -1,6 +1,6 @@
 """HTTP schemas of the team dashboard: sign-in, integrations, dialogs, deliveries.
 
-No secret ever appears here: tokens, webhook secrets and service keys stay on the server.
+No secret is returned. Client bot tokens are SecretStr inputs; webhook secrets and service keys stay on the server.
 """
 
 from datetime import datetime as DateTime
@@ -178,7 +178,9 @@ class TelegramConnectIn(BaseModel):
     def validate_source(self):
         if (self.token is None) == (self.credential_ref is None):
             raise ValueError("Choose a bot token or a prepared credential")
-        if self.token is not None and not re.fullmatch(r"[0-9]{5,20}:[A-Za-z0-9_-]{20,128}", self.token.get_secret_value().strip()):
+        if self.token is not None and not re.fullmatch(
+            r"[0-9]{5,20}:[A-Za-z0-9_-]{20,128}", self.token.get_secret_value().strip()
+        ):
             raise ValueError("Invalid Telegram bot token format")
         return self
 

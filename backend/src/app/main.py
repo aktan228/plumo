@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.deps import require_api_key
-from app.api.routes import auth, customers, dialogs, integrations, messages, onboarding, operations, telephony, testing, voice, webhooks
+from app.api.routes import auth, customers, dialogs, integrations, messages, onboarding, operations, readiness, telephony, testing, voice, webhooks
 from app.application.services.handoff_service import drain_notifications
 from app.config import Settings, get_settings
 from app.container import Runtime, build_runtime
@@ -137,6 +137,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     app.include_router(auth.router, prefix="/api/v1", dependencies=protected)
     app.include_router(onboarding.router, prefix="/api/v1", dependencies=protected)
     app.include_router(testing.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(readiness.router, prefix="/api/v1", dependencies=protected)
     app.include_router(customers.router, prefix="/api/v1", dependencies=protected)
     app.include_router(operations.router, prefix="/api/v1", dependencies=protected)
     app.include_router(dialogs.router, prefix="/api/v1", dependencies=protected)

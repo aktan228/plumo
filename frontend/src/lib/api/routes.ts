@@ -7,6 +7,7 @@ const id = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const allowed: Record<string, RegExp[]> = {
   GET: [
     /^auth\/me$/,
+    /^dashboard\/readiness$/,
     /^onboarding$/,
     /^testing\/sessions$/,
     new RegExp(`^testing/sessions/${id}$`),

@@ -757,6 +757,25 @@
         }
       }
     },
+    "/api/v1/dashboard/readiness": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Готовность своего бизнеса, материалов, теста и канала",
+        "operationId": "readiness_api_v1_dashboard_readiness_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/customers/{customer_id}": {
       "get": {
         "tags": [
@@ -1740,7 +1759,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConnectIn"
+                "$ref": "#/components/schemas/TelegramConnectIn"
               }
             }
           },
@@ -1811,6 +1830,49 @@
           },
           "503": {
             "description": "Не настроен сервер (not_configured) или канал временно недоступен"
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/{connection_id}/verification": {
+      "post": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Получить новую проверочную ссылку Telegram",
+        "operationId": "restart_verification_api_v1_integrations__connection_id__verification_post",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -2792,6 +2854,16 @@
       },
       "ConnectionOut": {
         "properties": {
+          "verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TelegramVerificationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "type": "string",
             "format": "uuid",
@@ -4821,6 +4893,104 @@
           "updated_at"
         ],
         "title": "SummaryOut"
+      },
+      "TelegramConnectIn": {
+        "properties": {
+          "token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160,
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "credential_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Ref"
+          },
+          "replace_webhook": {
+            "type": "boolean",
+            "title": "Replace Webhook",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TelegramConnectIn"
+      },
+      "TelegramVerificationOut": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "TelegramVerificationOut"
       },
       "TestMessageIn": {
         "properties": {
