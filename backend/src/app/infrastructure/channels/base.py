@@ -64,7 +64,8 @@ _HUMAN = {
     "credential_missing": "Серверная конфигурация больше недоступна этому бизнесу.",
     "credential_empty": "В серверной конфигурации нет токена.",
     "missing_permission": "У приложения нет нужных прав или роли для этого аккаунта.",
-    "subscription_failed": "Meta не подтвердила подписку на сообщения.",
+    "public_url_unreachable": "Telegram не нашёл публичный адрес API Plumo. Проверьте PUBLIC_BASE_URL на сервере и подключите снова.",
+    "subscription_failed":"Meta не подтвердила подписку на сообщения.",
 }
 
 

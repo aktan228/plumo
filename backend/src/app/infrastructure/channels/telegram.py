@@ -132,6 +132,9 @@ def _result(response: httpx.Response, sends: bool):
     if status >= 500:
         kind = "ambiguous" if sends else "transient"
         raise ChannelError(kind, "telegram_server_error", description, status=status)
+    if status == 400 and "bad webhook" in description.lower() and "resolve host" in description.lower():
+        # Telegram cannot find our public address in DNS: PUBLIC_BASE_URL is wrong or the tunnel is gone.
+        raise ChannelError("bad_request", "public_url_unreachable", description, status=status)
     raise ChannelError("bad_request", "telegram_bad_request", description, status=status)
 
 

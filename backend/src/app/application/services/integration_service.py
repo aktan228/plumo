@@ -320,22 +320,27 @@ class IntegrationService:
             await self.session.commit()
             return connection
         warning = await self._release_provider(connection)
-        now = utcnow()
-        connection.status = ConnectionStatus.disconnected
-        connection.agent_enabled = False
-        connection.webhook_nonce = None
-        connection.encrypted_token = None
-        connection.details = {key: value for key, value in connection.details.items() if key != "telegram_verification"}
-        connection.disconnected_at = now
-        connection.version += 1
-        connection.details = {**connection.details, "disconnect_warning": warning}
-        connection = await self.connections.save(connection)
-        cancelled = await self.outbound.cancel_queued_for_connection(connection.id, "channel_disconnected")
+        connection, cancelled = await self._close(connection, warning)
         await self.session.commit()
         logger.info(
             "integration_disconnected", extra={"connection_id": str(connection.id), "cancelled_replies": cancelled}
         )
         return connection
+
+    async def _close(self, connection: ChannelConnection, warning: str | None) -> tuple[ChannelConnection, int]:
+        """Mark the connection disconnected and cancel its queued replies. The caller commits."""
+
+        connection.status = ConnectionStatus.disconnected
+        connection.agent_enabled = False
+        connection.webhook_nonce = None
+        connection.encrypted_token = None
+        connection.details = {key: value for key, value in connection.details.items() if key != "telegram_verification"}
+        connection.disconnected_at = utcnow()
+        connection.version += 1
+        connection.details = {**connection.details, "disconnect_warning": warning}
+        connection = await self.connections.save(connection)
+        cancelled = await self.outbound.cancel_queued_for_connection(connection.id, "channel_disconnected")
+        return connection, cancelled
 
     async def _release_provider(self, connection: ChannelConnection) -> str | None:
         """Remove only our own webhook/subscription. A failure here does not block the disconnect."""
@@ -374,9 +379,14 @@ class IntegrationService:
             raise IntegrationConflict("this account is connected to another business", code="account_in_use")
         current = await self.connections.active(business_id, channel)
         if current is not None and current.external_account_id != account.external_account_id:
-            raise IntegrationConflict(
-                f"another {channel} account is connected; disconnect it first", code="already_connected"
-            )
+            if current.status == ConnectionStatus.connected:
+                raise IntegrationConflict(
+                    f"another {channel} account is connected; disconnect it first", code="already_connected"
+                )
+            # A failed or half-finished attempt must not hold the slot: close it, then connect the new account.
+            await self._close(current, await self._release_provider(current))
+            current = None
+            await self.session.flush()
         connection = current or await self.connections.find_account(business_id, channel, account.external_account_id)
         now = utcnow()
         if connection is None:

@@ -424,6 +424,36 @@ async def test_1_2_connect_telegram(stand):
     assert checked.json()["status"] == "connected" and checked.json()["last_check_ok"] is True
 
 
+async def test_failed_webhook_names_the_public_url_and_does_not_block_another_bot(stand):
+    stand.providers.fail(
+        "setWebhook",
+        (400, {"ok": False, "description": "Bad Request: bad webhook: Failed to resolve host: Name or service not known"}),
+    )
+    first = await stand.client.post("/api/v1/integrations/telegram/connect", json={"credential_ref": "tg-test"})
+    assert first.status_code == 422 and first.json()["code"] == "public_url_unreachable"
+    rows = await stand.sql("SELECT status, last_error_code, last_error_message FROM channel_connections")
+    assert rows[0][0] == "error" and rows[0][1] == "public_url_unreachable"
+    assert "PUBLIC_BASE_URL" in rows[0][2] and "Bad Request" not in rows[0][2]
+
+    # The failed attempt held the Telegram slot: a different bot used to get "already_connected".
+    stand.providers.bot = {**stand.providers.bot, "id": 888000, "username": "other_test_bot"}
+    second = await stand.client.post("/api/v1/integrations/telegram/connect", json={"credential_ref": "tg-test"})
+    assert second.status_code == 200, second.text
+    assert second.json()["status"] == "connected" and second.json()["account"]["external_id"] == "888000"
+    states = await stand.sql("SELECT external_account_id, status FROM channel_connections ORDER BY created_at")
+    assert [tuple(row) for row in states] == [("777000", "disconnected"), ("888000", "connected")]
+
+
+async def test_working_connection_is_not_replaced_by_another_bot(stand):
+    first = await stand.client.post("/api/v1/integrations/telegram/connect", json={"credential_ref": "tg-test"})
+    assert first.status_code == 200
+    stand.providers.bot = {**stand.providers.bot, "id": 888000, "username": "other_test_bot"}
+    second = await stand.client.post("/api/v1/integrations/telegram/connect", json={"credential_ref": "tg-test"})
+    assert second.status_code == 409 and second.json()["code"] == "already_connected"
+    states = await stand.sql("SELECT external_account_id, status FROM channel_connections")
+    assert [tuple(row) for row in states] == [("777000", "connected")]
+
+
 async def test_27_disconnect_cancels_the_queue_and_reconnect_sends_nothing_old(stand):
     connected = await stand.client.post(
         "/api/v1/integrations/telegram/connect", json={"credential_ref": "tg-test"}
