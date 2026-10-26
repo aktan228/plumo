@@ -1,0 +1,10 @@
+# Git stores text with LF; each checkout uses the platform's line endings.
+# Without this, a clone made on Windows shows every file as changed on Linux.
+* text=auto
+
+# Shell scripts must stay LF even on Windows checkouts.
+*.sh text eol=lf
+
+# Windows scripts keep CRLF everywhere.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
