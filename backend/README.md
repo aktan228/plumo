@@ -1,10 +1,12 @@
 # Plumo
 
-Plumo — ядро AI-менеджера по продажам. Один клиент, одна карточка, одна история, даже если он пишет из WhatsApp, Instagram, Telegram и потом звонит.
+Plumo — ядро AI-менеджера по продажам. Каждый канал ведёт карточку клиента внутри бизнеса; карточки разных каналов объединяются только после подтверждения (раздел «Как работает customer merge»).
 
-Подключить бэк к кабинету, каналам или серверу: [FULLSTACK.md](FULLSTACK.md). Коротко для лида: [LEAD.md](LEAD.md). Живая модель или канал: [INTEGRATION.md](INTEGRATION.md). Звонки: [VOICE.md](VOICE.md). Какую модель брать: [docs/MODELS.md](docs/MODELS.md), сравнить модели на 55 сценариях: [docs/BENCH.md](docs/BENCH.md). Как агент разговаривает: [docs/CONVERSATION.md](docs/CONVERSATION.md). Что подключить и купить: [docs/CHECKLIST.md](docs/CHECKLIST.md).
+MVP — мессенджеры: WhatsApp, Telegram, Instagram и кабинет менеджера; телефония отложена. План — [../README.md](../README.md#mvp).
 
-Текстовая модель — Claude Haiku 5.5 через OpenRouter, thinking выключен, запасная Haiku 4.5: в 2 раза быстрее и в 6 раз дешевле Gemini 3.8 Flash на наших замерах ([docs/MODELS.md](docs/MODELS.md)). Агента зовут Плюмо, он всегда говорит, что он ИИ; что продаёт бизнес — из `businesses.profile`, не из кода. Малой модели пока нет: её реплики отвечает большая. Телефонные звонки идут через ElevenLabs Agents, Plumo подключён к нему как Custom LLM: [VOICE.md](VOICE.md). Порты STT/TTS для голосовых сообщений в чатах пока mock. Telegram-бот и Instagram Direct подключены через webhook и worker, проверены тестами на фейковых API; живая проверка ещё не проведена, WhatsApp не подключён. Запуск, настройка и политика надёжности: [../docs/dashboard-channels.md](../docs/dashboard-channels.md).
+Подключить бэк к кабинету, каналам или серверу: [FULLSTACK.md](FULLSTACK.md). Коротко для лида: [LEAD.md](LEAD.md). Живая модель или канал: [INTEGRATION.md](INTEGRATION.md). Звонки: [VOICE.md](VOICE.md). Какую модель брать: [docs/MODELS.md](docs/MODELS.md), сравнить модели на 55 сценариях: [docs/BENCH.md](docs/BENCH.md), многошаговые диалоги с симулятором клиента: [docs/DIALOG_EVAL.md](docs/DIALOG_EVAL.md). Как агент разговаривает: [docs/CONVERSATION.md](docs/CONVERSATION.md). Что подключить и купить: [docs/CHECKLIST.md](docs/CHECKLIST.md).
+
+Текстовая модель — Claude Haiku 5.5 через OpenRouter, thinking выключен, запасная Haiku 4.5: в 2 раза быстрее и в 6 раз дешевле Gemini 3.8 Flash на наших замерах ([docs/MODELS.md](docs/MODELS.md)). Агента зовут Плюмо, он всегда говорит, что он ИИ; что продаёт бизнес — из `businesses.profile`, не из кода. Малой модели пока нет: её реплики отвечает большая, роутер только размечает реплики. Код звонков через ElevenLabs Agents (Plumo как Custom LLM, [VOICE.md](VOICE.md)) сохранён, но телефония отложена. Порты STT/TTS для голосовых сообщений в чатах пока mock. Telegram-бот и Instagram Direct подключены через webhook и worker: Telegram проверен вживую на тестовом боте, Instagram — только тестами на подписанных fixtures, WhatsApp не подключён. Запуск, настройка и политика надёжности: [../docs/dashboard-channels.md](../docs/dashboard-channels.md).
 
 ## Архитектура
 
@@ -101,7 +103,7 @@ postgresql+asyncpg://plumo:plumo@localhost:5432/plumo
 
 ## Миграции
 
-Схема в `alembic/versions/001_initial.py`, звонки — `002_voice_calls.py`, изоляция клиентов по бизнесу и защита от дублей сообщений — `003_business_isolation.py`, бизнес у звонков и логов, замеры по шагам и уверенность STT — `004_call_metrics.py`. Существующие клиенты при миграции 003 привязываются к самому старому бизнесу.
+Схема в `alembic/versions/001_initial.py`, звонки — `002_voice_calls.py`, изоляция клиентов по бизнесу и защита от дублей сообщений — `003_business_isolation.py`, бизнес у звонков и логов, замеры по шагам и уверенность STT — `004_call_metrics.py`, профиль бизнеса — `005_business_profile.py`, операторы, подключения каналов, входящие события, очередь заданий, отправки и режим диалога — `006_channels_dashboard.py`. Существующие клиенты при миграции 003 привязываются к самому старому бизнесу.
 
 ```powershell
 alembic upgrade head
@@ -145,7 +147,7 @@ python -m app.seed
 ## База знаний из таблицы
 
 ```powershell
-python -m app.import_knowledge --business "Demo Realty" ..\data\demo\knowledge_example.csv --dry-run
+python -m app.import_knowledge --business "Demo Realty" .\knowledge.csv --dry-run
 python -m app.import_knowledge --business "Demo Realty" "https://docs.google.com/spreadsheets/d/<id>/edit#gid=0" --deactivate-missing
 ```
 

@@ -15,6 +15,7 @@ import socket
 from uuid import uuid4
 
 from app.application.services.delivery_service import DeliveryService
+from app.application.services.handoff_notifier import HandoffNotifier
 from app.application.services.inbound_processor import InboundProcessor
 from app.config import Settings, get_settings
 from app.container import Runtime, build_agent, build_runtime
@@ -38,6 +39,7 @@ class Worker:
         factory = runtime.session_factory
         self.inbound = InboundProcessor(factory, runtime, build_agent)
         self.delivery = DeliveryService(factory, runtime.channel_gateway)
+        self.notifier = HandoffNotifier(factory, runtime.handoff_provider)
 
     async def run_once(self) -> bool:
         """Claim and handle one job. False when nothing is due."""
@@ -57,6 +59,8 @@ class Worker:
             await TelegramVerificationWorker(self.runtime.session_factory, self.runtime.channel_gateway).run(job, self.worker_id)
         elif job.kind == JobKind.send_outbound:
             await self.delivery.run(job, self.worker_id)
+        elif job.kind == JobKind.notify_handoff:
+            await self.notifier.run(job, self.worker_id)
         else:
             async with self.runtime.session_factory() as session:
                 await JobQueue(session).fail(job, self.worker_id, f"unknown kind {job.kind}")

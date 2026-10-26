@@ -174,6 +174,7 @@ class HandoffRequestRow(Base):
     status: Mapped[str] = mapped_column(String(16), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class MeetingRow(Base):
@@ -398,6 +399,8 @@ class JobRow(Base):
     __table_args__ = (
         Index("ix_jobs_status_run_at", "status", "run_at"),
         Index("ix_jobs_ordering_key_id", "ordering_key", "id"),
+        # One notification job per handoff, whatever retries or redeliveries happen.
+        Index("uq_jobs_notify_handoff", "handoff_id", unique=True, postgresql_where=text("kind = 'notify_handoff'")),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
@@ -409,6 +412,7 @@ class JobRow(Base):
     outbound_message_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("outbound_messages.id"), nullable=True
     )
+    handoff_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("handoff_requests.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(16))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, default=5)

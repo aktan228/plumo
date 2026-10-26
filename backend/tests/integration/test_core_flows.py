@@ -243,3 +243,27 @@ async def test_mid_dialog_fallback_keeps_qualifying_instead_of_deflecting(agent)
     )
     assert "fallback:continue" in answer.logs
     assert "не подскажу" not in answer.response_text
+
+
+async def test_second_request_for_a_manager_does_not_repeat_the_first_line(agent, session):
+    """Found by the dialog eval: every "менеджер" got the same fixed line and a new handoff."""
+
+    from sqlalchemy import func, select
+
+    from app.domain.models import InboundMessage
+    from app.infrastructure.database.models import HandoffRequestRow
+
+    user = "+996700555101"
+    first = await agent.process_message(InboundMessage(channel="whatsapp", external_user_id=user, text="Позовите менеджера"))
+    second = await agent.process_message(InboundMessage(channel="whatsapp", external_user_id=user, text="соедините с менеджером, я жду"))
+    chatter = await agent.process_message(
+        InboundMessage(channel="whatsapp", external_user_id=user, text="а менеджер может скинуть цену?")
+    )
+
+    assert first.handoff_required and first.response_text
+    assert second.response_text != first.response_text
+    assert "human_phrase_again" in second.logs
+    assert "скоро" not in first.response_text.lower() + second.response_text.lower()
+    # Talking about the manager is a question for the model, not a second call.
+    assert "human_phrase" not in chatter.logs and "human_phrase_again" not in chatter.logs
+    assert await session.scalar(select(func.count()).select_from(HandoffRequestRow)) == 1

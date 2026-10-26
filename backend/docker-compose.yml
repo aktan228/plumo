@@ -19,7 +19,8 @@ services:
     build: .
     env_file:
       - .env
-    environment:
+    # Models (OPENROUTER_*_MODEL and fallbacks) come from .env, not from here.
+    environment: &app_env
       DATABASE_URL: postgresql+asyncpg://plumo:plumo@db:5432/plumo
       AI_MODE: ${AI_MODE:-mock}
       SMALL_MODEL_PROVIDER: ${SMALL_MODEL_PROVIDER:-mock}
@@ -31,8 +32,6 @@ services:
       ROUTER: rules
       DEFAULT_LANGUAGE: ru
       LOG_LEVEL: INFO
-      OPENROUTER_SMALL_MODEL: ${OPENROUTER_SMALL_MODEL:-google/gemini-2.5-flash}
-      OPENROUTER_BIG_MODEL: ${OPENROUTER_BIG_MODEL:-google/gemini-2.5-flash}
       VOICE_PLATFORM: ${VOICE_PLATFORM:-elevenlabs}
       VOICE_USD_PER_MINUTE: ${VOICE_USD_PER_MINUTE:-0}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
@@ -41,6 +40,21 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  # Answers Telegram/Instagram events stored by the webhooks. Without it nothing is sent.
+  # The API applies migrations on start; until then the worker's claims fail and it polls again.
+  worker:
+    build: .
+    command: ["python", "-m", "app.worker"]
+    env_file:
+      - .env
+    environment: *app_env
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started
 
 volumes:
   plumo_pg:

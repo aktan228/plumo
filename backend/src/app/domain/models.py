@@ -268,6 +268,8 @@ class HandoffRequest:
     status: str
     created_at: datetime
     updated_at: datetime
+    # When the manager was told. None: the notification job has not succeeded yet.
+    notified_at: datetime | None = None
 
 
 @dataclass(slots=True)
@@ -573,3 +575,4 @@ class Job:
     locked_until: datetime | None = None
     locked_by: str | None = None
     last_error: str | None = None
+    handoff_id: UUID | None = None

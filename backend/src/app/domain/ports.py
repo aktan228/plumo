@@ -74,12 +74,24 @@ class LanguageDetector(Protocol):
 
 class HumanHandoffProvider(Protocol):
     async def notify(self, handoff: HandoffRequest) -> None:
-        """Tell a human that a dialog is waiting. Mock only logs."""
+        """Tell a human that a dialog is waiting. Mock only logs.
+
+        Raises ProviderTransientError when a retry may work, ProviderUnavailable when it will not.
+        """
+
+
+class JobEnqueuer(Protocol):
+    """The job table, seen from services that only queue work in their own transaction."""
+
+    async def enqueue(self, **kwargs) -> int: ...
 
 
 class KnowledgeRetriever(Protocol):
-    async def retrieve(self, business_id: UUID, query: str, limit: int = 5) -> list:
-        """Return ranked knowledge hits for one business. Shape is list[KnowledgeHit]."""
+    async def retrieve(self, business_id: UUID, query: str, limit: int = 5, recent: str = "") -> list:
+        """Return ranked knowledge hits for one business. Shape is list[KnowledgeHit].
+
+        `recent` is the last turns of the dialog: items already discussed stay in view.
+        """
 
 
 class ActionExecutor(Protocol):

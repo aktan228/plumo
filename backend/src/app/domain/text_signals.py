@@ -12,6 +12,7 @@ _YO = str.maketrans({"ё": "е", "Ё": "е"})
 KY_MARKERS = frozenset(
     {
         "салам",
+        "саламатсызбы",
         "рахмат",
         "жакшы",
         "кантип",
@@ -60,9 +61,9 @@ GREETING = ("здравствуйте", "привет", "приветствую"
 FAREWELL = ("до свидания", "пока", "всего доброго", "жакшы калыныз", "подумаю", "ойлонуп")
 CLEAR_CONFIRM = frozenset({"да", "нет", "ок", "хорошо", "ооба", "жок"})
 UNCLEAR_CONFIRM = frozenset({"ну", "угу", "ага", "хм", "эм"})
+# Phrases that ask for a live person on their own. The words "менеджер" and "оператор" are not here:
+# "а менеджер может скинуть цену?" talks about the manager, it does not call one (see asks_for_person).
 HUMAN = (
-    "менеджер",
-    "оператор",
     "позовите человека",
     "живой оператор",
     "живой человек",
@@ -77,6 +78,21 @@ HUMAN = (
     "адамга туташтыр",
     "адамды чакыр",
 )
+_PERSON = r"(?:менеджер|оператор|администратор)\w*"
+# Verbs of calling, connecting or handing over, within three words of the role, either order.
+_CALL = r"(?:позов|зов[иеу]|соедин|переключ|подключ|передай|передат|свяж|связат|поговор|пообща|побесед|нужен|нужна|чакыр|туташтыр|байланыштыр|сүйлөш|суйлош)\w*"
+_ASKS_FOR_PERSON = re.compile(
+    rf"(?<!\w){_CALL}(?:\W+\w+){{0,3}}?\W+{_PERSON}|(?<!\w){_PERSON}(?:\W+\w+){{0,3}}?\W+{_CALL}"
+)
+
+
+def asks_for_person(text: str) -> bool:
+    """The customer wants a live person now: "позовите менеджера", not "менеджер может скинуть цену?"."""
+
+    normalized = normalize_text(text)
+    return contains_any(normalized, HUMAN) or bool(_ASKS_FOR_PERSON.search(normalized))
+
+
 MEETING = (
     "встреч",
     "встретиться",
@@ -97,6 +113,10 @@ MEETING = (
     "записать",
     "запиш",
     "жолугу",
+    # Kyrgyz "can I see it", "show me", "to view". Not "көрө": "ойлонуп көрөйүн" is "I'll think it over".
+    "көрсө болобу",
+    "көрсөт",
+    "көрүүгө",
 )
 INSTALLMENT = ("рассроч", "ипотек", "кредит")
 MONEY = ("дорого", "скидк", "торг", "дешевле", "бюджет")
@@ -185,6 +205,26 @@ def compact_numbers(text: str) -> list[str]:
     return re.findall(r"\d{4,}", compact)
 
 
+# "90 тысяч", "90 тыс", "90к", "85 миң": amounts people type without zeros.
+# A bare "к" needs two digits written next to it: "1к", "2к" in listings mean a 1- or 2-room flat,
+# and "в 11 к вам" is a time.
+_THOUSANDS = re.compile(
+    r"(?<![\d.,])(?:(\d{1,3})\s*(?:тысяч|тыс|тыщ|миң)[а-яңөү.]*|(\d{2,3})[кk](?![а-яa-z]))"
+)
+
+
+def money_numbers(text: str) -> list[str]:
+    """`compact_numbers` plus amounts written in thousands: "до 90 тысяч" -> `90000`.
+
+    Only for checking replies. Routing and search keep `compact_numbers`, so a
+    budget the customer names does not turn into a factual question.
+    """
+
+    normalized = normalize_text(text)
+    expanded = [str(int(match.group(1) or match.group(2)) * 1000) for match in _THOUSANDS.finditer(normalized)]
+    return compact_numbers(_THOUSANDS.sub(" ", normalized)) + expanded
+
+
 def contains_any(text: str, needles: tuple[str, ...] | frozenset[str]) -> bool:
     hay = normalize_text(text)
     return any(needle in hay for needle in needles)
@@ -255,9 +295,16 @@ class MessageSignals:
         )
 
 
+# Greetings Russian speakers in Bishkek use too: alone they say nothing about the language.
+_SHARED_GREETING = frozenset({"салам", "алейкум", "алейкуме", "ассалам", "ассаламу"})
+
+
 def detect_language(text: str) -> str:
     normalized = normalize_text(text)
-    tokens = set(re.findall(r"[a-zа-я]+", normalized))
+    words = set(re.findall(r"[a-zа-я]+", normalized))
+    tokens = words - _SHARED_GREETING
+    if words and not tokens:
+        return "unknown"
     ky = bool(tokens & KY_MARKERS)
     ru_hit = bool(tokens & RU_MARKERS)
     if ky and ru_hit:
@@ -278,7 +325,7 @@ def analyze_message(text: str) -> MessageSignals:
         farewell=contains_word(normalized, FAREWELL),
         clear_confirmation=token in CLEAR_CONFIRM,
         unclear_confirmation=token in UNCLEAR_CONFIRM,
-        human_request=contains_any(normalized, HUMAN),
+        human_request=asks_for_person(normalized),
         meeting=contains_any(normalized, MEETING),
         installment=contains_any(normalized, INSTALLMENT),
         money=contains_any(normalized, MONEY),

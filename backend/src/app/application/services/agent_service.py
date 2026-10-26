@@ -199,7 +199,8 @@ class AgentService:
 
         summary = await self.memory.get_summary(customer.id)
         history = await self.messages.list_context(customer.id, limit=20)
-        knowledge = await self.retriever.retrieve(business.id, message.text)
+        recent = "\n".join(item.text for item in history[-4:])
+        knowledge = await self.retriever.retrieve(business.id, message.text, recent=recent)
         context = self.context_builder.build(
             business=business,
             knowledge=knowledge,
@@ -239,7 +240,9 @@ class AgentService:
             signals, slot_named, mid_dialog=bool(context.recent_messages), phone_given=bool(find_phones(message.text))
         )
         if signals.human_request:
-            response_text = human_phrase(language, message.channel, seed)
+            already_open = await self.handoffs.find_open(conversation.id, "user_requested_human") is not None
+            response_text = human_phrase(language, message.channel, seed, again=already_open)
+            steps.append("human_phrase_again" if already_open else "human_phrase")
         elif assessment.factual and not assessment.answerable and (
             not context.knowledge or assessment.topic == "installment" or configured_text(business.profile, "fallback")
         ):
@@ -328,7 +331,11 @@ class AgentService:
             # The model said "уточню у менеджера" for a fact the lexicon did not
             # catch (guarantee, delivery terms...). The promise needs a real task,
             # whether or not the model remembered to set its handoff flag.
-            decision = HandoffDecision(required=True, reason="no_knowledge", priority="normal")
+            # A customer leaving a number is the next sales step, not a missing fact.
+            if find_phones(message.text):
+                decision = HandoffDecision(required=True, reason="ready_for_meeting", priority="high")
+            else:
+                decision = HandoffDecision(required=True, reason="no_knowledge", priority="normal")
         if decision.required and decision.reason:
             actions.append(
                 Action(

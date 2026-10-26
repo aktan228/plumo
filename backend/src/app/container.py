@@ -36,6 +36,7 @@ from app.infrastructure.ai.openrouter_llm import OpenRouterLLMProvider
 from app.infrastructure.channels.credentials import CredentialStore
 from app.infrastructure.channels.gateway import ChannelGateway
 from app.infrastructure.channels.mock_adapters import mock_channels
+from app.infrastructure.database.channel_repositories import JobQueue
 from app.infrastructure.database.repositories import (
     BusinessRepository,
     ConversationRepository,
@@ -123,7 +124,7 @@ def build_agent(session: AsyncSession, runtime: Runtime) -> AgentService:
     logs = LogRepository(session)
     memory = MemoryService(customers, summaries)
     meeting_service = MeetingService(meetings, runtime.events)
-    handoff_service = HandoffService(handoffs, customers, runtime.handoff_provider, runtime.events)
+    handoff_service = HandoffService(handoffs, customers, runtime.handoff_provider, runtime.events, JobQueue(session))
     return AgentService(
         resolver=CustomerResolver(customers, runtime.events),
         memory=memory,
@@ -178,6 +179,7 @@ def build_handoffs(session: AsyncSession, runtime: Runtime) -> HandoffService:
         CustomerRepository(session),
         runtime.handoff_provider,
         runtime.events,
+        JobQueue(session),
     )
 
 

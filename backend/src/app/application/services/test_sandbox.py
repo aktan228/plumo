@@ -100,6 +100,16 @@ class TestLogs:
         return entry
 
 
+class TestHandoffs:
+    """The sandbox never stores a handoff: nothing is open, nothing is accepted."""
+
+    async def find_open(self, conversation_id, reason):
+        return None
+
+    async def find_accepted(self, conversation_id, since=None):
+        return None
+
+
 class TestActions:
     def __init__(self, state):
         self.state = state
@@ -156,7 +166,7 @@ def test_agent(session, runtime, state):
     agent.actions = TestActions(state)
     agent.logs = TestLogs()
     agent.events = events
-    agent.handoffs = None
+    agent.handoffs = TestHandoffs()
     agent.chat_budget_s = min(22.0, runtime.settings.chat_turn_budget_s)
     meter = {"calls": 0, "cost": 0.0}
     providers = {}

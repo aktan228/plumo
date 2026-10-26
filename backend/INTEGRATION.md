@@ -281,17 +281,9 @@ actions=GoogleCalendarActionExecutor(...)
 
 ## Handoff-уведомление
 
-`HumanHandoffProvider.notify(handoff)` вызывается после записи в базу. Mock пишет structured log.
+`HumanHandoffProvider.notify(handoff)` вызывается после добавления записи в сессию, фоновой задачей процесса, ещё до commit транзакции. Перевести уведомление на очередь заданий, чтобы оно не терялось и не уходило по откатившейся передаче, — первый пункт плана MVP.
 
-Свой транспорт:
-
-```python
-class TelegramHandoffProvider:
-    async def notify(self, handoff) -> None:
-        ...
-```
-
-Подключить его в `_handoff_provider`, когда `HANDOFF_PROVIDER=telegram` и `AI_MODE=production`. Создание записи, статусы `PENDING / ACCEPTED / RESOLVED / CANCELLED` и причины остаются в `HandoffService`.
+Готовые транспорты: `TelegramHandoffProvider` (`infrastructure/handoff/telegram_provider.py`, при `HANDOFF_PROVIDER=telegram`) и mock, который пишет structured log. Свой транспорт — класс с `async def notify(self, handoff)`, подключается в `_handoff_provider`. Создание записи, статусы `PENDING / ACCEPTED / RESOLVED / CANCELLED` и причины остаются в `HandoffService`.
 
 ## База знаний
 

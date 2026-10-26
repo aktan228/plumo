@@ -15,6 +15,7 @@ rem   dev eval     live 10-turn dialog with the real model
 rem   dev lint     ruff: syntax errors, undefined names, unused imports
 rem   dev voice    live ElevenLabs TTS/STT check in phone quality (spends credits)
 rem   dev bench    compare models on 55 sales scenarios (spends credits, ~$1.6)
+rem   dev dialog-eval  simulated customers talk to the whole core, judged (spends credits; --mock is free)
 rem   dev up       db + seed + run
 
 setlocal
@@ -40,6 +41,7 @@ if /i "%~1"=="eval" goto eval
 if /i "%~1"=="lint" goto lint
 if /i "%~1"=="voice" goto voice
 if /i "%~1"=="bench" goto bench
+if /i "%~1"=="dialog-eval" goto dialog_eval
 if /i "%~1"=="up" goto up
 goto help
 
@@ -99,6 +101,10 @@ exit /b %errorlevel%
 
 :bench
 "%PY%" -m app.bench %2 %3 %4 %5 %6 %7 %8 %9
+exit /b %errorlevel%
+
+:dialog_eval
+"%PY%" -m app.dialog_eval %2 %3 %4 %5 %6 %7 %8 %9
 exit /b %errorlevel%
 
 :voice

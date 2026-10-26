@@ -109,7 +109,7 @@ async def test_installment_routes_big():
 
 
 async def test_mixed_language_routes_big():
-    decision = await RuleBasedRouter().select_model(_context("Салам, квартира еще продается?"))
+    decision = await RuleBasedRouter().select_model(_context("Квартира еще продается, баасы канча?"))
     assert decision.model == "big"
     assert decision.reason == "mixed_language"
 
@@ -154,10 +154,13 @@ async def test_quote_knowledge_hides_internal_notes_and_sounds_human():
 async def test_language_detection():
     assert detect_language("Здравствуйте, квартира еще продается?") == "ru"
     assert detect_language("Салам, кантип баасы?") == "ky"
-    assert detect_language("Салам, квартира еще продается?") == "mixed"
+    assert detect_language("Квартира еще продается, баасы канча?") == "mixed"
+    # Russian speakers in Bishkek greet with "салам" too: alone it does not make a message Kyrgyz.
+    assert detect_language("Салам, квартира еще продается?") == "ru"
+    assert detect_language("салам") == "unknown"
     assert detect_language("hello") == "unknown"
     detector = MockLanguageDetector()
-    assert await detector.detect("Салам") == "ky"
+    assert await detector.detect("Салам, рахмат") == "ky"
 
 
 def test_phone_normalization():
@@ -200,6 +203,32 @@ def test_two_people_is_not_a_human_request():
     assert analyze_message("үч адамдык батир барбы").human_request is False
     assert analyze_message("адам менен сүйлөшкүм келет").human_request is True
     assert analyze_message("менеджерди чакырыңыз").human_request is True
+
+
+def test_talking_about_the_manager_is_not_calling_one():
+    # Found by the dialog eval: these used to get "зову менеджера" instead of an answer, again and again.
+    for text in (
+        "а менеджер может скинуть цену?",
+        "ну так что, менеджер может цену опустить или нет?",
+        "если менеджер звонить не будет, скиньте телефон агентства",
+        "что скажет менеджер про рассрочку",
+        "менеджер сказал 80 тысяч",
+        "менеджер отвечает или нет",
+    ):
+        assert analyze_message(text).human_request is False, text
+    for text in (
+        "позовите менеджера",
+        "Позовите менеджера, пожалуйста",
+        "соедините с оператором",
+        "переключите меня на менеджера",
+        "хочу поговорить с менеджером",
+        "мне нужен живой менеджер",
+        "менеджера позовите",
+        "подключите оператора",
+        "передайте менеджеру мой вопрос",
+        "менеджерди чакырыңыз",
+    ):
+        assert analyze_message(text).human_request is True, text
 
 
 def test_products_greeting_is_a_catalog_question():
@@ -447,3 +476,92 @@ async def test_slow_voice_turn_is_answered_by_the_hedged_request():
 
     assert (await AgentService._first_reply(Fast(), None, RouteDecision("big", "t", 1.0), 3.0, 0.2)).text == "fast"
     assert Fast.calls == 1
+
+
+async def test_reply_may_repeat_the_budget_the_customer_named():
+    chui = _item("2-комнатная квартира, 58 м², 5 этаж, цена 85000 USD. Статус: доступна.")
+    context = _context("нас трое, бюджет где-то до 90 тысяч", [chui])
+    result = ResponseValidator().validate("В рамках 90 000 USD для троих подойдёт Квартира на Чуй за 85 000 USD.", context)
+    assert result.safe, result.reason
+
+
+async def test_a_price_the_customer_attributes_to_someone_is_still_invented():
+    chui = _item("2-комнатная квартира, 58 м², 5 этаж, цена 85000 USD. Статус: доступна.")
+    context = _context("менеджер сказал, что до 80 тысяч отдадите", [chui])
+    assert ResponseValidator().validate("Да, отдадим за 80 000 USD.", context).reason == "invented_number"
+
+
+async def test_amounts_written_in_thousands_are_checked():
+    chui = _item("2-комнатная квартира, 58 м², 5 этаж, цена 85000 USD. Статус: доступна.")
+    context = _context("сколько стоит на Чуй?", [chui])
+    assert ResponseValidator().validate("Сейчас всего 70 тысяч долларов.", context).reason == "invented_number"
+    assert ResponseValidator().validate("Она стоит 85 тысяч долларов.", context).safe
+    # "2к" in a listing is a two-room flat, not 2000.
+    assert ResponseValidator().validate("Это 2к на Чуй за 85000 USD.", context).safe
+
+
+async def test_listing_named_a_turn_ago_stays_in_view():
+    phil = _item("1-комнатная квартира, 41 м², цена 62000 USD. Статус: доступна.", title="Однушка у Филармонии")
+    rent = _item("1-комнатная квартира в аренду, 38 м². Аренда 450 USD в месяц.", title="Аренда на Токтогула")
+    chui = _item("2-комнатная квартира, 58 м², цена 85000 USD.", title="Квартира на Чуй")
+    retriever = SimpleKnowledgeRetriever(_Store([rent, chui, phil]))
+    said = "Клиент: в центре\nПлюмо: В центре есть однушка у Филармонии, 41 м². Для вас?"
+    hits = await retriever.retrieve(uuid4(), "скок стоит", limit=2, recent=said)
+    assert phil.id in {hit.item.id for hit in hits}
+    # Generic words of a title ("квартира") do not count as a mention.
+    hits = await retriever.retrieve(uuid4(), "скок стоит", limit=1, recent="какая квартира лучше?")
+    assert len(hits) == 1
+
+
+async def test_prompt_lists_questions_the_agent_already_asked():
+    from types import SimpleNamespace
+
+    from app.infrastructure.ai.openrouter_llm import _asked
+
+    history = [
+        SimpleNamespace(role="assistant", text="Да, есть. Для себя ищете или под инвестицию?"),
+        SimpleNamespace(role="user", text="в центре"),
+        SimpleNamespace(role="assistant", text="Понял. На сколько человек? Для себя ищете или под инвестицию?"),
+    ]
+    assert _asked(history) == "Для себя ищете или под инвестицию? | На сколько человек?"
+
+
+def test_unconfirmed_booking_words_are_caught_but_saved_numbers_are_not():
+    from app.application.services.response_validator import ResponseValidator
+    from app.bench.run import build_context
+    from app.bench.scenarios import SCENARIOS
+    import asyncio
+
+    context = asyncio.run(build_context(SCENARIOS[0]))
+    validator = ResponseValidator()
+    for bad in ("Записал. Суббота, 11:00.", "Записала вас на субботу.", "Подтвердил время на 18:30.", "Подтверждаю встречу на завтра."):
+        assert validator.validate(bad, context).safe is False, bad
+    for good in ("Записал ваш номер, менеджер свяжется.", "Передам менеджеру время, он подтвердит."):
+        assert validator.validate(good, context).safe is True, good
+
+
+async def test_quote_knowledge_does_not_offer_a_rental_to_a_buyer():
+    from app.application.services.grounded_reply import quote_knowledge
+    from app.bench.run import build_context
+    from app.bench.scenarios import SCENARIOS
+
+    context = await build_context(SCENARIOS[0])
+    rent = _knowledge_hit("Аренда на Токтогула", "1-комнатная квартира в аренду, 38 м². Аренда 450 USD в месяц.")
+    sale = _knowledge_hit("Квартира на Чуй", "2-комнатная квартира, 58 м², цена 85000 USD.")
+    context.knowledge = [rent, sale]
+    context.current_message = "а что подешевле, мне нужна квартира для семьи"
+    context.recent_messages = []
+    text = quote_knowledge(context)
+    assert "Токтогула" not in text and "Чуй" in text
+    context.current_message = "хочу снять квартиру"
+    assert "Токтогула" in quote_knowledge(context)
+
+
+def _knowledge_hit(title: str, content: str):
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from app.domain.models import KnowledgeHit, KnowledgeItem
+
+    now = datetime.now(UTC)
+    return KnowledgeHit(item=KnowledgeItem(uuid4(), uuid4(), "property", title, content, {}, True, now, now), score=2.0)

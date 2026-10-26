@@ -389,6 +389,7 @@ class JobQueue:
         ordering_key: str,
         inbound_event_id: UUID | None = None,
         outbound_message_id: UUID | None = None,
+        handoff_id: UUID | None = None,
         max_attempts: int = 5,
         run_at: datetime | None = None,
     ) -> int:
@@ -399,6 +400,7 @@ class JobQueue:
             ordering_key=ordering_key[:200],
             inbound_event_id=inbound_event_id,
             outbound_message_id=outbound_message_id,
+            handoff_id=handoff_id,
             status=JobStatus.queued,
             attempts=0,
             max_attempts=max_attempts,
@@ -437,7 +439,7 @@ class JobQueue:
                 FOR UPDATE SKIP LOCKED
             )
             RETURNING id, kind, business_id, ordering_key, status, attempts, max_attempts, run_at,
-                      inbound_event_id, outbound_message_id, locked_until, locked_by, last_error
+                      inbound_event_id, outbound_message_id, locked_until, locked_by, last_error, handoff_id
             """
         )
         params = {"lease": float(lease_s), "worker": worker_id[:64]}
@@ -512,6 +514,7 @@ class JobQueue:
             locked_until=row.locked_until,
             locked_by=row.locked_by,
             last_error=row.last_error,
+            handoff_id=row.handoff_id,
         )
 
 

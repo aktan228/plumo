@@ -6,6 +6,9 @@ from app.domain.models import AgentContext
 from app.domain.phrases import unknown_phrase
 from app.domain.text_signals import normalize_text
 
+# Renting, not buying (same stems as the retriever uses): "снять", "аренда", Kyrgyz "ижара".
+_RENT_STEMS = ("снять", "сниму", "снимать", "сним", "аренд", "ижара", "квартирант")
+
 _JUNK = (
     "user safety",
     "content policy",
@@ -59,6 +62,9 @@ def quote_knowledge(context: AgentContext) -> str:
     """
 
     hits = [hit for hit in context.knowledge if not _hidden(hit.item.content)]
+    if not _wants_rent(context):
+        # A buyer is not offered a rental as "what we have" (found by the dialog eval).
+        hits = [hit for hit in hits if "аренд" not in normalize_text(f"{hit.item.title} {hit.item.content}")]
     if not hits:
         return unknown_phrase(None, context.language)
     voice = context.channel == "voice"
@@ -71,6 +77,16 @@ def quote_knowledge(context: AgentContext) -> str:
         return f"Смотрите, есть {parts[0]} Интересно посмотреть?"
     lines = "\n".join(f"• {part}" for part in parts)
     return f"Смотрите, что есть:\n{lines}\nКакой вариант ближе?"
+
+
+def _wants_rent(context: AgentContext) -> bool:
+    """The customer asked about renting in this message or earlier in the dialog."""
+
+    said = [context.current_message] + [
+        item.text for item in context.recent_messages if str(getattr(item.role, "value", item.role)) == "user"
+    ]
+    blob = normalize_text(" ".join(said))
+    return any(stem in blob for stem in _RENT_STEMS)
 
 
 def _hidden(content: str) -> bool:
