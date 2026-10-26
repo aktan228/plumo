@@ -30,6 +30,7 @@ from app.domain.events import (
     MESSAGE_RECEIVED,
 )
 from app.domain.ports import HumanHandoffProvider, Router
+from app.infrastructure.auth_mail import ResendAuthMailer
 from app.infrastructure.ai.factory import AIProviderFactory
 from app.infrastructure.ai.openrouter_llm import OpenRouterLLMProvider
 from app.infrastructure.channels.credentials import CredentialStore
@@ -70,6 +71,7 @@ class Runtime:
     owns_engine: bool = True
     # Real Telegram/Instagram adapters; the mock `channels` above stay for local tests.
     channel_gateway: ChannelGateway | None = None
+    auth_mailer: ResendAuthMailer | None = None
 
 
 def build_runtime(settings: Settings, engine: AsyncEngine | None = None) -> Runtime:
@@ -91,6 +93,7 @@ def build_runtime(settings: Settings, engine: AsyncEngine | None = None) -> Runt
     _register_llm_providers(providers, settings)
     return Runtime(
         settings=settings,
+        auth_mailer=ResendAuthMailer(settings),
         engine=engine,
         session_factory=create_session_factory(engine),
         providers=providers,

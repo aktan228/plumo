@@ -36,8 +36,11 @@ class OperatorRepository:
         row = await self.session.get(OperatorRow, operator_id)
         return _operator(row) if row else None
 
-    async def get_with_hash(self, email: str) -> tuple[Operator, str] | None:
-        row = await self.session.scalar(select(OperatorRow).where(OperatorRow.email == email.strip().lower()))
+    async def get_with_hash(self, email: str, *, lock: bool = False) -> tuple[Operator, str] | None:
+        stmt = select(OperatorRow).where(OperatorRow.email == email.strip().lower())
+        if lock:
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
+        row = await self.session.scalar(stmt)
         return (_operator(row), row.password_hash) if row else None
 
     async def add(self, *, business_id: UUID, email: str, password_hash: str, display_name: str = "") -> Operator:
@@ -47,6 +50,7 @@ class OperatorRepository:
             business_id=business_id,
             email=email.strip().lower(),
             password_hash=password_hash,
+            email_verified_at=now,
             display_name=display_name.strip()[:100],
             active=True,
             created_at=now,
@@ -55,6 +59,18 @@ class OperatorRepository:
         self.session.add(row)
         await self.session.flush()
         return _operator(row)
+
+    async def add_registered(self, *, business_id: UUID, email: str, password_hash: str, display_name: str) -> Operator | None:
+        now = utcnow()
+        stmt = (
+            insert(OperatorRow)
+            .values(id=uuid4(), business_id=business_id, email=email.strip().lower(), password_hash=password_hash,
+                    display_name=display_name, active=True, email_verified_at=None, created_at=now, updated_at=now)
+            .on_conflict_do_nothing(index_elements=[OperatorRow.email])
+            .returning(OperatorRow)
+        )
+        row = (await self.session.scalars(stmt)).one_or_none()
+        return _operator(row) if row else None
 
     async def set_password(self, operator_id: UUID, password_hash: str) -> None:
         row = await self.session.get(OperatorRow, operator_id)
@@ -177,6 +193,7 @@ class ConnectionRepository:
         row.channel = connection.channel
         row.credential_ref = connection.credential_ref
         row.auth_method = connection.auth_method
+        row.encrypted_token = connection.encrypted_token
         row.external_account_id = connection.external_account_id
         row.display_name = connection.display_name[:200]
         row.username = (connection.username or None) and connection.username[:100]
@@ -530,6 +547,7 @@ def _operator(row: OperatorRow) -> Operator:
         email=row.email,
         display_name=row.display_name or "",
         active=row.active,
+        email_verified=row.email_verified_at is not None,
         created_at=row.created_at,
     )
 
@@ -549,6 +567,7 @@ def _connection(row: ChannelConnectionRow) -> ChannelConnection:
         created_at=row.created_at,
         updated_at=row.updated_at,
         auth_method=row.auth_method or "server_credential",
+        encrypted_token=row.encrypted_token,
         webhook_nonce=row.webhook_nonce,
         last_check_at=row.last_check_at,
         last_check_ok=row.last_check_ok,

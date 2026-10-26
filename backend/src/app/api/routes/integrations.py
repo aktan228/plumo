@@ -1,6 +1,8 @@
 """Channel connections of the operator's business. Secrets never leave the server."""
 
 from uuid import UUID
+import asyncio
+from app.domain.errors import ChannelUnavailable
 
 from fastapi import APIRouter, Depends
 
@@ -8,6 +10,7 @@ from app.api.dashboard_mappers import connection_out
 from app.api.dashboard_schemas import (
     ChannelIntegrationOut,
     ConnectIn,
+    TelegramConnectIn,
     ConnectionOut,
     CredentialOut,
     IntegrationPatchIn,
@@ -55,13 +58,22 @@ async def list_integrations(
     responses=_ERRORS,
 )
 async def connect_telegram(
-    body: ConnectIn,
+    body: TelegramConnectIn,
     operator: OperatorContext = Depends(current_operator),
     services: Services = Depends(get_services),
 ) -> ConnectionOut:
-    connection = await services.integrations.connect_telegram(
-        operator.business_id, body.credential_ref, body.replace_webhook
-    )
+    try:
+        async with asyncio.timeout(25):
+            connection = await services.integrations.connect_telegram(
+                operator.business_id,
+                body.credential_ref or "stored",
+                body.replace_webhook,
+                raw_token=body.token.get_secret_value().strip() if body.token else None,
+            )
+    except TimeoutError:
+        raise ChannelUnavailable(
+            "Telegram setup timed out. Check the connection before retrying.", code="telegram_timeout"
+        ) from None
     return connection_out(connection)
 
 
@@ -78,6 +90,17 @@ async def connect_instagram(
 ) -> ConnectionOut:
     connection = await services.integrations.connect_instagram(operator.business_id, body.credential_ref)
     return connection_out(connection)
+
+
+@router.post(
+    "/{connection_id}/verification", response_model=ConnectionOut, summary="Получить новую проверочную ссылку Telegram"
+)
+async def restart_verification(
+    connection_id: UUID,
+    operator: OperatorContext = Depends(current_operator),
+    services: Services = Depends(get_services),
+):
+    return connection_out(await services.integrations.restart_verification(connection_id, operator.business_id))
 
 
 @router.post("/{connection_id}/check", response_model=ConnectionOut, summary="Повторная проверка", responses=_ERRORS)
@@ -102,7 +125,9 @@ async def patch_integration(
     return connection_out(connection)
 
 
-@router.post("/{connection_id}/disconnect", response_model=ConnectionOut, summary="Отключить канал (история сохраняется)")
+@router.post(
+    "/{connection_id}/disconnect", response_model=ConnectionOut, summary="Отключить канал (история сохраняется)"
+)
 async def disconnect_integration(
     connection_id: UUID,
     operator: OperatorContext = Depends(current_operator),

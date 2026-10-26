@@ -59,6 +59,10 @@ class InvalidState(AppError):
     http_status = 409
 
 
+class RegistrationConflict(InvalidState):
+    code = "registration_conflict"
+
+
 class CustomerConflict(InvalidState):
     """A concurrent request created the same customer first."""
 
@@ -105,6 +109,16 @@ class Unauthorized(AppError):
 
     code = "unauthorized"
     http_status = 401
+
+
+class InvalidAccountToken(AppError):
+    code = "invalid_account_token"
+    http_status = 400
+
+
+class EmailNotVerified(AppError):
+    code = "email_not_verified"
+    http_status = 403
 
 
 class NotAuthenticated(AppError):

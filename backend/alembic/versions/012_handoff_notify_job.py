@@ -11,8 +11,8 @@ the worker sends it.
 
 Handoffs created before this revision were notified by the old path: they are marked as notified.
 
-Revision ID: 007_handoff_notify_job
-Revises: 006_channels_dashboard
+Revision ID: 012_handoff_notify_job
+Revises: 011_telegram_self_service
 Create Date: 2026-10-25
 """
 
@@ -20,8 +20,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = "007_handoff_notify_job"
-down_revision = "006_channels_dashboard"
+revision = "012_handoff_notify_job"
+down_revision = "011_telegram_self_service"
 branch_labels = None
 depends_on = None
 

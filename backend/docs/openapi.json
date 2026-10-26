@@ -221,6 +221,211 @@
         }
       }
     },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Создать аккаунт и отправить подтверждение почты",
+        "operationId": "register_api_v1_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/resend-verification": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Повторить подтверждение почты",
+        "operationId": "resend_verification_api_v1_auth_resend_verification_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptedOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Запросить ссылку сброса пароля",
+        "operationId": "forgot_password_api_v1_auth_forgot_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptedOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/verify-email": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Подтвердить почту и войти",
+        "operationId": "verify_email_api_v1_auth_verify_email_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountTokenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/reset-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Задать новый пароль и завершить старые сессии",
+        "operationId": "reset_password_api_v1_auth_reset_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptedOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": [
@@ -297,6 +502,274 @@
                 "schema": {
                   "$ref": "#/components/schemas/SessionOut"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/onboarding": {
+      "get": {
+        "tags": [
+          "onboarding"
+        ],
+        "summary": "Загрузить настройки мастера своего бизнеса",
+        "operationId": "get_draft_api_v1_onboarding_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WizardOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "onboarding"
+        ],
+        "summary": "Сохранить шаги и материалы мастера",
+        "operationId": "save_draft_api_v1_onboarding_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveWizardIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WizardOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/onboarding/complete": {
+      "post": {
+        "tags": [
+          "onboarding"
+        ],
+        "summary": "Завершить настройку и сохранить карточку бизнеса",
+        "operationId": "complete_draft_api_v1_onboarding_complete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteWizardIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WizardOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/testing/sessions": {
+      "get": {
+        "tags": [
+          "testing"
+        ],
+        "summary": "List Tests",
+        "operationId": "list_tests_api_v1_testing_sessions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "testing"
+        ],
+        "summary": "Create Test",
+        "operationId": "create_test_api_v1_testing_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/testing/sessions/{ident}": {
+      "get": {
+        "tags": [
+          "testing"
+        ],
+        "summary": "Get Test",
+        "operationId": "get_test_api_v1_testing_sessions__ident__get",
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ident"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/testing/sessions/{ident}/messages": {
+      "post": {
+        "tags": [
+          "testing"
+        ],
+        "summary": "Post Test",
+        "operationId": "post_test_api_v1_testing_sessions__ident__messages_post",
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ident"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestMessageIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/readiness": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Готовность своего бизнеса, материалов, теста и канала",
+        "operationId": "readiness_api_v1_dashboard_readiness_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
@@ -1286,7 +1759,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConnectIn"
+                "$ref": "#/components/schemas/TelegramConnectIn"
               }
             }
           },
@@ -1357,6 +1830,49 @@
           },
           "503": {
             "description": "Не настроен сервер (not_configured) или канал временно недоступен"
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/{connection_id}/verification": {
+      "post": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Получить новую проверочную ссылку Telegram",
+        "operationId": "restart_verification_api_v1_integrations__connection_id__verification_post",
+        "parameters": [
+          {
+            "name": "connection_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Connection Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -1744,6 +2260,18 @@
   },
   "components": {
     "schemas": {
+      "AcceptedOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "accepted",
+            "title": "Status",
+            "default": "accepted"
+          }
+        },
+        "type": "object",
+        "title": "AcceptedOut"
+      },
       "AccountOut": {
         "properties": {
           "external_id": {
@@ -1783,6 +2311,23 @@
           "display_name"
         ],
         "title": "AccountOut"
+      },
+      "AccountTokenIn": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 43,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "AccountTokenIn"
       },
       "ActionOut": {
         "properties": {
@@ -1970,6 +2515,106 @@
           }
         ]
       },
+      "AgentSettings": {
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "sales",
+              "support"
+            ],
+            "title": "Purpose",
+            "default": "sales"
+          },
+          "company": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Company",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 3000,
+            "title": "Description",
+            "default": ""
+          },
+          "audience": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Audience",
+            "default": ""
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "title": "Color",
+            "default": "#2b55ff"
+          },
+          "logo": {
+            "type": "string",
+            "maxLength": 1333400,
+            "title": "Logo",
+            "default": ""
+          },
+          "logoName": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Logoname",
+            "default": ""
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 60,
+            "title": "Name",
+            "default": "Plumo"
+          },
+          "tone": {
+            "type": "string",
+            "enum": [
+              "friendly",
+              "formal"
+            ],
+            "title": "Tone",
+            "default": "friendly"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "ru",
+              "en"
+            ],
+            "title": "Language",
+            "default": "ru"
+          },
+          "greeting": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Greeting",
+            "default": ""
+          },
+          "goal": {
+            "type": "string",
+            "maxLength": 1500,
+            "title": "Goal",
+            "default": ""
+          },
+          "fallback": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Fallback",
+            "default": ""
+          },
+          "handoffRules": {
+            "type": "string",
+            "maxLength": 1500,
+            "title": "Handoffrules",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AgentSettings"
+      },
       "BusinessBriefOut": {
         "properties": {
           "id": {
@@ -2137,6 +2782,22 @@
         ],
         "title": "ChannelIntegrationOut"
       },
+      "CompleteWizardIn": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "maximum": 2000000000.0,
+            "minimum": 0.0,
+            "title": "Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "CompleteWizardIn"
+      },
       "ConnectIn": {
         "properties": {
           "credential_ref": {
@@ -2193,6 +2854,16 @@
       },
       "ConnectionOut": {
         "properties": {
+          "verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TelegramVerificationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "type": "string",
             "format": "uuid",
@@ -2388,6 +3059,21 @@
           "updated_at"
         ],
         "title": "ConversationOut"
+      },
+      "CreateTestIn": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "CreateTestIn"
       },
       "CredentialOut": {
         "properties": {
@@ -2954,6 +3640,31 @@
           "mode_version"
         ],
         "title": "DialogStateOut"
+      },
+      "EmailRequestIn": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "title": "Email"
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ru",
+              "en"
+            ],
+            "title": "Locale",
+            "default": "ru"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "EmailRequestIn"
       },
       "ErrorStateOut": {
         "properties": {
@@ -3804,6 +4515,48 @@
         ],
         "title": "OperatorOut"
       },
+      "PricingChoice": {
+        "properties": {
+          "choice": {
+            "type": "string",
+            "enum": [
+              "start",
+              "business",
+              "custom",
+              "demo"
+            ],
+            "title": "Choice"
+          },
+          "volume": {
+            "type": "integer",
+            "multipleOf": 500.0,
+            "maximum": 10000.0,
+            "minimum": 1000.0,
+            "title": "Volume"
+          },
+          "billing": {
+            "type": "string",
+            "enum": [
+              "quarter",
+              "month"
+            ],
+            "title": "Billing"
+          },
+          "voice": {
+            "type": "boolean",
+            "title": "Voice"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "choice",
+          "volume",
+          "billing",
+          "voice"
+        ],
+        "title": "PricingChoice"
+      },
       "ReadIn": {
         "properties": {
           "seq": {
@@ -3836,6 +4589,73 @@
           "unread"
         ],
         "title": "ReadOut"
+      },
+      "RegisterIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 10,
+            "title": "Password"
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ru",
+              "en"
+            ],
+            "title": "Locale",
+            "default": "ru"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "email",
+          "password"
+        ],
+        "title": "RegisterIn"
+      },
+      "RegisterOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "verification_required",
+            "title": "Status",
+            "default": "verification_required"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "email_delivery": {
+            "type": "string",
+            "enum": [
+              "sent",
+              "unavailable"
+            ],
+            "title": "Email Delivery"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "email_delivery"
+        ],
+        "title": "RegisterOut"
       },
       "ReplyStateOut": {
         "properties": {
@@ -3895,6 +4715,30 @@
         ],
         "title": "ReplyStateOut"
       },
+      "ResetPasswordIn": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 43,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Token"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 10,
+            "title": "Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "ResetPasswordIn"
+      },
       "ResolveDeliveryIn": {
         "properties": {
           "action": {
@@ -3912,6 +4756,33 @@
           "action"
         ],
         "title": "ResolveDeliveryIn"
+      },
+      "SaveWizardIn": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "maximum": 2000000000.0,
+            "minimum": 0.0,
+            "title": "Version"
+          },
+          "step": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Step"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WizardData"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "step",
+          "data"
+        ],
+        "title": "SaveWizardIn"
       },
       "SessionOut": {
         "properties": {
@@ -3936,6 +4807,37 @@
           "ai_mode"
         ],
         "title": "SessionOut"
+      },
+      "SourceEntry": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "website",
+              "instagram",
+              "text",
+              "file",
+              "faq"
+            ],
+            "title": "Kind",
+            "default": "website"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 100000,
+            "title": "Value",
+            "default": ""
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Question",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SourceEntry"
       },
       "SummaryOut": {
         "properties": {
@@ -3991,6 +4893,126 @@
           "updated_at"
         ],
         "title": "SummaryOut"
+      },
+      "TelegramConnectIn": {
+        "properties": {
+          "token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160,
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "credential_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Ref"
+          },
+          "replace_webhook": {
+            "type": "boolean",
+            "title": "Replace Webhook",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TelegramConnectIn"
+      },
+      "TelegramVerificationOut": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "TelegramVerificationOut"
+      },
+      "TestMessageIn": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "text"
+        ],
+        "title": "TestMessageIn"
       },
       "TranscribeIn": {
         "properties": {
@@ -4175,6 +5197,163 @@
           "response"
         ],
         "title": "VoiceRespondOut"
+      },
+      "WizardData": {
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/AgentSettings"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/WizardSource"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Sources"
+          },
+          "channel": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "title": "Channel",
+            "default": 0
+          },
+          "pricing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PricingChoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entry": {
+            "$ref": "#/components/schemas/SourceEntry"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WizardData"
+      },
+      "WizardOut": {
+        "properties": {
+          "business_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Business Id"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WizardData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "published": {
+            "type": "boolean",
+            "title": "Published",
+            "default": false
+          },
+          "knowledge_count": {
+            "type": "integer",
+            "title": "Knowledge Count",
+            "default": 0
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "business_id",
+          "step",
+          "data",
+          "version",
+          "completed_at",
+          "updated_at"
+        ],
+        "title": "WizardOut"
+      },
+      "WizardSource": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "website",
+              "instagram",
+              "text",
+              "file",
+              "faq"
+            ],
+            "title": "Kind"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Content"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "content"
+        ],
+        "title": "WizardSource"
       }
     }
   }

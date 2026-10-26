@@ -258,4 +258,3 @@ async def _reply_state(services: Services, row, connection) -> ReplyStateOut:
     elif row.channel == "instagram" and (expires is None or utcnow() > expires):
         reason = "window_closed"
     return ReplyStateOut(allowed=reason is None, reason=reason, window_expires_at=expires, **limits)
-

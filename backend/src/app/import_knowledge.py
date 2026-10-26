@@ -23,7 +23,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 
@@ -145,7 +145,9 @@ async def _read(source: str) -> str:
 async def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Импорт базы знаний бизнеса из CSV или Google-таблицы")
     parser.add_argument("source", help="путь к CSV или ссылка на Google-таблицу")
-    parser.add_argument("--business", required=True, help="имя бизнеса в базе")
+    workspace = parser.add_mutually_exclusive_group(required=True)
+    workspace.add_argument("--business", help="уникальное имя бизнеса в базе")
+    workspace.add_argument("--business-id", type=UUID, help="ID бизнеса, если названия повторяются")
     parser.add_argument("--deactivate-missing", action="store_true", help="выключить объекты, которых нет в таблице")
     parser.add_argument("--dry-run", action="store_true", help="показать изменения, ничего не записывать")
     args = parser.parse_args(argv)
@@ -159,7 +161,8 @@ async def main(argv: list[str] | None = None) -> int:
     engine = create_engine(settings.database_url)
     try:
         async with create_session_factory(engine)() as session:
-            business = await BusinessRepository(session).get_by_name(args.business)
+            repo = BusinessRepository(session)
+            business = await repo.get(args.business_id) if args.business_id else await repo.get_by_name(args.business)
             if business is None:
                 print(f"Ошибка: бизнес «{args.business}» не найден", file=sys.stderr)
                 return 1

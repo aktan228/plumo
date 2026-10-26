@@ -17,10 +17,11 @@ test('a card is connected only when the server says so', () => {
   assert.equal(cardStatus(integration({ connection: connection('disconnected') })), 'disconnected');
 });
 
-test('without prepared access the channel needs action, not a button that pretends to connect', () => {
+test('Telegram accepts a client token; Instagram still needs prepared access', () => {
   const noCredential = integration({ credentials: [] });
-  assert.equal(cardStatus(noCredential), 'action_required');
-  assert.equal(canConnect(noCredential), false);
+  assert.equal(cardStatus(noCredential), 'not_connected');
+  assert.equal(canConnect(noCredential), true);
+  assert.equal(canConnect(integration({ channel: 'instagram', credentials: [] })), false);
   const noUrl = integration({ requirements: { public_url: false, secret_key: true } });
   assert.deepEqual(missingRequirements(noUrl), ['public_url']);
   assert.equal(canConnect(noUrl), false);

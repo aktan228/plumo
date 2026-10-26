@@ -15,6 +15,7 @@ import { useLanguage } from "@/lib/i18n";
 import { apiErrorText } from "./api-messages";
 import { formatTime } from "./dialogue-model";
 import { cardStatus, statusLabel, statusTone } from "./integration-model";
+import { TelegramSetup } from "./telegram-setup";
 import { ChannelSetup } from "./channel-setup";
 import { WhatsAppSetup } from "./whatsapp-setup";
 import { initialWhatsAppDraft } from "./whatsapp-setup-model";
@@ -95,7 +96,7 @@ function Logo({ channel }: { channel: keyof typeof logos }) {
   return <Image src={logos[channel]} alt={names[channel]} width={48} height={48} className="size-12 shrink-0 object-contain" />;
 }
 
-export function Integrations({ onDialogues }: { onDialogues: () => void }) {
+export function Integrations({ onDialogues, onStateChange }: { onDialogues: () => void; onStateChange?: (data: IntegrationsResponse) => void }) {
   const { locale } = useLanguage();
   const c = copy[locale];
   const [data, setData] = useState<IntegrationsResponse | null>(null);
@@ -111,7 +112,9 @@ export function Integrations({ onDialogues }: { onDialogues: () => void }) {
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      setData(await api<IntegrationsResponse>("integrations", { signal }));
+      const result = await api<IntegrationsResponse>("integrations", { signal });
+      setData(result);
+      onStateChange?.(result);
       setLoadError(null);
     } catch (error) {
       if (error instanceof ApiError) {
@@ -120,7 +123,7 @@ export function Integrations({ onDialogues }: { onDialogues: () => void }) {
       }
       throw error;
     }
-  }, []);
+  }, [onStateChange]);
   // Statuses also change on the server (a revoked token found by the worker): refresh now and then.
   const refresh = usePolling(load, 15_000, "integrations");
 
@@ -159,12 +162,19 @@ export function Integrations({ onDialogues }: { onDialogues: () => void }) {
     if (done) { setActive(null); focusTitle(); }
   }
 
+  async function connectTelegram(token: string, replace: boolean) {
+    const done = await run("connect:telegram", "telegram", () => api("integrations/telegram/connect", { method: "POST", body: { token, replace_webhook: replace } }), locale === "ru" ? "Бот подключён. Откройте проверочную ссылку на карточке Telegram." : "Bot connected. Open the verification link on its Telegram card.");
+    if (done) { setActive(null); focusTitle(); }
+    return done;
+  }
+
   const channels = data?.channels ?? [];
   const selected = channels.find(item => item.channel === active);
 
   return <section ref={containerRef} className="h-full overflow-y-auto bg-plumo-line/15 px-5 py-6 sm:px-8 sm:py-8">
     <div className="mx-auto max-w-[1120px]">
       {active === "whatsapp" ? <WhatsAppSetup draft={whatsappDraft} onChange={setWhatsappDraft} onBack={close} onSave={() => setWhatsappSaved(true)} />
+        : selected?.channel === "telegram" ? <TelegramSetup item={selected} busy={busy === "connect:telegram"} notice={notice?.channel === "telegram" ? notice : null} onBack={close} onConnect={connectTelegram} />
         : selected ? <ChannelSetup key={selected.channel} item={selected} busy={busy === `connect:${selected.channel}`} notice={notice?.channel === selected.channel ? notice : null} onBack={close} onConnect={(ref, replace) => connect(selected, replace, ref)} />
         : <>
           <h1 ref={titleRef} tabIndex={-1} className="m-0 text-2xl font-semibold tracking-tight outline-none">{c.title}</h1>
@@ -205,12 +215,19 @@ export function Integrations({ onDialogues }: { onDialogues: () => void }) {
       </dl>}
       {(connection?.last_error || (!connection && item.connection?.last_error && status !== "not_connected")) && <p className="mb-0 mt-3 flex gap-2 text-xs leading-5 text-red-700"><PlumoIcon icon={Alert02Icon} size={16} />{(connection ?? item.connection)!.last_error!.message}</p>}
       {cardNotice && <p role="status" className={`mb-0 mt-3 text-xs leading-5 ${cardNotice.tone === "ok" ? "text-emerald-700" : "text-red-700"}`}>{cardNotice.text}</p>}
+      {connection?.channel === "telegram" && connection.verification && <div className="mt-4 rounded-xl bg-plumo-soft/70 p-4 text-[13px] leading-6">
+        <p className="m-0 font-medium">{locale === "ru" ? "Проверка подключения" : "Connection verification"}</p>
+        <p className="mb-0 mt-2">{connection.verification.state === "verified" ? (locale === "ru" ? "Контрольное сообщение принято Telegram. Подключение проверено." : "Telegram accepted the control message. Connection verified.") : (locale === "ru" ? "Откройте бота по ссылке, нажмите «Запустить» и дождитесь контрольного сообщения. Затем обновите проверку." : "Open the bot link, press Start and wait for the control message. Then refresh the check.")}</p>
+        {connection.status === "connected" && connection.verification.link && <a href={connection.verification.link} target="_blank" rel="noreferrer" className="mt-3 inline-block text-plumo-blue underline">{locale === "ru" ? "Открыть бота для проверки" : "Open bot to verify"}</a>}
+        {connection.verification.state === "sending" && <p role="status" className="mb-0 mt-2">{locale === "ru" ? "Отправляем контрольное сообщение…" : "Sending the control message…"}</p>}
+        {["unknown", "failed", "expired", "required"].includes(connection.verification.state) && <><p className="mb-0 mt-2">{locale === "ru" ? "Проверка не завершена. Получите новую ссылку и повторите её." : "Verification is incomplete. Get a new link and retry."}</p><button type="button" disabled={busy !== null || connection.status !== "connected"} className={`${secondary} mt-3`} onClick={() => run(`verification:${connection.id}`, "telegram", () => api(`integrations/${connection.id}/verification`, { method: "POST" }))}>{locale === "ru" ? "Новая проверочная ссылка" : "New verification link"}</button></>}
+      </div>}
       <div className="flex-1" />
       {connection ? <div className="mt-5 flex flex-wrap gap-2">
         <button type="button" className={secondary} disabled={busy !== null} onClick={() => run(`check:${connection.id}`, item.channel, () => api(`integrations/${connection.id}/check`, { method: "POST" }))}>{busy === `check:${connection.id}` ? <PlumoIcon icon={Loading03Icon} size={16} className="animate-spin" /> : <PlumoIcon icon={Refresh01Icon} size={16} />}{c.check}</button>
-        <button type="button" className={connection.agent_enabled ? secondary : primary} disabled={busy !== null} aria-pressed={connection.agent_enabled}
+        <button type="button" className={connection.agent_enabled ? secondary : primary} disabled={busy !== null || (!connection.agent_enabled && connection.auth_method === "bot_token" && (connection.status !== "connected" || connection.verification?.state !== "verified"))} aria-pressed={connection.agent_enabled}
           onClick={() => run(`agent:${connection.id}`, item.channel, () => api(`integrations/${connection.id}`, { method: "PATCH", body: { agent_enabled: !connection.agent_enabled, version: connection.version } }))}>{busy === `agent:${connection.id}` && <PlumoIcon icon={Loading03Icon} size={16} className="animate-spin" />}{connection.agent_enabled ? c.disable : c.enable}</button>
-        {connection.status !== "connected" && <button type="button" className={secondary} disabled={busy !== null} onClick={() => open(item.channel)}>{c.reconnect}</button>}
+        {(connection.status !== "connected" || connection.auth_method === "bot_token") && <button type="button" className={secondary} disabled={busy !== null} onClick={() => open(item.channel)}>{c.reconnect}</button>}
         {confirming === connection.id ? <div className="flex w-full flex-wrap items-center gap-2 rounded-lg bg-red-50 p-3 text-xs text-red-800" role="group"><span className="w-full">{c.confirmDisconnect}</span>
           <button type="button" className={`${secondary} border-red-300 text-red-700`} disabled={busy !== null} onClick={async () => { await run(`disconnect:${connection.id}`, item.channel, () => api(`integrations/${connection.id}/disconnect`, { method: "POST" })); setConfirming(null); }}>{c.yes}</button>
           <button type="button" className={secondary} onClick={() => setConfirming(null)}>{c.no}</button></div>

@@ -3,6 +3,7 @@
 from functools import lru_cache
 
 from dotenv import load_dotenv
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
@@ -99,9 +100,18 @@ class Settings(BaseSettings):
     mock_channel_events: bool = True
     # Operator session lifetime in the dashboard.
     session_ttl_hours: float = 12.0
+    # Frontend origin for account links; distinct from API/webhook PUBLIC_BASE_URL.
+    auth_public_url: str = ""
+    auth_email_from: str = ""
     # Days the raw webhook copy of a customer message keeps its text; the dialog history stays.
     # 0 = keep forever.
     inbound_retention_days: int = 30
+    # Shared per-business test allowance, reset at UTC midnight. Reserve survives failed calls.
+    test_chat_daily_messages: int = Field(default=50, ge=1, le=500)
+    test_chat_session_messages: int = Field(default=20, ge=1, le=50)
+    test_chat_daily_budget_usd: float = Field(default=1.0, gt=0, le=100)
+    test_chat_turn_reserve_usd: float = Field(default=0.05, gt=0, le=10)
+    channel_worker_enabled: bool = False
     worker_concurrency: int = 4
     worker_poll_interval_s: float = 0.5
 

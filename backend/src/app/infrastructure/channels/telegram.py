@@ -166,6 +166,8 @@ def parse_update(update: dict[str, Any]) -> ChannelEvent | None:
     text = message.get("text")
     if isinstance(text, str) and text.strip():
         stripped = text.strip()
+        if stripped.startswith("/start plumo_check_"):
+            data["start_parameter"] = stripped[len("/start "):][:128]
         if stripped == "/start" or stripped.startswith("/start "):
             return ChannelEvent(event_id, "start", sender_id, chat_id, message_id, "/start", when, data)
         clipped, cut = clip_inbound(stripped)

@@ -7,6 +7,7 @@ from decimal import Decimal
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Identity,
@@ -29,7 +30,7 @@ class BusinessRow(Base):
     __tablename__ = "businesses"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    name: Mapped[str] = mapped_column(String(200), unique=True)
+    name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
     working_hours: Mapped[str] = mapped_column(String(200), default="")
     contacts: Mapped[dict] = mapped_column(JSONB, default=dict)
@@ -37,6 +38,19 @@ class BusinessRow(Base):
     profile: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class OnboardingDraftRow(Base):
+    __tablename__ = "onboarding_drafts"
+    __table_args__ = (CheckConstraint("step >= 0 AND step <= 5", name="ck_onboarding_step"),)
+
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
+    step: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    data: Mapped[dict] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
 
 
 class KnowledgeItemRow(Base):
@@ -248,10 +262,26 @@ class OperatorRow(Base):
     business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
     email: Mapped[str] = mapped_column(String(254), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     display_name: Mapped[str] = mapped_column(String(100), default="")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AuthEmailTokenRow(Base):
+    __tablename__ = "auth_email_tokens"
+    __table_args__ = (
+        CheckConstraint("purpose IN ('verify', 'reset')", name="ck_auth_email_purpose"),
+        Index("ix_auth_email_operator_created", "operator_id", "created_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    operator_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("operators.id", ondelete="CASCADE"))
+    purpose: Mapped[str] = mapped_column(String(16))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class OperatorSessionRow(Base):
@@ -292,6 +322,7 @@ class ChannelConnectionRow(Base):
     business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
     channel: Mapped[str] = mapped_column(String(16))
     credential_ref: Mapped[str] = mapped_column(String(64))
+    encrypted_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     auth_method: Mapped[str] = mapped_column(String(32), default="server_credential")
     external_account_id: Mapped[str] = mapped_column(String(64))
     display_name: Mapped[str] = mapped_column(String(200), default="")
@@ -403,3 +434,36 @@ class ConversationReadRow(Base):
     conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"), primary_key=True)
     last_read_seq: Mapped[int] = mapped_column(BigInteger, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TestBudgetRow(Base):
+    __tablename__ = "test_chat_budgets"
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[str] = mapped_column(String(10))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    sessions: Mapped[int] = mapped_column(Integer, default=0)
+    charged: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=0)
+
+
+class TestSessionRow(Base):
+    __tablename__ = "test_chat_sessions"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    publication_version: Mapped[int] = mapped_column(Integer)
+    state: Mapped[dict] = mapped_column(JSONB)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    pending_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TestTurnRow(Base):
+    __tablename__ = "test_chat_turns"
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("test_chat_sessions.id", ondelete="CASCADE"), primary_key=True)
+    request_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16))
+    error: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    result: Mapped[dict] = mapped_column(JSONB, default=dict)
+    day: Mapped[str] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

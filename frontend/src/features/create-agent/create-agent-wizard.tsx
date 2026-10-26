@@ -2,13 +2,16 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction, type FormEvent, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { LanguageSwitch, useLanguage } from "@/lib/i18n";
 import { DemoChoice } from "@/components/landing/demo-choice";
 import { DemoContactForm } from "@/components/landing/demo-contact-form";
 import { pricingRequestLabel, type PricingRequest } from "@/components/landing/pricing";
-import { demoReply, emptyDraft, example, makeScript, MAX_SOURCE_BYTES, sourceFits, sourceUrl, type AgentDraft, type Source } from "./wizard-model";
+import { demoReply, example, makeScript, MAX_SOURCE_BYTES, sourceFits, sourceUrl, type AgentDraft, type Source } from "./wizard-model";
+import { useWizardStorage, type WizardMode } from "./use-wizard-storage";
+import type { Snapshot } from "./wizard-persistence";
+import { AgentTestChat } from "./agent-test-chat";
 import { wizardCopy } from "./wizard-copy";
 
 const input = "w-full min-w-0 rounded-xl border border-solid border-plumo-line bg-white px-3.5 py-3 font-[inherit] text-[16px] leading-6 text-plumo-ink placeholder:text-plumo-muted/65 focus:border-plumo-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue";
@@ -28,26 +31,30 @@ function Field({ title, children }: { title: string; children: ReactNode }) {
   return <label className={label}>{title}{children}</label>;
 }
 
-export function CreateAgentWizard() {
+export function CreateAgentWizard({ mode = "guest" }: { mode?: WizardMode }) {
   const { locale, t } = useLanguage();
   const c = wizardCopy[locale];
   const reduced = useReducedMotion();
-  const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<AgentDraft>({ ...emptyDraft });
-  const [sources, setSources] = useState<Source[]>([]);
-  const [kind, setKind] = useState<Kind>("website");
-  const [value, setValue] = useState("");
-  const [question, setQuestion] = useState("");
+  const storage = useWizardStorage(mode);
+  const { step, settings: draft, sources, channel, pricing, entry: { kind, value, question } } = storage.snapshot;
+  function part<K extends keyof Snapshot>(key: K): Dispatch<SetStateAction<Snapshot[K]>> {
+    return next => storage.change(previous => ({ ...previous, [key]: typeof next === "function" ? (next as (value: Snapshot[K]) => Snapshot[K])(previous[key]) : next }));
+  }
+  const setStep = part("step"), setDraft = part("settings"), setSources = part("sources"), setChannel = part("channel"), setPricing = part("pricing");
+  function entry<K extends keyof Snapshot["entry"]>(key: K, next: Snapshot["entry"][K]) {
+    storage.change(previous => ({ ...previous, entry: { ...previous.entry, [key]: next } }));
+  }
+  const setKind = (next: Kind) => entry("kind", next);
+  const setValue = (next: string) => entry("value", next);
+  const setQuestion = (next: string) => entry("question", next);
   const [error, setError] = useState("");
   const [reading, setReading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [handedOff, setHandedOff] = useState(false);
-  const [channel, setChannel] = useState(0);
   const [contact, setContact] = useState(false);
   const [mailReady, setMailReady] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
-  const [pricing, setPricing] = useState<PricingRequest | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const transcript = useRef<HTMLDivElement>(null);
   const initialStep = useRef(true);
@@ -56,13 +63,14 @@ export function CreateAgentWizard() {
   const faqs = sources.filter(source => source.kind === "faq");
 
   useEffect(() => {
+    if (!storage.ready || pricing) return;
     const params = new URLSearchParams(window.location.search);
     const choice = params.get("plan");
     const volume = Number(params.get("volume"));
     if (["start", "business", "custom", "demo"].includes(choice ?? "") && volume >= 1000 && volume <= 10000 && volume % 500 === 0) {
       setPricing({ choice: choice as PricingRequest["choice"], volume, billing: params.get("billing") === "quarter" ? "quarter" : "month", voice: params.get("voice") === "true" });
     }
-  }, []);
+  }, [storage.ready]);
 
   useEffect(() => {
     if (initialStep.current) { initialStep.current = false; return; }
@@ -80,10 +88,14 @@ export function CreateAgentWizard() {
   }
 
   function append(source: Source) {
-    if (!sourceFits(sources, source)) { setError(c.limitError); return false; }
-    setSources(previous => [...previous, source]);
-    setValue(""); setQuestion(""); setError(""); setDownloaded(false);
-    return true;
+    let accepted = false;
+    storage.change(previous => {
+      if (!sourceFits(previous.sources, source)) { setError(c.limitError); return previous; }
+      accepted = true;
+      return { ...previous, sources: [...previous.sources, source], entry: { ...previous.entry, value: "", question: "" } };
+    });
+    if (accepted) { setError(""); setDownloaded(false); }
+    return accepted;
   }
 
   function addSource() {
@@ -127,7 +139,7 @@ export function CreateAgentWizard() {
     finally { setReading(false); }
   }
 
-  function next(event: FormEvent) {
+  async function next(event: FormEvent) {
     event.preventDefault();
     setError("");
     if (reading) return;
@@ -146,6 +158,7 @@ export function CreateAgentWizard() {
       setMessages([]); setHandedOff(false); setChatInput("");
     }
     setStep(previous => Math.min(5, previous + 1));
+    await storage.flush();
   }
 
   function useExample() {
@@ -164,7 +177,7 @@ export function CreateAgentWizard() {
 
   function download() {
     const { logo: _logo, ...settings } = draft;
-    const config = { version: 1, mode: "scripted-demo", settings: { ...settings, ...{ greeting, goal: draft.goal || baseScript.goal, fallback: draft.fallback || baseScript.fallback } }, sources, requestedChannel: c.channels[channel], pricing };
+    const config = { version: 1, mode: "scripted-demo", settings: { ...settings, ...{ greeting, goal: draft.goal || baseScript.goal, fallback: draft.fallback || baseScript.fallback } }, sources, requestedChannel: c.channels[channel], pricing, wizardSnapshot: storage.snapshot };
     const url = URL.createObjectURL(new Blob([JSON.stringify(config, null, 2)], { type: "application/json" }));
     const a = document.createElement("a"); a.href = url; a.download = "plumo-agent-draft.json"; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000); setDownloaded(true);
@@ -183,14 +196,35 @@ export function CreateAgentWizard() {
     setMailReady(true);
   }
 
+  async function leave(href: string) {
+    if (await storage.flush()) window.location.assign(href);
+  }
+
+  const note = mode === "account" ? c.accountNote : c.guestNote;
+  const statusText = storage.status === "loading" ? c.loadingDraft : storage.status === "saving" ? c.savingDraft
+    : storage.status === "conflict" ? c.conflictDraft : storage.status === "expired" ? c.expiredDraft
+    : storage.status === "error" ? (storage.failure === "invalid_message" ? c.invalidDraft : c.failedDraft)
+    : storage.status === "dirty" ? c.unsavedDraft : mode === "account" ? c.savedDraft : c.savedGuest;
+
+  if (!storage.ready) return <main className="flex min-h-svh items-center justify-center bg-plumo-line/20 px-5 text-plumo-ink"><section className="max-w-lg rounded-3xl border border-solid border-plumo-line bg-white p-8 text-center"><h1 className="m-0 text-2xl font-medium">{c.loadingDraft}</h1><p className="mt-4 leading-6 text-plumo-muted" role="status">{statusText}</p>{storage.status !== "loading" && <div className="mt-5 flex flex-wrap justify-center gap-3"><button type="button" className={primary} onClick={() => mode === "unavailable" ? window.location.reload() : void storage.reload()}>{c.retryDraft}</button><Link href="/login?next=/create/wizard" className={secondary}>{c.signInSave}</Link></div>}</section></main>;
+
   return <div className="min-h-svh bg-plumo-line/20 text-plumo-ink">
     <header className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-3 px-5 py-5 md:px-10">
-      <Link href="/" className="text-[13px] text-plumo-muted hover:text-plumo-ink">← {c.home}</Link>
-      <Link href="/" aria-label={t.home} className="brand"><span className="brand-crop"><Image src="/images/plumo-logo.png" alt="" width={172} height={172} priority className="brand-image mix-blend-multiply" /></span></Link>
+      <Link href="/" onClick={event => { event.preventDefault(); void leave("/"); }} className="text-[13px] text-plumo-muted hover:text-plumo-ink">← {c.home}</Link>
+      <Link href="/" onClick={event => { event.preventDefault(); void leave("/"); }} aria-label={t.home} className="brand"><span className="brand-crop"><Image src="/images/plumo-logo.png" alt="" width={172} height={172} priority className="brand-image mix-blend-multiply" /></span></Link>
       <LanguageSwitch />
     </header>
     <main className="mx-auto max-w-[1120px] px-4 pb-10 pt-5 md:px-8 md:pt-8">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-[12px] text-plumo-muted"><span>{c.step} {step + 1} {c.of} 6 · {c.steps[step]}</span><span className="rounded-full border border-solid border-plumo-line bg-white px-3 py-1.5">{c.demoMode}</span></div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-solid border-plumo-line bg-white p-4 text-[13px]">
+        <p className={`m-0 leading-6 ${["error", "conflict", "expired"].includes(storage.status) ? "text-red-700" : "text-plumo-muted"}`} role="status">{statusText}</p>
+        <div className="flex flex-wrap gap-2">
+          {storage.status === "expired" && <button type="button" className={secondary} onClick={download}>{c.download}</button>}
+          {storage.status === "conflict" ? <><button type="button" className={secondary} onClick={download}>{c.download}</button><button type="button" className={secondary} onClick={() => void storage.reload()}>{c.loadServerDraft}</button></> : <button type="button" className={secondary} disabled={storage.status === "saving" || storage.finishing || storage.status === "expired"} onClick={() => void storage.flush()}>{c.saveDraft}</button>}
+          {mode === "guest" || storage.status === "expired" ? <Link href="/login?next=/create/wizard" className={secondary} onClick={event => { if (mode === "guest") { event.preventDefault(); void leave("/login?next=/create/wizard"); } }}>{c.signInSave}</Link> : <Link href="/dashboard" className={secondary} onClick={event => { event.preventDefault(); void leave("/dashboard"); }}>{c.workspace}</Link>}
+        </div>
+      </div>
+      {storage.guest && <div className="mb-5 rounded-2xl border border-solid border-plumo-line bg-plumo-soft p-5"><p className="mt-0 text-[14px] leading-6">{c.importGuestNote}</p><button type="button" className={secondary} onClick={() => void storage.importGuest()}>{c.importGuest}</button></div>}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-[12px] text-plumo-muted"><span>{c.step} {step + 1} {c.of} 6 · {c.steps[step]}</span><span className="rounded-full border border-solid border-plumo-line bg-white px-3 py-1.5">{mode === "account" ? c.accountMode : c.demoMode}</span></div>
       <motion.div key={step} initial={reduced ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className={`overflow-hidden rounded-[24px] border border-solid border-plumo-line bg-white ${step < 5 ? "grid lg:min-h-[600px] lg:grid-cols-2" : ""}`}>
         {step < 5 ? <>
           <form onSubmit={next} className="flex flex-col p-6 md:p-10">
@@ -199,11 +233,11 @@ export function CreateAgentWizard() {
             <div className="flex flex-col gap-5">
               {step === 0 && <>
                 <Field title={c.purpose}><select value={draft.purpose} onChange={e => update("purpose", e.target.value as AgentDraft["purpose"])} className={input}><option value="sales">{c.sales}</option><option value="support">{c.support}</option></select></Field>
-                <div className="flex flex-wrap gap-2" role="group" aria-label={c.alternatives}>{(["website", "instagram", "text", "file", "faq"] as const).map(tab => <button key={tab} type="button" disabled={reading} aria-pressed={kind === tab} onClick={() => { setKind(tab); setValue(""); setQuestion(""); setError(""); }} className={`cursor-pointer rounded-lg border border-solid px-3 py-2 font-[inherit] text-[12px] ${kind === tab ? "border-plumo-ink bg-plumo-ink text-white" : "border-plumo-line bg-white text-plumo-muted"}`}>{c[tab]}</button>)}</div>
+                <div className="flex flex-wrap gap-2" role="group" aria-label={c.alternatives}>{(["website", "instagram", "text", "file", "faq"] as const).map(tab => <button key={tab} type="button" disabled={reading || storage.finishing} aria-pressed={kind === tab} onClick={() => { setKind(tab); setValue(""); setQuestion(""); setError(""); }} className={`cursor-pointer rounded-lg border border-solid px-3 py-2 font-[inherit] text-[12px] ${kind === tab ? "border-plumo-ink bg-plumo-ink text-white" : "border-plumo-line bg-white text-plumo-muted"}`}>{c[tab]}</button>)}</div>
                 {(kind === "website" || kind === "instagram") && <><Field title={c.sourceLabel}><input value={value} onChange={e => setValue(e.target.value)} placeholder={kind === "instagram" ? "instagram.com/yourcompany" : c.sourcePlaceholder} inputMode="url" maxLength={2000} className={input} /></Field><p className="m-0 text-[12px] leading-relaxed text-plumo-muted">{c.sourceNote}</p></>}
                 {kind === "text" && <Field title={c.material}><textarea value={value} onChange={e => setValue(e.target.value)} rows={5} maxLength={50000} placeholder={c.materialPlaceholder} className={input} /></Field>}
                 {kind === "faq" && <><Field title={c.question}><input value={question} onChange={e => setQuestion(e.target.value)} maxLength={300} className={input} /></Field><Field title={c.answer}><textarea value={value} onChange={e => setValue(e.target.value)} rows={4} maxLength={5000} className={input} /></Field></>}
-                {kind === "file" ? <Field title={c.fileHint}><input type="file" accept=".txt,.md,text/plain,text/markdown" disabled={reading} onChange={e => { void readFile(e.target.files?.[0]); e.target.value = ""; }} className={`${input} file:mr-3 file:rounded-lg file:border-0 file:bg-plumo-soft file:px-3 file:py-2 file:text-plumo-blue`} /></Field> : <button type="button" onClick={addSource} className={secondary}>{c.add} <span aria-hidden="true">+</span></button>}
+                {kind === "file" ? <Field title={c.fileHint}><input type="file" accept=".txt,.md,text/plain,text/markdown" disabled={reading || storage.finishing} onChange={e => { void readFile(e.target.files?.[0]); e.target.value = ""; }} className={`${input} file:mr-3 file:rounded-lg file:border-0 file:bg-plumo-soft file:px-3 file:py-2 file:text-plumo-blue`} /></Field> : <button type="button" onClick={addSource} className={secondary}>{c.add} <span aria-hidden="true">+</span></button>}
                 {reading && <p role="status" className="m-0 text-[13px] text-plumo-muted">{c.loading}</p>}
                 {sources.length > 0 && <ul className="m-0 flex list-none flex-col gap-2 p-0">{sources.map(source => <li key={source.id} className="flex items-center justify-between gap-3 rounded-xl bg-plumo-line/25 px-3 py-2"><span className="min-w-0 truncate text-[12px]" title={source.title}>{source.title}</span><button type="button" aria-label={`${c.remove}: ${source.title}`} onClick={() => { setSources(previous => previous.filter(s => s.id !== source.id)); setDownloaded(false); }} className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-plumo-muted">×</button></li>)}</ul>}
               </>}
@@ -214,7 +248,7 @@ export function CreateAgentWizard() {
               </>}
               {step === 2 && <>
                 <div className="flex items-center gap-4"><Mark draft={draft} size={64} /><div className="min-w-0"><p className="m-0 text-[14px] font-medium">{c.logo}</p><p className="mb-0 mt-2 text-[12px] text-plumo-muted">{c.logoHint}</p></div></div>
-                <Field title={c.uploadLogo}><input type="file" accept="image/png,image/jpeg,image/webp" disabled={reading} onChange={e => { void readLogo(e.target.files?.[0]); e.target.value = ""; }} className={`${input} file:mr-2 file:border-0 file:bg-plumo-soft file:p-2 file:text-plumo-blue`} /></Field>
+                <Field title={c.uploadLogo}><input type="file" accept="image/png,image/jpeg,image/webp" disabled={reading || storage.finishing} onChange={e => { void readLogo(e.target.files?.[0]); e.target.value = ""; }} className={`${input} file:mr-2 file:border-0 file:bg-plumo-soft file:p-2 file:text-plumo-blue`} /></Field>
                 {draft.logo && <button type="button" onClick={() => { update("logo", ""); update("logoName", ""); }} className={`${secondary} self-start`}>{c.removeLogo}</button>}
                 <fieldset className="m-0 border-0 p-0"><legend className="mb-3 text-[13px]">{c.color}</legend><div className="flex flex-wrap gap-3">{["#2b55ff", "#111113", "#16806a", "#8056d9", "#ac4b32"].map(color => <button key={color} type="button" aria-label={color} aria-pressed={draft.color === color} onClick={() => update("color", color)} className="flex size-11 cursor-pointer items-center justify-center rounded-full border-0 text-[20px] text-white outline-offset-4 aria-pressed:outline aria-pressed:outline-2 aria-pressed:outline-plumo-ink" style={{ backgroundColor: color }}>{draft.color === color ? "✓" : ""}</button>)}</div></fieldset>
               </>}
@@ -227,12 +261,14 @@ export function CreateAgentWizard() {
                 <Field title={c.greeting}><textarea required value={draft.greeting} onChange={e => update("greeting", e.target.value)} rows={3} maxLength={1000} className={input} /></Field>
                 <Field title={c.goal}><textarea required value={draft.goal} onChange={e => update("goal", e.target.value)} rows={3} maxLength={1500} className={input} /></Field>
                 <Field title={c.fallback}><textarea required value={draft.fallback} onChange={e => update("fallback", e.target.value)} rows={3} maxLength={1000} className={input} /></Field>
+                <Field title={c.handoffRules}><textarea value={draft.handoffRules} onChange={e => update("handoffRules", e.target.value)} rows={3} maxLength={1500} placeholder={c.handoffPlaceholder} className={input} /></Field>
+                <p className="m-0 text-[12px] leading-relaxed text-plumo-muted">{c.publishNote}</p>
                 <p className="m-0 text-[12px] leading-relaxed text-plumo-muted">{c.scriptNote}</p>
               </>}
             </div>
             <p role="alert" className="mb-0 mt-4 text-[13px] leading-relaxed text-plumo-ink empty:hidden">{error}</p>
-            <div className="mt-auto flex gap-3 pt-7">{step > 0 && <button type="button" disabled={reading} onClick={() => { setError(""); setStep(step - 1); }} className={secondary}>← {c.back}</button>}<button type="submit" disabled={reading} className={`${primary} flex-1`}>{step === 4 ? c.test : c.next}<span aria-hidden="true">→</span></button></div>
-            {step === 0 && <><div className="my-5 h-px bg-plumo-line" /><button type="button" disabled={reading} onClick={useExample} className={secondary}>{c.sample}</button><p className="mb-0 mt-3 text-center text-[11px] text-plumo-muted">{c.sampleNote}</p></>}
+            <div className="mt-auto flex gap-3 pt-7">{step > 0 && <button type="button" disabled={reading || storage.finishing} onClick={() => { setError(""); setStep(step - 1); }} className={secondary}>← {c.back}</button>}<button type="submit" disabled={reading || storage.finishing} className={`${primary} flex-1`}>{step === 4 ? c.test : c.next}<span aria-hidden="true">→</span></button></div>
+            {step === 0 && <><div className="my-5 h-px bg-plumo-line" /><button type="button" disabled={reading || storage.finishing} onClick={useExample} className={secondary}>{c.sample}</button><p className="mb-0 mt-3 text-center text-[11px] text-plumo-muted">{c.sampleNote}</p></>}
           </form>
           <aside aria-label={c.preview} className="relative flex min-h-[360px] items-center justify-center overflow-hidden border-0 border-t border-solid border-plumo-line bg-plumo-line/15 p-6 md:p-10 lg:border-l lg:border-t-0">
             <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-40" style={{ backgroundImage: "radial-gradient(var(--muted) 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
@@ -250,7 +286,7 @@ export function CreateAgentWizard() {
         </> : <div className="p-5 md:p-8">
           <div className="mb-7 flex flex-wrap items-start justify-between gap-4"><div><h1 ref={heading} tabIndex={-1} className="m-0 text-[28px] font-medium tracking-tight outline-none">{c.titles[5]}</h1><p className="mb-0 mt-3 max-w-[550px] text-[14px] leading-relaxed text-plumo-muted">{c.intros[5]}</p></div><button type="button" onClick={() => setStep(0)} className={secondary}>{c.edit}</button></div>
           <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-            <div className="min-w-0 overflow-hidden rounded-[20px] border border-solid border-plumo-line">
+            {mode === "account" ? <AgentTestChat prepare={storage.complete} /> : <div className="min-w-0 overflow-hidden rounded-[20px] border border-solid border-plumo-line">
               <div className="flex items-center gap-3 border-0 border-b border-solid border-plumo-line p-4"><Mark draft={draft} size={40} /><div className="min-w-0 flex-1"><p className="m-0 truncate text-[15px] font-semibold">{draft.name} · {draft.company}</p><p className="mb-0 mt-1 text-[11px] text-plumo-muted">{c.demoMode}</p></div><button type="button" onClick={() => { setMessages([]); setHandedOff(false); setChatInput(""); }} className="cursor-pointer border-0 bg-transparent p-2 font-[inherit] text-[11px] text-plumo-muted underline">{c.restart}</button></div>
               <div ref={transcript} role="log" aria-label={c.test} aria-live="polite" className="flex h-[340px] flex-col gap-4 overflow-y-auto bg-plumo-line/10 p-4">
                 <p className="m-0 max-w-[90%] self-start rounded-2xl rounded-tl-sm border border-solid border-plumo-line bg-white px-4 py-3 text-[14px] leading-relaxed">{greeting}</p>
@@ -260,19 +296,21 @@ export function CreateAgentWizard() {
                 {handedOff ? <p role="status" className="m-0 rounded-xl bg-plumo-soft p-3 text-[13px] leading-relaxed text-plumo-ink">{c.paused}</p> : <form onSubmit={e => { e.preventDefault(); send(chatInput); }} className="flex gap-2"><input aria-label={c.placeholder} value={chatInput} onChange={e => setChatInput(e.target.value)} maxLength={1000} placeholder={c.placeholder} className={input} /><button type="submit" disabled={!chatInput.trim()} className={primary} aria-label={c.send}>↑</button></form>}
               </div>
             </div>
+            }
             <aside className="flex min-w-0 flex-col gap-5 rounded-[20px] bg-plumo-line/20 p-5">
               <div><span className="text-[11px] text-plumo-muted">{c.ready}</span><h2 className="mb-0 mt-3 break-words text-[22px] font-medium">{draft.company}</h2><p className="mb-0 mt-3 text-[13px] leading-relaxed text-plumo-muted">{draft.purpose === "sales" ? c.sales : c.support} · {c.knowledge}: {sources.length}</p></div>
               <Field title={c.channel}><select value={channel} onChange={e => { setChannel(Number(e.target.value)); setDownloaded(false); }} className={input}>{c.channels.map((name, index) => <option key={name} value={index}>{name}</option>)}</select></Field>
               <p className="m-0 text-[12px] leading-relaxed text-plumo-muted">{c.launchHint}</p>
+              {mode === "account" && <><button type="button" onClick={() => void storage.complete()} disabled={storage.finishing || storage.status === "conflict" || storage.status === "expired" || reading} className={primary}>{storage.finishing ? c.savingDraft : storage.completed ? c.completedDraft : c.completeDraft}</button>{storage.completed && <p className="m-0 text-[13px] leading-relaxed text-plumo-muted" role="status">{storage.knowledgeCount ? c.completionNote : c.noPublishedMaterials}</p>}</>}
               <button type="button" onClick={() => { setMailReady(false); setContact(true); }} aria-haspopup="dialog" className={primary}>{c.discuss} →</button>
               <button type="button" onClick={download} className={secondary}>{downloaded ? c.downloaded : c.download}</button>
-              <p className="m-0 text-[11px] leading-relaxed text-plumo-muted">{c.localNote}</p>
+              <p className="m-0 text-[11px] leading-relaxed text-plumo-muted">{note}</p>
             </aside>
           </div>
         </div>}
       </motion.div>
       <nav aria-label={c.progress} className="mx-auto mt-6 flex max-w-[600px] justify-center gap-2">{c.steps.map((name, index) => <div key={name} aria-current={step === index ? "step" : undefined} className="flex min-w-0 flex-1 flex-col items-center gap-2"><span className={`h-1.5 w-full rounded-full ${index <= step ? "bg-plumo-ink" : "bg-plumo-line"}`} /><span className={`hidden text-[11px] sm:block ${index === step ? "text-plumo-ink" : "text-plumo-muted"}`}>{name}</span></div>)}</nav>
-      {step < 5 && <p className="mb-0 mt-5 text-center text-[11px] leading-relaxed text-plumo-muted">{c.localNote}</p>}
+      {step < 5 && <p className="mb-0 mt-5 text-center text-[11px] leading-relaxed text-plumo-muted">{note}</p>}
     </main>
     {contact && <DemoChoice step="expert" onClose={() => setContact(false)} onBack={() => setContact(false)} onSelect={() => {}} backLabel={locale === "ru" ? "← К тестовому чату" : "← Back to the test"}
       expertForm={<DemoContactForm onSubmit={prepareMail} selection={pricing} mailReady={mailReady} defaults={{ company: draft.company, message: `${c.channel} ${c.channels[channel]}` }} formCopy={{ name: c.contactName, business: c.company, email: c.email, message: c.message, send: c.prepare, mailNote: c.mailNote, mailReady: c.mailReady }} />} />}

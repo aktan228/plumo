@@ -471,6 +471,7 @@ class Operator:
     display_name: str
     active: bool
     created_at: datetime
+    email_verified: bool = True
 
 
 @dataclass(slots=True)
@@ -485,7 +486,7 @@ class OperatorSession:
 class ChannelConnection:
     """One Telegram bot or Instagram account linked to one business.
 
-    The secret is not here: `credential_ref` names a server-side credential.
+    Plaintext is never stored here: an encrypted token or a legacy server credential reference is used.
     """
 
     id: UUID
@@ -500,6 +501,7 @@ class ChannelConnection:
     version: int
     created_at: datetime
     updated_at: datetime
+    encrypted_token: str | None = field(default=None, repr=False)
     auth_method: str = "server_credential"
     webhook_nonce: str | None = None
     last_check_at: datetime | None = None
