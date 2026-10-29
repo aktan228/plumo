@@ -5,12 +5,17 @@ back never reaches the manager. The send runs outside any transaction. `notified
 set once the provider accepted the message: a job taken again (lease ran out, worker
 restarted) finds it and sends nothing. Only a crash between the provider's answer and
 that commit can notify twice; no transport can close that window.
+
+The chat is the business's confirmed recipient, read when the job runs: a recipient
+changed or disconnected while the job waited gets nothing, and a business without one
+is told so (`recipient_not_configured`) instead of falling back to a shared chat.
 """
 
 import logging
 from collections.abc import Callable
 
 from app.application.services.delivery_service import _backoff
+from app.application.services.manager_recipients import ManagerRecipients
 from app.domain.errors import ProviderTransientError, ProviderUnavailable
 from app.domain.models import Job, utcnow
 from app.domain.ports import HumanHandoffProvider
@@ -29,6 +34,7 @@ class HandoffNotifier:
         async with self.session_factory() as session:
             handoff = await HandoffRepository(session).get(job.handoff_id) if job.handoff_id else None
             conversation = await ConversationRepository(session).get(handoff.conversation_id) if handoff else None
+            chat_id = await ManagerRecipients(session).chat_for(job.business_id) if job.business_id else None
         if handoff is None or conversation is None:
             await self._close(job, worker_id, failed="handoff_not_found")
             return
@@ -40,24 +46,30 @@ class HandoffNotifier:
         if handoff.notified_at is not None:
             await self._close(job, worker_id)
             return
+        if chat_id is None:
+            logger.warning("handoff_notify_no_recipient", extra={"handoff_id": str(handoff.id)})
+            await self._close(job, worker_id, failed="recipient_not_configured")
+            return
         try:
-            await self.provider.notify(handoff)
+            await self.provider.notify(handoff, chat_id)
         except ProviderTransientError as exc:
             await self._retry_or_fail(job, worker_id, str(exc), handoff.id)
             return
         except ProviderUnavailable as exc:
-            # Wrong chat id, revoked token: another attempt will not help, someone has to look.
+            # Chat gone, bot blocked, revoked token: another attempt will not help, someone has to look.
             logger.error("handoff_notify_rejected", extra={"handoff_id": str(handoff.id), "error": str(exc)[:200]})
-            await self._close(job, worker_id, failed="notify_rejected")
+            await self._close(job, worker_id, failed="notify_rejected", recipient=(chat_id, "delivery_rejected"))
             return
         except Exception as exc:
             logger.exception("handoff_notify_failed", extra={"handoff_id": str(handoff.id)})
             await self._retry_or_fail(job, worker_id, type(exc).__name__, handoff.id)
             return
-        await self._close(job, worker_id, notified=handoff.id)
+        await self._close(job, worker_id, notified=handoff.id, recipient=(chat_id, None))
 
-    async def _close(self, job: Job, worker_id: str, *, failed: str | None = None, notified=None) -> None:
+    async def _close(self, job: Job, worker_id: str, *, failed: str | None = None, notified=None, recipient=None) -> None:
         async with self.session_factory() as session:
+            if recipient is not None:
+                await ManagerRecipients(session).mark(job.business_id, *recipient)
             if notified is not None:
                 repo = HandoffRepository(session)
                 current = await repo.get(notified)

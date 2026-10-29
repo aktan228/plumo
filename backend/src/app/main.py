@@ -13,8 +13,21 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.deps import require_api_key
-from app.api.routes import auth, customers, dialogs, integrations, messages, onboarding, operations, readiness, telephony, testing, voice, webhooks
-from app.application.services.handoff_service import drain_notifications
+from app.api.routes import (
+    auth,
+    customers,
+    dialogs,
+    integrations,
+    manager_notifications,
+    messages,
+    onboarding,
+    operations,
+    readiness,
+    telephony,
+    testing,
+    voice,
+    webhooks,
+)
 from app.config import Settings, get_settings
 from app.container import Runtime, build_runtime
 from app.correlation import correlation_id, request_id
@@ -58,7 +71,6 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
                     worker_task.cancel()
                     with suppress(asyncio.CancelledError):
                         await worker_task
-        await drain_notifications()
         await app.state.runtime.providers.aclose()
         close = getattr(app.state.runtime.handoff_provider, "aclose", None)
         if close is not None:
@@ -142,6 +154,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     app.include_router(operations.router, prefix="/api/v1", dependencies=protected)
     app.include_router(dialogs.router, prefix="/api/v1", dependencies=protected)
     app.include_router(integrations.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(manager_notifications.router, prefix="/api/v1", dependencies=protected)
     # Provider callbacks authenticate themselves (secret header, signature).
     app.include_router(webhooks.router, prefix="/api/v1")
     app.include_router(telephony.router, prefix="/api/v1")

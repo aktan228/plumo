@@ -5,8 +5,8 @@
 ## Этап 1 — разработка (≈ $5–10)
 
 - [ ] **OpenRouter** — ключ и баланс $5–10. В `.env`: `AI_MODE=production`, `SMALL_MODEL_PROVIDER=none`, `BIG_MODEL_PROVIDER=openrouter_big`, `OPENROUTER_API_KEY=…`, модели — как в `.env.example` ([MODELS.md](MODELS.md)). Проверка: `python -m app.ping_llm --repeat 3`.
-- [ ] **Telegram-бот для менеджеров** — в Telegram @BotFather → `/newbot` → токен. Создать группу «Plumo менеджеры», добавить туда бота, написать любое сообщение, открыть `https://api.telegram.org/bot<ТОКЕН>/getUpdates` и взять `chat.id` (число с минусом).
-      В `.env`: `HANDOFF_PROVIDER=telegram`, `TELEGRAM_BOT_TOKEN=…`, `TELEGRAM_MANAGER_CHAT_ID=-100…`.
+- [ ] **Служебный Telegram-бот уведомлений** — в Telegram @BotFather → `/newbot` → токен. В `.env`: `HANDOFF_PROVIDER=telegram`, `TELEGRAM_BOT_TOKEN=…`; затем `python -m app.manager_bot` (нужны `PUBLIC_BASE_URL`, `CHANNEL_SECRET_KEY`) и напечатанное имя — в `TELEGRAM_BOT_USERNAME`.
+      Менеджер каждого бизнеса привязывается в кабинете: «Интеграции» → «Уведомления менеджеру» ([../../docs/manager-notifications.md](../../docs/manager-notifications.md)). Общего чата нет.
 - [ ] **Тестовый Telegram-бот бизнеса** — отдельный бот через @BotFather, подключается в кабинете ([../../docs/dashboard-channels.md](../../docs/dashboard-channels.md), раздел 4).
 - [ ] **Временный публичный HTTPS** — `cloudflared` или ngrok, чтобы Telegram и Meta доставляли webhook на локальный стенд.
 

@@ -283,29 +283,29 @@ async def test_telegram_card_and_failures_are_raised_for_the_job_to_retry() -> N
         sent.append(json.loads(request.content))
         return httpx.Response(200, json={"ok": True})
 
-    provider = TelegramHandoffProvider(token="t", chat_id="42", transport=httpx.MockTransport(ok))
-    await provider.notify(handoff)
+    provider = TelegramHandoffProvider(token="t", transport=httpx.MockTransport(ok))
+    await provider.notify(handoff, "42")
     assert sent[0]["chat_id"] == "42"
 
     # The notification job retries what may work next time and stops at what will not.
     from app.domain.errors import ProviderTransientError, ProviderUnavailable
 
     def failing(status: int) -> TelegramHandoffProvider:
-        return TelegramHandoffProvider(token="t", chat_id="42", transport=httpx.MockTransport(lambda r: httpx.Response(status)))
+        return TelegramHandoffProvider(token="t", transport=httpx.MockTransport(lambda r: httpx.Response(status)))
 
     for status in (429, 500, 502):
         with pytest.raises(ProviderTransientError):
-            await failing(status).notify(handoff)
+            await failing(status).notify(handoff, "42")
     for status in (400, 401, 403):
         with pytest.raises(ProviderUnavailable) as refused:
-            await failing(status).notify(handoff)
+            await failing(status).notify(handoff, "42")
         assert not isinstance(refused.value, ProviderTransientError)
 
     def unreachable(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("no route", request=request)
 
     with pytest.raises(ProviderTransientError):
-        await TelegramHandoffProvider(token="t", chat_id="42", transport=httpx.MockTransport(unreachable)).notify(handoff)
+        await TelegramHandoffProvider(token="t", transport=httpx.MockTransport(unreachable)).notify(handoff, "42")
 
 
 async def test_dialled_number_picks_its_business() -> None:

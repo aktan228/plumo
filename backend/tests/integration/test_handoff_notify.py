@@ -11,7 +11,7 @@ from app.domain.enums import JobKind
 from app.domain.errors import ProviderTransientError, ProviderUnavailable
 from app.domain.models import InboundMessage
 from app.infrastructure.database.channel_repositories import JobQueue
-from app.infrastructure.database.models import HandoffRequestRow, JobRow
+from app.infrastructure.database.models import HandoffRequestRow, JobRow, ManagerRecipientRow
 from app.seed import DEMO_BUSINESS_ID, seed
 from app.worker import Worker
 
@@ -21,10 +21,12 @@ class Recorder:
 
     def __init__(self, script=()):
         self.calls = []
+        self.chats = []
         self.script = list(script)
 
-    async def notify(self, handoff):
+    async def notify(self, handoff, chat_id):
         self.calls.append(handoff.id)
+        self.chats.append(chat_id)
         step = self.script.pop(0) if self.script else None
         if step is not None:
             raise step
@@ -32,6 +34,8 @@ class Recorder:
 
 async def _ask_for_a_manager(session, runtime, user="+996700555201"):
     await seed(session)
+    # The demo business has a confirmed manager chat; tests without one are in test_manager_recipients.py.
+    session.add(ManagerRecipientRow(business_id=DEMO_BUSINESS_ID, chat_id="4242", chat_label="Менеджер"))
     await session.commit()
     agent = build_agent(session, runtime)
     return await agent.process_message(InboundMessage(channel="whatsapp", external_user_id=user, text="Позовите менеджера"))
@@ -57,7 +61,7 @@ async def test_notification_goes_out_once_after_the_commit(session, runtime):
     await session.commit()
 
     assert await Worker(runtime, worker_id="t1").drain() == 1
-    assert len(recorder.calls) == 1
+    assert len(recorder.calls) == 1 and recorder.chats == ["4242"]
     session.expire_all()
     handoff = await session.scalar(select(HandoffRequestRow))
     job = (await _notify_jobs(session))[0]

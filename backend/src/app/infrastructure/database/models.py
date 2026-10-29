@@ -269,6 +269,32 @@ class OperatorRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ManagerRecipientRow(Base):
+    """Telegram chat that gets the business's handoff notifications through the service bot.
+
+    `chat_id` is the confirmed recipient. A chat that sent a binding code waits in
+    `candidate_*` until an operator of the same business confirms it; until then the
+    previous recipient, if any, keeps getting notifications.
+    """
+
+    __tablename__ = "manager_recipients"
+
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
+    code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    candidate_chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    candidate_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    candidate_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    chat_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("operators.id", ondelete="SET NULL"), nullable=True)
+    attention: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    attention_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
+
+
 class AuthEmailTokenRow(Base):
     __tablename__ = "auth_email_tokens"
     __table_args__ = (

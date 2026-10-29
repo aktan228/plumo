@@ -60,3 +60,11 @@ test('readiness is read-only and Telegram verification uses scoped connection ID
   assert.equal(isAllowedRoute('GET', `integrations/${ident}/verification`), false);
   assert.equal(isAllowedRoute('POST', 'integrations/other-business/verification'), false);
 });
+
+test('manager notifications open only their own actions, and never the service bot webhook', () => {
+  assert.equal(isAllowedRoute('GET', 'manager-notifications'), true);
+  for (const action of ['link', 'confirm', 'disconnect']) assert.equal(isAllowedRoute('POST', `manager-notifications/${action}`), true);
+  assert.equal(isAllowedRoute('POST', 'manager-notifications'), false);
+  assert.equal(isAllowedRoute('GET', 'manager-notifications/link'), false);
+  assert.equal(isAllowedRoute('POST', 'webhooks/telegram-manager'), false);
+});

@@ -19,6 +19,7 @@ import { TelegramSetup } from "./telegram-setup";
 import { ChannelSetup } from "./channel-setup";
 import { WhatsAppSetup } from "./whatsapp-setup";
 import { initialWhatsAppDraft } from "./whatsapp-setup-model";
+import { ManagerNotifications } from "./manager-notifications";
 
 const copy = {
   ru: {
@@ -193,6 +194,7 @@ export function Integrations({ onDialogues, onStateChange }: { onDialogues: () =
             </article>
             {channels.map(item => renderCard(item))}
           </div>
+          <ManagerNotifications />
           <div className="mt-8 flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-solid border-plumo-line bg-white p-6"><div className="max-w-[650px]"><h2 className="m-0 text-sm font-medium">{c.help}</h2><p className="mb-0 mt-2 text-sm leading-6 text-plumo-muted">{c.helpText}</p></div><button type="button" className={secondary} onClick={onDialogues}><PlumoIcon icon={Chatting01Icon} size={17} />{c.dialogues}</button></div>
         </>}
     </div>

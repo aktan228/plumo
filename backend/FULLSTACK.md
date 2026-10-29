@@ -64,7 +64,7 @@ python -m app.seed && uvicorn app.main:app --reload
 | `OPENROUTER_BIG_MODEL` | модель | `anthropic/claude-haiku-5.5` |
 | `OPENROUTER_API_KEY` | ключ OpenRouter, если модели через него | `sk-or-v1-…` |
 | `HANDOFF_PROVIDER` | `telegram` — карточка менеджеру в Telegram | `telegram` |
-| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_MANAGER_CHAT_ID` | бот уведомлений менеджерам (не клиентский бот) | `123:ABC…` / `-100…` |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_BOT_USERNAME` | служебный бот уведомлений менеджерам (не клиентский бот); чат менеджера каждый бизнес привязывает в кабинете, [подробно](../docs/manager-notifications.md) | `123:ABC…` / `plumo_alerts_bot` |
 | `ELEVENLABS_LLM_TOKEN` | секрет, с которым ElevenLabs ходит к нам | случайная строка |
 | `ELEVENLABS_WEBHOOK_SECRET` | HMAC post-call вебхука, берётся в ElevenLabs | `wsec_…` |
 | `VOICE_USD_PER_MINUTE` | цена минуты по тарифу ElevenLabs, для метрик | `0.08` |

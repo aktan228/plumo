@@ -38,6 +38,20 @@ export type ChannelIntegration = {
 };
 export type IntegrationsResponse = { channels: ChannelIntegration[]; ai_mode: string };
 
+export type ManagerStatus = "not_configured" | "waiting_code" | "awaiting_confirmation" | "ready" | "needs_attention";
+export type ManagerChat = { label: string; at: string | null };
+export type ManagerNotifications = {
+  status: ManagerStatus;
+  recipient: ManagerChat | null;
+  candidate: ManagerChat | null;
+  attention: string | null;
+  code_expires_at: string | null;
+  bot_username: string | null;
+  service_bot_configured: boolean;
+};
+export type ManagerLink = ManagerNotifications & { command: string; link: string | null };
+export type ManagerConfirm = ManagerNotifications & { control_delivery: "sent" | "failed" | "rejected" };
+
 export type DialogMode = "ai" | "waiting" | "human";
 export type DeliveryStatus = "queued" | "sending" | "sent" | "failed" | "unknown" | "cancelled";
 export type Delivery = { id: string; status: DeliveryStatus; attempts: number; error_code: string | null; sent_at: string | null; updated_at: string };

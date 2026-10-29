@@ -1,8 +1,10 @@
 """Telegram notification to the manager when a dialog needs a human.
 
-Runs in the worker from a `notify_handoff` job, after the handoff is committed. A failure
-is raised so the job retries: ProviderTransientError for a network error, 429 or 5xx,
-ProviderUnavailable for any other refusal (wrong chat id, revoked token).
+Runs in the worker from a `notify_handoff` job, after the handoff is committed. The chat
+is the business's confirmed recipient (`manager_recipients`), passed in by the caller; this
+class knows only the service bot's token. A failure is raised so the job retries:
+ProviderTransientError for a network error, 429 or 5xx, ProviderUnavailable for any other
+refusal (chat not found, bot blocked by the manager, revoked token).
 """
 
 import html
@@ -33,32 +35,33 @@ class TelegramHandoffProvider:
         self,
         *,
         token: str | None = None,
-        chat_id: str | None = None,
         dashboard_url: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.token = (token if token is not None else os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
-        self.chat_id = (chat_id if chat_id is not None else os.getenv("TELEGRAM_MANAGER_CHAT_ID", "")).strip()
         self.dashboard_url = (dashboard_url or os.getenv("DASHBOARD_URL", "")).rstrip("/")
-        if not self.token or not self.chat_id:
-            raise ProviderUnavailable("TELEGRAM_BOT_TOKEN and TELEGRAM_MANAGER_CHAT_ID are required")
+        if not self.token:
+            raise ProviderUnavailable("TELEGRAM_BOT_TOKEN of the service bot is required")
         self._client = httpx.AsyncClient(timeout=10.0, transport=transport)
 
-    async def notify(self, handoff: HandoffRequest) -> None:
+    async def notify(self, handoff: HandoffRequest, chat_id: str) -> None:
+        await self._send(chat_id, render(handoff, self.dashboard_url), "HTML", str(handoff.id))
+
+    async def send_text(self, chat_id: str, text: str) -> None:
+        await self._send(chat_id, text, None, "")
+
+    async def _send(self, chat_id: str, text: str, parse_mode: str | None, handoff_id: str) -> None:
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
-        body = {
-            "chat_id": self.chat_id,
-            "text": render(handoff, self.dashboard_url),
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        }
+        body: dict = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
+        if parse_mode:
+            body["parse_mode"] = parse_mode
         try:
             response = await self._client.post(url, json=body)
         except httpx.HTTPError as exc:
-            logger.warning("telegram_unreachable", extra={"handoff_id": str(handoff.id)})
+            logger.warning("telegram_unreachable", extra={"handoff_id": handoff_id})
             raise ProviderTransientError("Telegram is unreachable") from exc
         if response.status_code >= 400:
-            logger.warning("telegram_notify_failed", extra={"status": response.status_code, "handoff_id": str(handoff.id)})
+            logger.warning("telegram_notify_failed", extra={"status": response.status_code, "handoff_id": handoff_id})
             if response.status_code == 429 or response.status_code >= 500:
                 raise ProviderTransientError(f"Telegram answered {response.status_code}")
             raise ProviderUnavailable(f"Telegram refused the notification: {response.status_code}")
