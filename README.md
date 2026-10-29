@@ -153,12 +153,14 @@ Compose поднимает PostgreSQL, API и worker; миграции прим�
 
 ## Проверки
 
+Полный список команд с ожидаемым результатом, проверка миграций на пустой БД и различие mock и live режима: [docs/dev-checks.md](docs/dev-checks.md).
+
 Frontend, из `frontend`; для прямого запуска тестов с импортом TypeScript нужен Node.js 22.18+ согласно frontend-документации:
 
 ```powershell
 npm run typecheck
 npm run build
-node --test tests/*.test.mjs
+npm test
 ```
 
 Backend, из `backend` после `setup`:

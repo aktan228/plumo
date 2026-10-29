@@ -38,6 +38,7 @@ from app.main import create_app
 from app.seed import seed
 from app.worker import Worker
 from channel_stand import APP_SECRET, IG_TOKEN, TG_TOKEN, FakeProviders, Stand
+from database_guard import guard_test_database
 
 # A developer's backend/.env may describe a live stand (APP_ENV=stand, MANAGER_PAUSE_HOURS=0).
 # Tests run against the defaults the code documents, whatever that file says.
@@ -75,6 +76,7 @@ async def _ensure_database() -> None:
 
 @pytest.fixture
 async def engine() -> AsyncIterator[AsyncEngine]:
+    guard_test_database(test_database_url(), Settings().database_url)
     await _ensure_database()
     db = create_engine(test_database_url(), null_pool=True)
     async with db.begin() as connection:
