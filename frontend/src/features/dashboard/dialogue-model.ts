@@ -137,3 +137,48 @@ export function unsupportedText(kind: string, locale: Locale): string {
   const name = attachmentNames[locale][kind] ?? kind;
   return locale === "ru" ? `Вложение: ${name} — в этой версии не поддерживается` : `Attachment: ${name} — not supported in this version`;
 }
+
+const conversationId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The dialog a notification link points at (`/dashboard?conversation=<id>`), or null for anything else. */
+export function linkedConversation(value: string | string[] | null | undefined): string | null {
+  const id = (Array.isArray(value) ? value[0] : value ?? "").trim().toLowerCase();
+  return conversationId.test(id) ? id : null;
+}
+
+/** Where the dashboard sends an anonymous visitor: sign in, then back to the same dialog. */
+export function dashboardLoginPath(conversation: string | null): string {
+  const target = conversation ? `/dashboard?conversation=${conversation}` : "/dashboard";
+  return `/login?next=${encodeURIComponent(target)}`;
+}
+
+const notificationTexts: Record<Locale, Record<string, string>> = {
+  ru: {
+    queued: "Уведомление менеджеру в очереди.",
+    sending: "Отправляем уведомление менеджеру…",
+    sent: "Менеджер уведомлён в Telegram.",
+    failed: "Уведомление менеджеру не отправлено.",
+    unknown: "Неизвестно, дошло ли уведомление: Telegram не ответил. Уточните у менеджера.",
+    cancelled: "Внешнее уведомление не настроено: менеджер видит передачу только в кабинете.",
+  },
+  en: {
+    queued: "Manager notification is queued.",
+    sending: "Sending the manager notification…",
+    sent: "The manager was notified in Telegram.",
+    failed: "The manager notification was not sent.",
+    unknown: "Unknown whether the notification arrived: Telegram did not answer. Check with the manager.",
+    cancelled: "External notification is not set up: the manager sees the handoff only in the dashboard.",
+  },
+};
+
+/** What the dashboard says about the manager notification. "Notified" only after Telegram accepted it. */
+export function notificationText(status: string | null | undefined, locale: Locale): string | null {
+  return status ? notificationTexts[locale][status] ?? null : null;
+}
+
+export function notificationTone(status: string | null | undefined): "ok" | "warn" | "error" | "idle" {
+  if (status === "sent") return "ok";
+  if (status === "failed" || status === "unknown") return "error";
+  if (status === "cancelled") return "warn";
+  return "idle";
+}

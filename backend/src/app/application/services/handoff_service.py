@@ -3,7 +3,7 @@
 import logging
 from uuid import uuid4
 
-from app.domain.enums import HandoffPriority, HandoffStatus, JobKind
+from app.domain.enums import HandoffPriority, HandoffStatus, JobKind, OutboundStatus
 from app.domain.errors import HandoffNotFound, InvalidState
 from app.domain.events import HANDOFF_REQUESTED, DomainEvent
 from app.domain.models import (
@@ -154,6 +154,8 @@ class HandoffService:
             handoff_id=handoff.id,
             max_attempts=6,
         )
+        handoff.notify_status = OutboundStatus.queued
+        await self.handoffs.save(handoff)
 
     async def list_requests(self, status: str | None, limit: int = 50) -> list[HandoffRequest]:
         return await self.handoffs.list_requests(status, limit)

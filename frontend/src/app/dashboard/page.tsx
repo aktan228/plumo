@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DashboardShell } from "@/features/dashboard/dashboard-shell";
+import { dashboardLoginPath, linkedConversation } from "@/features/dashboard/dialogue-model";
 import { currentSession } from "@/lib/server/backend";
 
 export const metadata: Metadata = {
@@ -12,9 +13,11 @@ export const metadata: Metadata = {
 // Real customer messages: the page is rendered only for a session the backend accepts.
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  // A manager's notification links to one dialog; it survives the sign-in. Another business's id answers 404 later.
+  const conversation = linkedConversation((await searchParams).conversation);
   const check = await currentSession();
-  if (check.state === "anonymous") redirect("/login?next=/dashboard");
+  if (check.state === "anonymous") redirect(dashboardLoginPath(conversation));
   if (check.state === "unavailable") {
     return <main className="flex min-h-svh items-center justify-center bg-plumo-line/15 px-4 text-plumo-ink">
       <div className="max-w-md rounded-2xl border border-solid border-plumo-line bg-white p-8 text-center">
@@ -24,5 +27,5 @@ export default async function DashboardPage() {
       </div>
     </main>;
   }
-  return <DashboardShell session={check.session} />;
+  return <DashboardShell session={check.session} conversation={conversation} />;
 }

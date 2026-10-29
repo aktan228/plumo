@@ -47,11 +47,11 @@ const actions: { ru: string; en: string; icon: DashboardIconName }[] = [
 ];
 const controlClass = "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-1 text-plumo-muted transition-colors hover:bg-plumo-line/65 hover:text-plumo-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue";
 
-export function DashboardShell({ session }: { session: Session }) {
+export function DashboardShell({ session, conversation = null }: { session: Session; conversation?: string | null }) {
   const { locale, t } = useLanguage();
   const [collapsed, setCollapsed] = useState(false);
   const [view, setView] = useState<View>("chats");
-  const [layout, setLayout] = useState<"kanban" | "list">("kanban");
+  const [layout, setLayout] = useState<"kanban" | "list">(conversation ? "list" : "kanban");
   const [soon, setSoon] = useState(false);
   const [integrations, setIntegrations] = useState<IntegrationsResponse | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -182,7 +182,7 @@ export function DashboardShell({ session }: { session: Session }) {
         <div className={view === "chats" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
           {view === "chats" && <ReadinessPanel onTesting={() => navigate("testing")} onIntegrations={() => navigate("integrations")} />}
           <div className={layout === "kanban" ? "min-h-0 flex-1" : "hidden"}><ChatBoard onSoon={() => setSoon(true)} /></div>
-          <div className={layout === "list" ? "min-h-0 flex-1" : "hidden"}><Dialogues active={view === "chats" && layout === "list"} /></div>
+          <div className={layout === "list" ? "min-h-0 flex-1" : "hidden"}><Dialogues active={view === "chats" && layout === "list"} initialId={conversation} /></div>
         </div>
         {view === "testing" && <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6"><div className="mx-auto max-w-[900px]"><AgentTestChat /></div></div>}
         {view !== "integrations" && view !== "chats" && view !== "testing" && <div className="flex flex-1 items-center justify-center text-base text-plumo-muted">soon</div>}

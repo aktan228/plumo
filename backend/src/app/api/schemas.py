@@ -225,6 +225,13 @@ class HandoffOut(BaseModel):
     status: str
     created_at: DateTime
     updated_at: DateTime
+    notify_status: str | None = Field(
+        default=None,
+        description="Уведомление менеджеру: queued/sending/sent/failed/unknown/cancelled. sent — Telegram принял, не «прочитано».",
+    )
+    notify_error: str | None = None
+    notify_attempted_at: DateTime | None = None
+    notified_at: DateTime | None = None
 
 
 class KnowledgeIn(BaseModel):

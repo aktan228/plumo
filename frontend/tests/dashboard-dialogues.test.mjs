@@ -58,3 +58,27 @@ test('statuses say what is known: accepted by the channel is not read by the cus
     'Менеджер взял диалог · автоматические ответы приостановлены · Азамат',
   );
 });
+
+test('a notification link opens one dialog after sign-in and nothing else', async () => {
+  const { dashboardLoginPath, linkedConversation } = await import('../src/features/dashboard/dialogue-model.ts');
+  const { safeNextPath } = await import('../src/lib/auth/registration.ts');
+  const id = '3f2b8c1e-7d4a-4c1b-9e2f-0a1b2c3d4e5f';
+  assert.equal(linkedConversation(id.toUpperCase()), id);
+  assert.equal(linkedConversation([id, 'other']), id);
+  for (const bad of [undefined, '', 'not-a-uuid', `${id}/../x`, `https://evil.example/${id}`]) assert.equal(linkedConversation(bad), null);
+  // The login page sends the operator back to the same dialog, and only inside our site.
+  const login = new URL(dashboardLoginPath(id), 'https://plumo.test');
+  assert.equal(login.pathname, '/login');
+  assert.equal(safeNextPath(login.searchParams.get('next')), `/dashboard?conversation=${id}`);
+  assert.equal(dashboardLoginPath(null), '/login?next=%2Fdashboard');
+});
+
+test('the dashboard says "notified" only after Telegram accepted the notification', async () => {
+  const { notificationText, notificationTone } = await import('../src/features/dashboard/dialogue-model.ts');
+  assert.match(notificationText('sent', 'ru'), /уведомлён/);
+  for (const status of ['queued', 'sending', 'failed', 'unknown', 'cancelled']) assert.doesNotMatch(notificationText(status, 'ru'), /Менеджер уведомлён/);
+  assert.match(notificationText('cancelled', 'ru'), /не настроено/);
+  assert.equal(notificationText(null, 'ru'), null);
+  assert.equal(notificationTone('unknown'), 'error');
+  assert.equal(notificationTone('sent'), 'ok');
+});

@@ -22,6 +22,7 @@ from app.container import Runtime, build_agent, build_runtime
 from app.domain.enums import InboundStatus, JobKind, OutboundStatus
 from app.domain.models import Job
 from app.infrastructure.database.channel_repositories import InboundEventRepository, JobQueue, OutboundRepository
+from app.infrastructure.database.models import HandoffRequestRow
 from app.infrastructure.logging.setup import setup_logging
 
 logger = logging.getLogger("plumo.worker")
@@ -136,6 +137,14 @@ class Worker:
                     )
                     outbound.error_code = "worker_crashed"
                     await repo.save(outbound)
+            if job.handoff_id:
+                # The worker died on this notification again and again; if one of those got as far as Telegram, nobody knows.
+                handoff = await session.get(HandoffRequestRow, job.handoff_id, with_for_update=True)
+                if handoff is not None and handoff.notify_status in (OutboundStatus.queued, OutboundStatus.sending):
+                    handoff.notify_error = "worker_crashed"
+                    handoff.notify_status = (
+                        OutboundStatus.unknown if handoff.notify_status == OutboundStatus.sending else OutboundStatus.failed
+                    )
             await JobQueue(session).fail(job, self.worker_id, "attempts_exhausted")
             await session.commit()
         logger.error("job_given_up", extra={"job_id": job.id, "kind": job.kind})

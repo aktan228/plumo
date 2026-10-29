@@ -89,6 +89,20 @@ class ProviderTransientError(ProviderUnavailable):
 
     code = "provider_transient_error"
 
+    def __init__(self, message: str, *, code: str | None = None, retry_after: float | None = None) -> None:
+        super().__init__(message, code=code)
+        # Seconds the provider asked to wait (Telegram 429 `retry_after`); None when it did not say.
+        self.retry_after = retry_after
+
+
+class DeliveryUnknown(ProviderUnavailable):
+    """The request may have reached the provider, but no answer came back (timeout after sending).
+
+    Repeating it could deliver twice, so nothing repeats it automatically: a person decides.
+    """
+
+    code = "delivery_unknown"
+
 
 class UnsafeResponse(AppError):
     """Raised only by strict callers. The message pipeline converts this into a handoff."""

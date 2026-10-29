@@ -13,7 +13,7 @@ import os
 
 import httpx
 
-from app.domain.errors import ProviderTransientError, ProviderUnavailable
+from app.domain.errors import DeliveryUnknown, ProviderTransientError, ProviderUnavailable
 from app.domain.models import HandoffRequest
 
 logger = logging.getLogger("plumo.handoff")
@@ -57,17 +57,30 @@ class TelegramHandoffProvider:
             body["parse_mode"] = parse_mode
         try:
             response = await self._client.post(url, json=body)
-        except httpx.HTTPError as exc:
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
+            # The request never left: safe to repeat.
             logger.warning("telegram_unreachable", extra={"handoff_id": handoff_id})
             raise ProviderTransientError("Telegram is unreachable") from exc
+        except httpx.HTTPError as exc:
+            # Sent, but no answer: Telegram may have delivered it.
+            logger.warning("telegram_no_answer", extra={"handoff_id": handoff_id})
+            raise DeliveryUnknown("Telegram did not answer after the request was sent") from exc
         if response.status_code >= 400:
             logger.warning("telegram_notify_failed", extra={"status": response.status_code, "handoff_id": handoff_id})
             if response.status_code == 429 or response.status_code >= 500:
-                raise ProviderTransientError(f"Telegram answered {response.status_code}")
+                raise ProviderTransientError(f"Telegram answered {response.status_code}", retry_after=_retry_after(response))
             raise ProviderUnavailable(f"Telegram refused the notification: {response.status_code}")
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    try:
+        value = response.json().get("parameters", {}).get("retry_after")
+    except (ValueError, AttributeError):
+        return None
+    return float(value) if isinstance(value, (int, float)) and value >= 0 else None
 
 
 def render(handoff: HandoffRequest, dashboard_url: str = "") -> str:
@@ -85,6 +98,7 @@ def render(handoff: HandoffRequest, dashboard_url: str = "") -> str:
             lines.append(f"<b>{who}:</b> {html.escape(str(item.get('text') or '')[:200])}")
     lines.append("")
     if dashboard_url:
-        lines.append(f'<a href="{dashboard_url}/conversations/{handoff.conversation_id}">Открыть диалог</a>')
+        # The dashboard opens this dialog after sign-in; another business's dialog answers 404.
+        lines.append(f'<a href="{dashboard_url}/dashboard?conversation={handoff.conversation_id}">Открыть диалог</a>')
     lines.append(f"<code>{handoff.id}</code>")
     return "\n".join(lines)

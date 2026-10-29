@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.container import build_agent
 from app.domain.enums import JobKind
-from app.domain.errors import ProviderTransientError, ProviderUnavailable
+from app.domain.errors import DeliveryUnknown, ProviderTransientError, ProviderUnavailable
 from app.domain.models import InboundMessage
 from app.infrastructure.database.channel_repositories import JobQueue
 from app.infrastructure.database.models import HandoffRequestRow, JobRow, ManagerRecipientRow
@@ -171,3 +171,122 @@ async def test_job_of_another_business_notifies_nobody(session, runtime):
     await Worker(runtime, worker_id="t1").drain()
     assert recorder.calls == []
     assert (await _notify_jobs(session))[0].last_error == "business_mismatch"
+
+
+async def _handoff_row(session):
+    session.expire_all()
+    return await session.scalar(select(HandoffRequestRow))
+
+
+async def test_notification_state_follows_the_job(session, runtime):
+    runtime.handoff_provider = Recorder()
+    await _ask_for_a_manager(session, runtime)
+    assert (await _handoff_row(session)).notify_status == "queued"
+    await session.commit()
+
+    await Worker(runtime, worker_id="t1").drain()
+    handoff = await _handoff_row(session)
+    assert handoff.notify_status == "sent" and handoff.notify_attempted_at is not None
+
+
+async def test_rate_limit_waits_as_long_as_telegram_asks(session, runtime):
+    runtime.handoff_provider = Recorder([ProviderTransientError("429", retry_after=120)])
+    await _ask_for_a_manager(session, runtime)
+    await session.commit()
+
+    await Worker(runtime, worker_id="t1").drain()
+    handoff = await _handoff_row(session)
+    job = (await _notify_jobs(session))[0]
+    assert job.status == "queued" and handoff.notify_status == "queued"
+    waited = (job.run_at - handoff.notify_attempted_at).total_seconds()
+    assert waited >= 119
+
+
+async def test_no_answer_after_sending_is_unknown_and_not_repeated(session, runtime):
+    recorder = runtime.handoff_provider = Recorder([DeliveryUnknown("read timeout")])
+    await _ask_for_a_manager(session, runtime)
+    await session.commit()
+    worker = Worker(runtime, worker_id="t1")
+
+    await worker.drain()
+    await _due_now(session)
+    await worker.drain()
+    assert len(recorder.calls) == 1
+    assert (await _handoff_row(session)).notify_status == "unknown"
+    assert (await _notify_jobs(session))[0].last_error == "delivery_unknown"
+
+
+async def test_worker_that_died_mid_send_leaves_unknown_not_a_second_send(session, runtime):
+    recorder = runtime.handoff_provider = Recorder()
+    await _ask_for_a_manager(session, runtime)
+    await session.commit()
+    # The previous worker wrote "sending", called Telegram and died; its lease ran out.
+    await session.execute(text("UPDATE handoff_requests SET notify_status = 'sending'"))
+    await session.execute(
+        text("UPDATE jobs SET status = 'running', attempts = 1, locked_until = now() - interval '1 second' WHERE kind = 'notify_handoff'")
+    )
+    await session.commit()
+
+    await Worker(runtime, worker_id="t2").drain()
+    assert recorder.calls == []
+    handoff = await _handoff_row(session)
+    assert (handoff.notify_status, handoff.notify_error) == ("unknown", "worker_stopped_mid_send")
+
+
+async def test_stopped_worker_loses_no_notification(session, runtime):
+    """Handoff created while no worker runs: the job waits in the table and goes out when one starts."""
+
+    recorder = runtime.handoff_provider = Recorder()
+    await _ask_for_a_manager(session, runtime)
+    await session.commit()
+    assert recorder.calls == [] and (await _handoff_row(session)).notify_status == "queued"
+
+    await Worker(runtime, worker_id="started-later").drain()
+    assert len(recorder.calls) == 1
+
+
+async def test_person_resolves_an_unknown_notification(client, runtime):
+    from app.domain.errors import DeliveryUnknown as Unknown
+
+    application_runtime = client._transport.app.state.runtime
+    recorder = application_runtime.handoff_provider = Recorder([Unknown("timeout")])
+    factory = application_runtime.session_factory
+    async with factory() as session:
+        session.add(ManagerRecipientRow(business_id=DEMO_BUSINESS_ID, chat_id="4242", chat_label="Менеджер"))
+        await session.commit()
+    response = await client.post(
+        "/api/v1/messages", json={"channel": "whatsapp", "external_user_id": "+996700555299", "text": "Позовите менеджера"}
+    )
+    assert response.json()["handoff_required"]
+    worker = Worker(application_runtime, worker_id="t1")
+    await worker.drain()
+    handoff = (await client.get("/api/v1/handoffs")).json()[0]
+    assert handoff["notify_status"] == "unknown"
+
+    # Nothing to decide about a sent one; a person picks retry for the unknown one.
+    resolve = f"/api/v1/handoffs/{handoff['id']}/notification/resolve"
+    retried = await client.post(resolve, json={"action": "retry"})
+    assert retried.status_code == 200 and retried.json()["notify_status"] == "queued"
+    await worker.drain()
+    assert len(recorder.calls) == 2
+    after = (await client.get("/api/v1/handoffs")).json()[0]
+    assert after["notify_status"] == "sent" and after["notified_at"]
+    again = await client.post(resolve, json={"action": "mark_sent"})
+    assert again.status_code == 409 and again.json()["code"] == "delivery_not_resolvable"
+
+
+async def test_another_business_cannot_resolve_this_notification(stand):
+    stand.runtime.handoff_provider = Recorder([DeliveryUnknown("timeout")])
+    async with stand.factory() as session:
+        session.add(ManagerRecipientRow(business_id=stand.business.id, chat_id="4242", chat_label="Менеджер"))
+        agent = build_agent(session, stand.runtime)
+        await agent.process_message(InboundMessage(channel="whatsapp", external_user_id="+996700555300", text="Позовите менеджера", business_id=stand.business.id))
+        await session.commit()
+    await Worker(stand.runtime, worker_id="t1").drain()
+    handoff_id = (await stand.client.get("/api/v1/handoffs")).json()[0]["id"]
+
+    other = {"Authorization": f"Bearer {stand.tokens['other']}"}
+    response = await stand.client.post(f"/api/v1/handoffs/{handoff_id}/notification/resolve", json={"action": "mark_sent"}, headers=other)
+    assert response.status_code == 404
+    own = await stand.client.post(f"/api/v1/handoffs/{handoff_id}/notification/resolve", json={"action": "mark_sent"})
+    assert own.status_code == 200 and own.json()["notify_status"] == "sent"

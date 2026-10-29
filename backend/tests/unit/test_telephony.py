@@ -275,7 +275,8 @@ async def test_telegram_card_and_failures_are_raised_for_the_job_to_retry() -> N
     card = render(handoff, "https://app.plumo.kg")
     assert "Вопрос вне базы" in card
     assert "&lt;есть&gt;" in card
-    assert f"/conversations/{handoff.conversation_id}" in card
+    # The page that exists in the frontend: /dashboard opens the dialog from the query after sign-in.
+    assert f'href="https://app.plumo.kg/dashboard?conversation={handoff.conversation_id}"' in card
 
     sent = []
 
@@ -306,6 +307,40 @@ async def test_telegram_card_and_failures_are_raised_for_the_job_to_retry() -> N
 
     with pytest.raises(ProviderTransientError):
         await TelegramHandoffProvider(token="t", transport=httpx.MockTransport(unreachable)).notify(handoff, "42")
+
+
+async def test_telegram_tells_a_safe_retry_from_an_unknown_delivery() -> None:
+    import httpx
+
+    from app.domain.errors import DeliveryUnknown, ProviderTransientError
+    from app.domain.models import HandoffRequest
+    from app.infrastructure.handoff.telegram_provider import TelegramHandoffProvider
+
+    now = datetime.now(UTC)
+    handoff = HandoffRequest(uuid4(), uuid4(), uuid4(), "user_requested_human", "normal", "", [], "PENDING", now, now)
+
+    def provider(handler) -> TelegramHandoffProvider:
+        return TelegramHandoffProvider(token="t", transport=httpx.MockTransport(handler))
+
+    def limited(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"ok": False, "error_code": 429, "parameters": {"retry_after": 37}})
+
+    with pytest.raises(ProviderTransientError) as rate:
+        await provider(limited).notify(handoff, "42")
+    assert rate.value.retry_after == 37
+
+    def refused_connection(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("connect timeout", request=request)
+
+    with pytest.raises(ProviderTransientError):
+        await provider(refused_connection).notify(handoff, "42")
+
+    def no_answer(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("sent, no answer", request=request)
+
+    with pytest.raises(DeliveryUnknown) as unknown:
+        await provider(no_answer).notify(handoff, "42")
+    assert not isinstance(unknown.value, ProviderTransientError)
 
 
 async def test_dialled_number_picks_its_business() -> None:

@@ -17,7 +17,7 @@ import { useLanguage } from "@/lib/i18n";
 import { apiErrorText } from "./api-messages";
 import {
   channelName, customerName, deliveryLabel, deliveryReason, eventText, formatTime, initials, mergeMessages,
-  modeLabel, replyHint, sendKey, textFits, textUsage, unsupportedText, type PendingSend,
+  modeLabel, notificationText, notificationTone, replyHint, sendKey, textFits, textUsage, unsupportedText, type PendingSend,
 } from "./dialogue-model";
 
 const labels = {
@@ -32,7 +32,7 @@ const labels = {
     agent: "Plumo", manager: "Менеджер", reply: "Написать сообщение…", send: "Отправить", replyVia: "Ответ уйдёт в",
     unread: "непрочитанных", messages: "Сообщения", details: "Информация о клиенте",
     offline: "Нет связи с сервером. Показаны последние загруженные данные, повторяем запрос…", retry: "Повторить",
-    markSent: "Клиент получил", markFailed: "Не дошло", resend: "Отправить ещё раз", unknownHint: "Проверьте в канале, дошло ли сообщение.",
+    markSent: "Клиент получил", markFailed: "Не дошло", resend: "Отправить ещё раз", managerGotIt: "Менеджер получил", notifyAgain: "Уведомить ещё раз", unknownHint: "Проверьте в канале, дошло ли сообщение.",
     tooLong: "Текст длиннее, чем разрешает канал.", waitingHandoff: "Агент запросил менеджера",
     languages: { ru: "Русский", ky: "Кыргызский", mixed: "Смешанный" } as Record<string, string>,
     reasons: { user_requested_human: "клиент просит менеджера", hot_lead: "горячий клиент", ready_for_meeting: "готов к встрече", no_knowledge: "вопрос вне базы знаний", customer_dissatisfied: "клиент недоволен", agent_unclear_twice: "агент дважды не понял", model_unavailable: "модель недоступна", manager_takeover: "менеджер взял диалог" } as Record<string, string>,
@@ -48,7 +48,7 @@ const labels = {
     agent: "Plumo", manager: "Manager", reply: "Write a message…", send: "Send", replyVia: "Reply goes to",
     unread: "unread", messages: "Messages", details: "Customer information",
     offline: "No connection to the server. Showing the last loaded data, retrying…", retry: "Retry",
-    markSent: "Customer got it", markFailed: "Did not arrive", resend: "Send again", unknownHint: "Check in the channel whether the message arrived.",
+    markSent: "Customer got it", markFailed: "Did not arrive", resend: "Send again", managerGotIt: "Manager got it", notifyAgain: "Notify again", unknownHint: "Check in the channel whether the message arrived.",
     tooLong: "The text is longer than the channel allows.", waitingHandoff: "The agent asked for a manager",
     languages: { ru: "Russian", ky: "Kyrgyz", mixed: "Mixed" } as Record<string, string>,
     reasons: { user_requested_human: "customer asks for a manager", hot_lead: "hot lead", ready_for_meeting: "ready to meet", no_knowledge: "question outside the knowledge base", customer_dissatisfied: "customer is unhappy", agent_unclear_twice: "agent did not understand twice", model_unavailable: "model unavailable", manager_takeover: "manager took the conversation" } as Record<string, string>,
@@ -65,7 +65,7 @@ function ChannelBadge({ channel }: { channel: string }) {
   return <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium ${channelColors[channel] ?? "bg-plumo-line/60 text-plumo-muted"}`}><span className="size-1.5 rounded-full bg-current" />{channelName(channel)}</span>;
 }
 
-export function Dialogues({ active }: { active: boolean }) {
+export function Dialogues({ active, initialId = null }: { active: boolean; initialId?: string | null }) {
   const { locale } = useLanguage();
   const c = labels[locale];
   const [items, setItems] = useState<DialogItem[]>([]);
@@ -76,7 +76,7 @@ export function Dialogues({ active }: { active: boolean }) {
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [pageLimit, setPageLimit] = useState(PAGE);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialId);
   const [detail, setDetail] = useState<DialogDetail | null>(null);
   const [older, setOlder] = useState<{ messages: DialogMessage[]; cursor: string | null }>({ messages: [], cursor: null });
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -84,12 +84,12 @@ export function Dialogues({ active }: { active: boolean }) {
   const [pending, setPending] = useState<Record<string, PendingSend>>({});
   const [sendErrors, setSendErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  const [mobileChat, setMobileChat] = useState(false);
+  const [mobileChat, setMobileChat] = useState(initialId !== null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const readSent = useRef<Record<string, number>>({});
-  const selectedRef = useRef<string | null>(null);
+  const selectedRef = useRef<string | null>(initialId);
   // Declared before the pollers: they read the selected id when a request starts.
   useEffect(() => { selectedRef.current = selectedId; }, [selectedId]);
 
@@ -295,7 +295,13 @@ export function Dialogues({ active }: { active: boolean }) {
       <div className="flex items-center justify-between"><h2 className="m-0 text-sm font-semibold">{c.customer}</h2><button type="button" aria-label={c.close} onClick={() => setDetailsOpen(false)} className={`${iconButton} xl:hidden`}><PlumoIcon icon={Cancel01Icon} size={18} /></button></div>
       <div className="mt-6 flex items-center gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-plumo-soft text-sm font-semibold text-plumo-blue">{initials(name(dialog))}</span><div><p className="m-0 text-sm font-semibold">{name(dialog)}</p><p className="mb-0 mt-1 text-xs text-plumo-muted">{channelName(dialog.channel)}</p></div></div>
       <dl className="mb-0 mt-6 space-y-5">{rows.map(([label, text]) => <div key={label}><dt className="text-xs text-plumo-muted">{label}</dt><dd className="mb-0 ml-0 mt-1.5 break-words text-[13px] leading-6">{text}</dd></div>)}</dl>
-      {value.handoff && <div className="mt-6 rounded-xl bg-plumo-soft p-4"><h3 className="m-0 text-xs font-semibold text-plumo-blue">{c.handoff}</h3><p className="mb-0 mt-2 text-[13px] leading-6">{c.reasons[value.handoff.reason] ?? value.handoff.reason}</p></div>}
+      {value.handoff && <div className="mt-6 rounded-xl bg-plumo-soft p-4"><h3 className="m-0 text-xs font-semibold text-plumo-blue">{c.handoff}</h3><p className="mb-0 mt-2 text-[13px] leading-6">{c.reasons[value.handoff.reason] ?? value.handoff.reason}</p>
+        {notificationText(value.handoff.notify_status, locale) && <p className={`mb-0 mt-2 text-xs leading-5 ${notificationTone(value.handoff.notify_status) === "error" ? "text-red-700" : notificationTone(value.handoff.notify_status) === "ok" ? "text-emerald-700" : "text-plumo-muted"}`} role="status">{notificationText(value.handoff.notify_status, locale)}</p>}
+        {(value.handoff.notify_status === "failed" || value.handoff.notify_status === "unknown") && <div className="mt-3 flex flex-wrap gap-2">
+          {value.handoff.notify_status === "unknown" && <button type="button" className={button} disabled={busy !== null} onClick={() => action(`notify:${value.handoff!.id}`, () => api(`handoffs/${value.handoff!.id}/notification/resolve`, { method: "POST", body: { action: "mark_sent" } }))}>{c.managerGotIt}</button>}
+          <button type="button" className={button} disabled={busy !== null} onClick={() => action(`notify:${value.handoff!.id}`, () => api(`handoffs/${value.handoff!.id}/notification/resolve`, { method: "POST", body: { action: "retry" } }))}>{c.notifyAgain}</button>
+        </div>}
+      </div>}
     </>;
   }
 

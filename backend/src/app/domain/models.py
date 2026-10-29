@@ -270,6 +270,10 @@ class HandoffRequest:
     updated_at: datetime
     # When the manager was told. None: the notification job has not succeeded yet.
     notified_at: datetime | None = None
+    # queued -> sending -> sent | failed | unknown | cancelled (NotifyStatus). None: nothing was planned.
+    notify_status: str | None = None
+    notify_error: str | None = None
+    notify_attempted_at: datetime | None = None
 
 
 @dataclass(slots=True)

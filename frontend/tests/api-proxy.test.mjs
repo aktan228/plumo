@@ -68,3 +68,9 @@ test('manager notifications open only their own actions, and never the service b
   assert.equal(isAllowedRoute('GET', 'manager-notifications/link'), false);
   assert.equal(isAllowedRoute('POST', 'webhooks/telegram-manager'), false);
 });
+
+test('a notification decision goes only to a handoff id', () => {
+  assert.equal(isAllowedRoute('POST', `handoffs/${id}/notification/resolve`), true);
+  assert.equal(isAllowedRoute('POST', 'handoffs/x/notification/resolve'), false);
+  assert.equal(isAllowedRoute('POST', `handoffs/${id}/resolve`), false);
+});

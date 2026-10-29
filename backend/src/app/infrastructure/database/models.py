@@ -175,6 +175,10 @@ class HandoffRequestRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Manager notification: queued/sending/sent/failed/unknown/cancelled; None when none was planned.
+    notify_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    notify_error: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    notify_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class MeetingRow(Base):

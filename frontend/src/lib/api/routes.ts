@@ -28,6 +28,7 @@ const allowed: Record<string, RegExp[]> = {
     /^manager-notifications\/(link|confirm|disconnect)$/,
     new RegExp(`^conversations/${id}/(takeover|resume|messages|read)$`),
     new RegExp(`^outbound-messages/${id}/resolve$`),
+    new RegExp(`^handoffs/${id}/notification/resolve$`),
   ],
   PATCH: [/^onboarding$/, new RegExp(`^integrations/${id}$`)],
 };
