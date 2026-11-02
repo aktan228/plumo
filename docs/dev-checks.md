@@ -19,7 +19,7 @@
 | Линт | `./dev.sh lint` | `All checks passed!` |
 | Приёмочный набор, без сети | `.venv/bin/python -m app.acceptance --mock` | отчёт в `work/acceptance/`; качество — только на живой модели, [ACCEPTANCE.md](../backend/docs/ACCEPTANCE.md) |
 
-`.venv`, созданный через `uv`, не содержит pip, и `./dev.sh setup` на нём падает с `No module named pip`. В этом случае поставьте зависимости так: `uv pip install --python .venv/bin/python -e ".[dev]"`.
+`.venv`, созданный через `uv`, не содержит pip: `./dev.sh setup` тогда ставит зависимости через `uv pip`.
 
 ### Миграции на пустой БД
 
