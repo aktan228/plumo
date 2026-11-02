@@ -111,6 +111,17 @@ class Settings(BaseSettings):
     test_chat_session_messages: int = Field(default=20, ge=1, le=50)
     test_chat_daily_budget_usd: float = Field(default=1.0, gt=0, le=100)
     test_chat_turn_reserve_usd: float = Field(default=0.05, gt=0, le=10)
+    # Channel traffic limits (J-04), per UTC day. Test chat has its own allowance above.
+    limit_sender_messages: int = Field(default=10, ge=1)
+    limit_sender_window_s: int = Field(default=300, ge=10)
+    limit_business_daily_calls: int = Field(default=300, ge=1)
+    limit_business_daily_usd: float = Field(default=3.0, gt=0)
+    limit_service_daily_usd: float = Field(default=20.0, gt=0)
+    limit_queue_per_business: int = Field(default=200, ge=1)
+    # Reserved before a customer turn: model reply, extraction and summary together, with margin.
+    turn_reserve_usd: float = Field(default=0.01, gt=0, le=1)
+    # Which price table the estimates come from; stored with every reservation.
+    cost_version: str = "2026-10"
     channel_worker_enabled: bool = False
     worker_concurrency: int = 4
     worker_poll_interval_s: float = 0.5

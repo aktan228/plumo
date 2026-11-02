@@ -299,6 +299,41 @@ class ManagerRecipientRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
 
 
+class SpendBudgetRow(Base):
+    """Paid model spend of one scope for one UTC day: `business:<id>` or `service`.
+
+    `reserved` is held by turns in flight, `spent` is settled. A reservation of a turn
+    that crashed stays counted: the call may have been billed.
+    """
+
+    __tablename__ = "spend_budgets"
+
+    scope: Mapped[str] = mapped_column(String(64), primary_key=True)
+    day: Mapped[str] = mapped_column(String(10), primary_key=True)
+    calls: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    reserved: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=0, server_default="0")
+    spent: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
+
+
+class SpendReservationRow(Base):
+    """One customer turn's hold on the budget. Unique per inbound event: a redelivered event pays once."""
+
+    __tablename__ = "spend_reservations"
+
+    inbound_event_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("inbound_events.id", ondelete="CASCADE"), primary_key=True
+    )
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    day: Mapped[str] = mapped_column(String(10))
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 6))
+    actual: Mapped[Decimal | None] = mapped_column(Numeric(14, 6), nullable=True)
+    status: Mapped[str] = mapped_column(String(16))  # reserved | settled
+    cost_version: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AuthEmailTokenRow(Base):
     __tablename__ = "auth_email_tokens"
     __table_args__ = (

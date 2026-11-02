@@ -24,6 +24,7 @@ from app.infrastructure.channels.gateway import channel_secret_key, telegram_web
 from app.infrastructure.channels.instagram import parse_entry, valid_signature
 from app.infrastructure.channels.telegram import parse_update
 from app.application.services.telegram_verification import verification_data
+from app.application.services.spend_limits import SpendLimits
 from app.application.services.manager_recipients import (
     BOUND_REPLY,
     UNKNOWN_CODE_REPLY,
@@ -151,7 +152,11 @@ async def _store(services: Services, connection: ChannelConnection, event: Chann
         provider_time=event.provider_time,
     )
     created = await services.inbound_events.add_if_new(inbound)
-    if created and actionable:
+    if created and actionable and not verification and await SpendLimits(services.session, services.runtime.settings).queue_full(connection.business_id):
+        # Too much waiting for this business: the message is kept, the queue does not grow.
+        await services.inbound_events.mark(inbound.id, InboundStatus.failed, "queue_full")
+        logger.warning("inbound_queue_full", extra={"business_id": str(connection.business_id)})
+    elif created and actionable:
         await services.jobs.enqueue(
             kind=JobKind.verify_telegram if verification else JobKind.process_inbound,
             business_id=connection.business_id,

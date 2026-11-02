@@ -17,6 +17,7 @@
 | Unit-тесты, без БД | `./dev.sh test tests/unit` | все проходят |
 | Все тесты, нужна БД | `./dev.sh test` | все проходят, около 5 минут |
 | Линт | `./dev.sh lint` | `All checks passed!` |
+| Приёмочный набор, без сети | `.venv/bin/python -m app.acceptance --mock` | отчёт в `work/acceptance/`; качество — только на живой модели, [ACCEPTANCE.md](../backend/docs/ACCEPTANCE.md) |
 
 `.venv`, созданный через `uv`, не содержит pip, и `./dev.sh setup` на нём падает с `No module named pip`. В этом случае поставьте зависимости так: `uv pip install --python .venv/bin/python -e ".[dev]"`.
 
@@ -31,7 +32,7 @@ DATABASE_URL=postgresql+asyncpg://plumo:plumo@localhost:5432/plumo_migcheck .ven
 docker compose exec -T db psql -U plumo -d plumo -c "DROP DATABASE plumo_migcheck;"
 ```
 
-Ожидаемо: 14 миграций, head — `014_handoff_notify_status`.
+Ожидаемо: 15 миграций, head — `015_spend_limits`.
 
 ### Тестовая база
 

@@ -28,3 +28,13 @@ test('Telegram accepts a client token; Instagram still needs prepared access', (
   assert.equal(canConnect(integration()), true);
   assert.equal(statusLabel('action_required', 'ru'), 'Требуется действие');
 });
+
+test('the daily agent limit is shown as reached by calls or by money', async () => {
+  const { limitReached, limitText } = await import('../src/features/dashboard/integration-model.ts');
+  const limits = (extra = {}) => ({ day: '2026-11-02', calls: 5, calls_limit: 300, spent_usd: 0.1, limit_usd: 3, ...extra });
+  assert.equal(limitReached(limits()), false);
+  assert.equal(limitReached(limits({ calls: 300 })), true);
+  assert.equal(limitReached(limits({ spent_usd: 3 })), true);
+  assert.match(limitText(limits({ calls: 300 }), 'ru'), /исчерпан/);
+  assert.match(limitText(limits(), 'ru'), /5 \/ 300/);
+});

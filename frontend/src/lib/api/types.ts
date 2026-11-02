@@ -38,6 +38,8 @@ export type ChannelIntegration = {
 };
 export type IntegrationsResponse = { channels: ChannelIntegration[]; ai_mode: string };
 
+export type Limits = { day: string; calls: number; calls_limit: number; spent_usd: number; limit_usd: number };
+
 export type ManagerStatus = "not_configured" | "waiting_code" | "awaiting_confirmation" | "ready" | "needs_attention";
 export type ManagerChat = { label: string; at: string | null };
 export type ManagerNotifications = {

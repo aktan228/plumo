@@ -10,10 +10,11 @@ billed twice: deduplication of stored events cannot prevent that.
 import logging
 import random
 
-from app.domain.enums import ConnectionStatus, InboundStatus
+from app.domain.enums import ConnectionStatus, InboundKind, InboundStatus
 from app.domain.errors import BusinessNotFound, CustomerNotFound, InvalidMessage
 from app.domain.models import InboundMessage, Job
 from app.application.services.outbound_service import OutboundService
+from app.application.services.spend_limits import SpendLimits
 from app.infrastructure.database.channel_repositories import (
     ConnectionRepository,
     InboundEventRepository,
@@ -80,8 +81,12 @@ class InboundProcessor:
             contact_name=event.data.get("contact_name"),
             contact_handle=event.data.get("contact_handle"),
         )
+        if event.kind == InboundKind.text:
+            message.limit_reason = await self._limit(session, event, connection.business_id)
         agent = self.build_agent(session, self.runtime)
         response = await agent.process_message(message)
+        if event.kind == InboundKind.text and not message.limit_reason:
+            await SpendLimits(session, self.runtime.settings).settle(event.id, response.usage.estimated_cost)
         conversations = ConversationRepository(session)
         conversation = await conversations.get(response.conversation_id)
         if conversation is not None:
@@ -95,6 +100,22 @@ class InboundProcessor:
             await outbound.queue_agent_reply(response, conversation, f"agent:{event.id}")
         await events.mark(event.id, InboundStatus.processed)
         return await jobs.complete(job, worker_id)
+
+    async def _limit(self, session, event, business_id) -> str | None:
+        """Why this turn may not call a paid model, or None. The reservation commits on its own."""
+
+        limits = SpendLimits(session, self.runtime.settings)
+        if await limits.sender_over_rate(event):
+            return "sender_rate_limit"
+        async with self.session_factory() as own:
+            allowance = await SpendLimits(own, self.runtime.settings).reserve(event.id, business_id)
+            if allowance.ok:
+                await own.commit()
+            else:
+                await own.rollback()
+        if not allowance.ok:
+            logger.warning("turn_over_limit", extra={"reason": allowance.reason, "business_id": str(business_id)})
+        return allowance.reason
 
     async def _failed(self, job: Job, worker_id: str, exc: Exception) -> None:
         permanent = isinstance(exc, _PERMANENT)

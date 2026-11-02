@@ -20,6 +20,9 @@ logger = logging.getLogger("plumo.handoff")
 
 _REASONS = {
     "hot_lead": "🔥 Горячий клиент",
+    "sender_rate_limit": "⏸ Клиент пишет слишком часто, агент приостановлен",
+    "business_budget": "⏸ Дневной лимит расходов бизнеса исчерпан, агент молчит",
+    "service_budget": "⏸ Общий дневной лимит Plumo исчерпан, агент молчит",
     "ready_for_meeting": "📅 Готов к встрече",
     "user_requested_human": "🙋 Просит менеджера",
     "no_knowledge": "❓ Вопрос вне базы",

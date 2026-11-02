@@ -13,6 +13,7 @@ const allowed: Record<string, RegExp[]> = {
     new RegExp(`^testing/sessions/${id}$`),
     /^integrations$/,
     /^manager-notifications$/,
+    /^limits$/,
     /^conversations$/,
     new RegExp(`^conversations/${id}$`),
     new RegExp(`^conversations/${id}/messages$`),

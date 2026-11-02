@@ -1,4 +1,4 @@
-import type { ChannelIntegration, ConnectionStatus } from "@/lib/api/types";
+import type { ChannelIntegration, ConnectionStatus, Limits } from "@/lib/api/types";
 
 // WhatsApp keeps its demo wizard (no live connection in this version).
 export type DemoChannel = "WhatsApp";
@@ -47,4 +47,19 @@ export function canConnect(item: ChannelIntegration): boolean {
 /** Live connection = connected now; the agent switch and the last check are shown separately. */
 export function isLive(item: ChannelIntegration): boolean {
   return item.connection?.status === "connected";
+}
+
+/** Today's agent allowance. When it runs out, messages are kept and the manager gets one handoff per dialog. */
+export function limitReached(limits: Limits): boolean {
+  return limits.calls >= limits.calls_limit || limits.spent_usd >= limits.limit_usd;
+}
+
+export function limitText(limits: Limits, locale: Locale): string {
+  const used = `${limits.calls} / ${limits.calls_limit}`;
+  if (locale === "en") return limitReached(limits)
+    ? `Today's agent limit is reached (${used} replies). Messages are kept; managers answer them.`
+    : `Agent replies today: ${used}.`;
+  return limitReached(limits)
+    ? `Дневной лимит агента исчерпан (${used} ответов). Сообщения сохраняются, отвечают менеджеры.`
+    : `Ответов агента сегодня: ${used}.`;
 }
