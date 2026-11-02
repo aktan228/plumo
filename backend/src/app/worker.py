@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.application.services.delivery_service import DeliveryService
 from app.application.services.handoff_notifier import HandoffNotifier
 from app.application.services.inbound_processor import InboundProcessor
+from app.application.services.leads import send_due
 from app.config import Settings, get_settings
 from app.container import Runtime, build_agent, build_runtime
 from app.domain.enums import InboundStatus, JobKind, OutboundStatus
@@ -37,6 +38,8 @@ LEASE_S = 120.0
 HOUSEKEEPING_S = 3600.0
 # Heartbeat for monitoring (/ops/status): three missed beats mean the worker is gone.
 HEARTBEAT_S = 15.0
+# How often stored website requests are passed on to the team chat.
+LEADS_S = 10.0
 
 
 class Worker:
@@ -119,8 +122,19 @@ class Worker:
                 except TimeoutError:
                     pass
 
+        async def team_leads() -> None:
+            while not stop.is_set():
+                try:
+                    await send_due(self.runtime.session_factory, self.runtime.handoff_provider)
+                except Exception:
+                    logger.exception("lead_notify_failed")
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=LEADS_S)
+                except TimeoutError:
+                    pass
+
         logger.info("worker_started", extra={"worker_id": self.worker_id, "concurrency": concurrency})
-        await asyncio.gather(heartbeat(), housekeeping(), *(slot(index) for index in range(max(1, concurrency))))
+        await asyncio.gather(heartbeat(), housekeeping(), team_leads(), *(slot(index) for index in range(max(1, concurrency))))
         logger.info("worker_stopped", extra={"worker_id": self.worker_id})
 
     async def beat(self, started) -> None:

@@ -18,6 +18,7 @@ from app.api.routes import (
     customers,
     dialogs,
     integrations,
+    leads,
     manager_notifications,
     messages,
     ops,
@@ -151,6 +152,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     # Dashboard routes: the service key of the Next.js server and an operator session.
     app.include_router(auth.router, prefix="/api/v1", dependencies=protected)
     app.include_router(onboarding.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(leads.router, prefix="/api/v1", dependencies=protected)
     app.include_router(testing.router, prefix="/api/v1", dependencies=protected)
     app.include_router(readiness.router, prefix="/api/v1", dependencies=protected)
     app.include_router(customers.router, prefix="/api/v1", dependencies=protected)

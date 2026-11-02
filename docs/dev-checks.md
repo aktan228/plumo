@@ -32,7 +32,7 @@ DATABASE_URL=postgresql+asyncpg://plumo:plumo@localhost:5432/plumo_migcheck .ven
 docker compose exec -T db psql -U plumo -d plumo -c "DROP DATABASE plumo_migcheck;"
 ```
 
-Ожидаемо: 16 миграций, head — `016_worker_heartbeats`.
+Ожидаемо: 17 миграций, head — `017_leads`.
 
 ### Тестовая база
 

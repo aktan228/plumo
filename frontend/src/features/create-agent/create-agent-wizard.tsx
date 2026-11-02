@@ -7,7 +7,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { LanguageSwitch, useLanguage } from "@/lib/i18n";
 import { DemoChoice } from "@/components/landing/demo-choice";
 import { DemoContactForm } from "@/components/landing/demo-contact-form";
-import { pricingRequestLabel, type PricingRequest } from "@/components/landing/pricing";
+import type { PricingRequest } from "@/components/landing/pricing";
 import { demoReply, example, makeScript, MAX_SOURCE_BYTES, sourceFits, sourceUrl, type AgentDraft, type Source } from "./wizard-model";
 import { useWizardStorage, type WizardMode } from "./use-wizard-storage";
 import type { Snapshot } from "./wizard-persistence";
@@ -53,7 +53,6 @@ export function CreateAgentWizard({ mode = "guest" }: { mode?: WizardMode }) {
   const [chatInput, setChatInput] = useState("");
   const [handedOff, setHandedOff] = useState(false);
   const [contact, setContact] = useState(false);
-  const [mailReady, setMailReady] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const transcript = useRef<HTMLDivElement>(null);
@@ -183,18 +182,10 @@ export function CreateAgentWizard({ mode = "guest" }: { mode?: WizardMode }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000); setDownloaded(true);
   }
 
-  function prepareMail(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const body = [
-      `${c.contactName}: ${form.get("name")}`, `${c.company}: ${form.get("company")}`, `${c.email}: ${form.get("email")}`,
-      String(form.get("message") ?? ""), "", `${c.company}: ${draft.company}`, `${c.description}: ${draft.description}`,
-      `${c.agentName}: ${draft.name}`, `${c.channel}: ${c.channels[channel]}`, `${c.knowledge}: ${sources.length}`,
-      pricing ? pricingRequestLabel(locale, pricing) : "",
-    ].filter(Boolean).join("\n");
-    window.location.href = `mailto:contact@plumo.app?subject=${encodeURIComponent(locale === "ru" ? "Plumo — после самостоятельного демо" : "Plumo — self-guided demo follow-up")}&body=${encodeURIComponent(body)}`;
-    setMailReady(true);
-  }
+  const leadContext = [
+    `${c.company}: ${draft.company}`, `${c.description}: ${draft.description}`, `${c.agentName}: ${draft.name}`,
+    `${c.channel}: ${c.channels[channel]}`, `${c.knowledge}: ${sources.length}`,
+  ].join("\n");
 
   async function leave(href: string) {
     if (await storage.flush()) window.location.assign(href);
@@ -302,7 +293,7 @@ export function CreateAgentWizard({ mode = "guest" }: { mode?: WizardMode }) {
               <Field title={c.channel}><select value={channel} onChange={e => { setChannel(Number(e.target.value)); setDownloaded(false); }} className={input}>{c.channels.map((name, index) => <option key={name} value={index}>{name}</option>)}</select></Field>
               <p className="m-0 text-[12px] leading-relaxed text-plumo-muted">{c.launchHint}</p>
               {mode === "account" && <><button type="button" onClick={() => void storage.complete()} disabled={storage.finishing || storage.status === "conflict" || storage.status === "expired" || reading} className={primary}>{storage.finishing ? c.savingDraft : storage.completed ? c.completedDraft : c.completeDraft}</button>{storage.completed && <p className="m-0 text-[13px] leading-relaxed text-plumo-muted" role="status">{storage.knowledgeCount ? c.completionNote : c.noPublishedMaterials}</p>}</>}
-              <button type="button" onClick={() => { setMailReady(false); setContact(true); }} aria-haspopup="dialog" className={primary}>{c.discuss} →</button>
+              <button type="button" onClick={() => setContact(true)} aria-haspopup="dialog" className={primary}>{c.discuss} →</button>
               <button type="button" onClick={download} className={secondary}>{downloaded ? c.downloaded : c.download}</button>
               <p className="m-0 text-[11px] leading-relaxed text-plumo-muted">{note}</p>
             </aside>
@@ -313,6 +304,6 @@ export function CreateAgentWizard({ mode = "guest" }: { mode?: WizardMode }) {
       {step < 5 && <p className="mb-0 mt-5 text-center text-[11px] leading-relaxed text-plumo-muted">{note}</p>}
     </main>
     {contact && <DemoChoice step="expert" onClose={() => setContact(false)} onBack={() => setContact(false)} onSelect={() => {}} backLabel={locale === "ru" ? "← К тестовому чату" : "← Back to the test"}
-      expertForm={<DemoContactForm onSubmit={prepareMail} selection={pricing} mailReady={mailReady} defaults={{ company: draft.company, message: `${c.channel} ${c.channels[channel]}` }} formCopy={{ name: c.contactName, business: c.company, email: c.email, message: c.message, send: c.prepare, mailNote: c.mailNote, mailReady: c.mailReady }} />} />}
+      expertForm={<DemoContactForm source="wizard" context={leadContext} selection={pricing} defaults={{ company: draft.company, message: `${c.channel} ${c.channels[channel]}` }} formCopy={{ name: c.contactName, business: c.company, email: c.email, message: c.message }} />} />}
   </div>;
 }

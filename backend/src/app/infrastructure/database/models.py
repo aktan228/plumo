@@ -344,6 +344,28 @@ class WorkerHeartbeatRow(Base):
     seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class LeadRow(Base):
+    """A pilot request from the website. Not tied to a business: the visitor has no account yet."""
+
+    __tablename__ = "leads"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
+    source: Mapped[str] = mapped_column(String(16))  # landing | wizard
+    name: Mapped[str] = mapped_column(String(100))
+    company: Mapped[str] = mapped_column(String(200), default="")
+    email: Mapped[str] = mapped_column(String(254))
+    message: Mapped[str] = mapped_column(Text, default="")
+    plan: Mapped[str] = mapped_column(String(200), default="")
+    locale: Mapped[str] = mapped_column(String(8), default="ru")
+    # Team notification: queued -> sent | failed | cancelled (no team chat configured).
+    notify_status: Mapped[str] = mapped_column(String(16), default="queued")
+    notify_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    notify_error: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    notify_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class AuthEmailTokenRow(Base):
     __tablename__ = "auth_email_tokens"
     __table_args__ = (
