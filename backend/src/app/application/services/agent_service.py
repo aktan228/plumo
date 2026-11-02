@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import logging
 import time
 from dataclasses import replace
@@ -13,7 +14,7 @@ from app.application.services.customer_resolver import CustomerResolver
 from app.application.services.grounded_reply import is_unusable_reply, is_weasel_reply, quote_knowledge
 from app.application.services.handoff_service import evaluate_handoff
 from app.application.services.memory_service import MemoryService, read_unclear_count, write_unclear_count
-from app.application.services.response_validator import ResponseValidator
+from app.application.services.response_validator import ResponseValidator, ambiguous_offers
 from app.correlation import get_correlation_id, get_request_id
 from app.domain.agent_settings import configured_text, published_settings
 from app.domain.enums import PHONE_CHANNELS, ActionType, Channel, ConversationMode, InboundKind, MessageRole, RouteModel
@@ -49,6 +50,7 @@ from app.domain.phrases import (
     human_phrase,
     unknown_phrase,
     unsupported_phrase,
+    which_offer_phrase,
     with_ai_disclosure,
 )
 from app.domain.scheduling import has_slot
@@ -192,6 +194,8 @@ class AgentService:
             return _paused_response(
                 customer.id, conversation.id, language, correlation_id, started, paused, conversation.mode_version
             )
+        if message.limit_reason:
+            return await self._over_limit(message, business, customer, conversation, language, correlation_id, started)
         if message.kind in (InboundKind.start, InboundKind.unsupported):
             return await self._service_reply(
                 message, business, customer.id, conversation, language, correlation_id, started
@@ -298,6 +302,11 @@ class AgentService:
 
         extra = json.dumps([item.payload for item in actions], ensure_ascii=False, default=str)
         validation = self.validator.validate(response_text, context, extra=extra)
+        if validation.reason == "ambiguous_object":
+            # Two listings fit "сколько стоит квартира?": ask which, do not guess and do not call a manager.
+            response_text = which_offer_phrase([item.title for item in ambiguous_offers(context)], language)
+            steps.append("clarify_object")
+            validation = self.validator.validate(response_text, context, extra=extra)
         if not validation.safe and wants_listings:
             response_text = quote_knowledge(context)
             validation = self.validator.validate(response_text, context, extra=extra)
@@ -336,6 +345,10 @@ class AgentService:
                 decision = HandoffDecision(required=True, reason="ready_for_meeting", priority="high")
             else:
                 decision = HandoffDecision(required=True, reason="no_knowledge", priority="normal")
+        if not decision.required and find_phones(message.text) and _CALL_BACK.search(response_text.lower()):
+            # The customer left a number and the reply, the model's or a fallback, says the manager
+            # will call: without a handoff nobody would.
+            decision = HandoffDecision(required=True, reason="ready_for_meeting", priority="high")
         if decision.required and decision.reason:
             actions.append(
                 Action(
@@ -801,6 +814,19 @@ class AgentService:
         # customer into another's history.
         raise BusinessNotFound("business_id is required")
 
+    async def _over_limit(self, message, business, customer, conversation, language, correlation_id, started) -> AgentResponse:
+        """A limit is reached: the message is in history, no model runs, no reply goes out.
+
+        One handoff per dialog and reason (HandoffService reuses an open one), so a spammer
+        does not produce a notification per message.
+        """
+
+        history = await self.messages.list_for_conversation(conversation.id)
+        reason = message.limit_reason or "limit_reached"
+        context = ActionContext(customer, conversation, business, language, history[-8:], message.text)
+        await self.actions.execute([Action(ActionType.handoff, {"reason": reason, "priority": "high"})], context)
+        return _limited(customer.id, conversation.id, language, correlation_id, started, reason, conversation.mode_version)
+
     async def _conversation(self, customer_id: UUID, message: InboundMessage, business_id: UUID) -> Conversation:
         existing = await self.conversations.get_open(customer_id, message.channel)
         if existing is not None:
@@ -861,6 +887,12 @@ def _as_assistant_preview(conversation: Conversation, customer_id: UUID, text: s
     )
 
 
+def _limited(customer_id, conversation_id, language, correlation_id, started, reason, mode_version):
+    response = _paused_response(customer_id, conversation_id, language, correlation_id, started, reason, mode_version, handoff=True)
+    response.logs = [f"limit:{reason}"]
+    return response
+
+
 def _paused_response(
     customer_id: UUID,
     conversation_id: UUID,
@@ -909,9 +941,14 @@ _SLOT_QUESTIONS = ("какой день", "в какое время", "во ск
 _FOLLOWUP = ("уточню", "узнаю у менеджера", "спрошу у менеджера", "менеджерден тактап")
 
 
+# "Передам ваше обращение менеджеру", "передаю вопрос менеджеру": a promise that needs a real handoff.
+_PASS_ON = re.compile(r"переда(?:м|ю|ди[мт])\b.{0,40}менеджер|переда(?:м|ю)\s+(?:ему|ей)\b")
+_CALL_BACK = re.compile(r"свяжется|перезвонит|позвонит|наберёт|наберет")
+
+
 def _promises_followup(text: str) -> bool:
     lowered = text.lower()
-    return any(marker in lowered for marker in _FOLLOWUP)
+    return any(marker in lowered for marker in _FOLLOWUP) or _PASS_ON.search(lowered) is not None
 
 
 def _asked_for_slot(history: list[Message]) -> bool:

@@ -139,6 +139,8 @@ class InboundMessage:
     # "text", "start" (Telegram /start) or "unsupported" (photo, voice...): the last two skip the model.
     kind: str = "text"
     # False: store the message, do not answer (agent switched off on the connection).
+    # Set by the worker when a rate or spend limit is reached: store the message, call no paid model.
+    limit_reason: str | None = None
     auto_reply: bool = True
     reply_to: str | None = None
     contact_name: str | None = None

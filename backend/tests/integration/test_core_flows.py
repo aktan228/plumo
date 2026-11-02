@@ -267,3 +267,110 @@ async def test_second_request_for_a_manager_does_not_repeat_the_first_line(agent
     # Talking about the manager is a question for the model, not a second call.
     assert "human_phrase" not in chatter.logs and "human_phrase_again" not in chatter.logs
     assert await session.scalar(select(func.count()).select_from(HandoffRequestRow)) == 1
+
+
+async def test_price_of_an_unnamed_listing_becomes_a_question_not_a_guess(agent):
+    """J-03: two flats fit "сколько стоит квартира?"; the model picked one without saying which."""
+
+    from app.domain.models import ExtractedCustomerData, InboundMessage, LLMGeneration, SummaryDraft
+
+    class Guess:
+        name = "guess"
+
+        async def generate_response(self, context, route):
+            return LLMGeneration("Она стоит 85 000 USD.", [], False, None, 0.9, "guess", 1, 1, 0.0)
+
+        async def extract_customer_data(self, text):
+            return ExtractedCustomerData()
+
+        async def summarize(self, messages, previous):
+            return SummaryDraft("-", None, [], None)
+
+    agent.llm_for_tier = lambda tier: Guess()
+    response = await agent.process_message(
+        InboundMessage(channel="telegram", external_user_id="tg-which-1", text="Сколько стоит квартира?")
+    )
+    assert "clarify_object" in response.logs
+    assert "какой вариант" in response.response_text
+    assert "Чуй" in response.response_text and "Киевской" in response.response_text
+    assert "85" not in response.response_text
+    assert not response.handoff_required
+
+
+
+async def test_a_promise_to_pass_on_creates_the_handoff_the_model_forgot(agent):
+    """Acceptance run 2026-10-29 (angry_threat): "Передам ваше обращение менеджеру" without a handoff."""
+
+    from app.domain.models import ExtractedCustomerData, InboundMessage, LLMGeneration, SummaryDraft
+
+    class Promise:
+        name = "promise"
+
+        async def generate_response(self, context, route):
+            text = "Понимаю. Передам ваше обращение менеджеру, он свяжется с вами."
+            return LLMGeneration(text, [], False, None, 0.9, "promise", 1, 1, 0.0)
+
+        async def extract_customer_data(self, text):
+            return ExtractedCustomerData()
+
+        async def summarize(self, messages, previous):
+            return SummaryDraft("-", None, [], None)
+
+    agent.llm_for_tier = lambda tier: Promise()
+    response = await agent.process_message(
+        InboundMessage(channel="telegram", external_user_id="tg-promise-1", text="Когда уже со мной свяжутся по квартире?")
+    )
+    assert response.handoff_required
+
+
+
+async def test_callback_number_with_a_replaced_reply_still_creates_the_handoff(agent):
+    """Acceptance run 2026-10-29 (handoff_callback_number): the validator replaced the model's reply,
+    the fallback said "Менеджер свяжется", and no handoff existed for anyone to call."""
+
+    from app.domain.models import ExtractedCustomerData, InboundMessage, LLMGeneration, SummaryDraft
+
+    class Booking:
+        name = "booking"
+
+        async def generate_response(self, context, route):
+            # Blocked by the validator: no calendar, nobody is booked.
+            return LLMGeneration("Записал вас на звонок в 15:00.", [], False, None, 0.9, "booking", 1, 1, 0.0)
+
+        async def extract_customer_data(self, text):
+            return ExtractedCustomerData()
+
+        async def summarize(self, messages, previous):
+            return SummaryDraft("-", None, [], None)
+
+    agent.llm_for_tier = lambda tier: Booking()
+    response = await agent.process_message(
+        InboundMessage(channel="telegram", external_user_id="tg-callback-1", text="Перезвоните мне, пожалуйста, +996 555 123 456")
+    )
+    assert any(step.startswith("validator:") for step in response.logs)
+    assert response.handoff_required and response.handoff_reason == "ready_for_meeting"
+
+
+async def test_passing_on_to_him_is_a_promise_too(agent):
+    """Acceptance run 2026-10-29 (mem_delete_data): "Я передам ему вашу просьбу" without a handoff."""
+
+    from app.domain.models import ExtractedCustomerData, InboundMessage, LLMGeneration, SummaryDraft
+
+    class Promise:
+        name = "promise"
+
+        async def generate_response(self, context, route):
+            text = "Удалить переписку сам я не могу, это делает менеджер. Я передам ему вашу просьбу."
+            return LLMGeneration(text, [], False, None, 0.9, "promise", 1, 1, 0.0)
+
+        async def extract_customer_data(self, text):
+            return ExtractedCustomerData()
+
+        async def summarize(self, messages, previous):
+            return SummaryDraft("-", None, [], None)
+
+    agent.llm_for_tier = lambda tier: Promise()
+    response = await agent.process_message(
+        InboundMessage(channel="telegram", external_user_id="tg-delete-1", text="Удалите мою переписку из вашей базы.")
+    )
+    assert response.handoff_required

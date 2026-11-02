@@ -153,20 +153,33 @@ def _score(query: _PreparedQuery, item) -> float:
 _GENERIC_TITLE = ("квартир", "однушк", "двушк", "трешк", "студи", "аренд", "комнат", "дом", "товар", "услуг")
 
 
-def _mentioned(item, recent: str) -> bool:
-    """The dialog's last turns name this item by a distinctive word of its title."""
+def title_stems(item) -> list[str]:
+    """Distinctive words of an offer's title, as stems: "Квартира на Киевской" -> ["киев"].
 
-    if not recent or item.category not in OFFER_CATEGORIES:
-        return False
-    hay = normalize_text(recent)
+    "Филармонии" / "у Филармонии", "Джале" / "на Джал": the stem matches the inflected forms.
+    """
+
+    if item.category not in OFFER_CATEGORIES:
+        return []
+    stems = []
     for token in _TOKEN.findall(normalize_text(item.title)):
         if len(token) < 3 or token in _STOPWORDS or any(token.startswith(word) for word in _GENERIC_TITLE):
             continue
-        # "Филармонии" / "у Филармонии", "Джале" / "на Джал": compare the stem.
-        stem = token[:4] if len(token) >= 5 else token
-        if re.search(rf"(?<![а-яa-zңөү]){re.escape(stem)}", hay):
-            return True
-    return False
+        stems.append(token[:4] if len(token) >= 5 else token)
+    return stems
+
+
+def names(item, text: str) -> bool:
+    """`text` names this offer by a distinctive word of its title."""
+
+    hay = normalize_text(text)
+    return any(re.search(rf"(?<![а-яa-zңөү]){re.escape(stem)}", hay) for stem in title_stems(item))
+
+
+def _mentioned(item, recent: str) -> bool:
+    """The dialog's last turns name this item by a distinctive word of its title."""
+
+    return bool(recent) and names(item, recent)
 
 
 def _offer(item) -> bool:
