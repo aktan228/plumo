@@ -20,6 +20,7 @@ from app.api.routes import (
     integrations,
     manager_notifications,
     messages,
+    ops,
     onboarding,
     operations,
     readiness,
@@ -141,6 +142,8 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    app.include_router(ops.router)
 
     protected = [Depends(require_api_key)]
     app.include_router(messages.router, prefix="/api/v1", dependencies=protected)

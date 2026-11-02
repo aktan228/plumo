@@ -334,6 +334,16 @@ class SpendReservationRow(Base):
     settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class WorkerHeartbeatRow(Base):
+    """Last sign of life of each worker process. Several workers each have their own row."""
+
+    __tablename__ = "worker_heartbeats"
+
+    worker_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class AuthEmailTokenRow(Base):
     __tablename__ = "auth_email_tokens"
     __table_args__ = (
