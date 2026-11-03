@@ -374,3 +374,30 @@ async def test_passing_on_to_him_is_a_promise_too(agent):
         InboundMessage(channel="telegram", external_user_id="tg-delete-1", text="Удалите мою переписку из вашей базы.")
     )
     assert response.handoff_required
+
+
+async def test_wrong_price_of_a_named_listing_is_corrected_from_the_data(agent):
+    """Acceptance run 2026-10-29 (trap_false_premise, trap_rounding): the blocked draft became
+    "С этим не подскажу…" although the listing and its real price were known."""
+
+    from app.domain.models import ExtractedCustomerData, InboundMessage, LLMGeneration, SummaryDraft
+
+    class Agrees:
+        name = "agrees"
+
+        async def generate_response(self, context, route):
+            return LLMGeneration("Да, верно, Чуй за 80 000 USD.", [], False, None, 0.9, "agrees", 1, 1, 0.0)
+
+        async def extract_customer_data(self, text):
+            return ExtractedCustomerData()
+
+        async def summarize(self, messages, previous):
+            return SummaryDraft("-", None, [], None)
+
+    agent.llm_for_tier = lambda tier: Agrees()
+    response = await agent.process_message(
+        InboundMessage(channel="telegram", external_user_id="tg-premise-1", text="Вчера ваш менеджер сказал, что квартира на Чуй за 80 тысяч. Так?")
+    )
+    assert "corrected:invented_number" in response.logs
+    assert "85000" in response.response_text.replace(" ", "")
+    assert "80" not in response.response_text.replace("85000", "")

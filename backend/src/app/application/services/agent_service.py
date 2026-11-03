@@ -5,13 +5,14 @@ import json
 import re
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from app.application.services.context_builder import ContextBuilder, assistant_name
 from app.application.services.customer_resolver import CustomerResolver
-from app.application.services.grounded_reply import is_unusable_reply, is_weasel_reply, quote_knowledge
+from app.application.services.grounded_reply import correct_named, is_unusable_reply, is_weasel_reply, quote_knowledge
 from app.application.services.handoff_service import evaluate_handoff
 from app.application.services.memory_service import MemoryService, read_unclear_count, write_unclear_count
 from app.application.services.response_validator import ResponseValidator, ambiguous_offers
@@ -138,7 +139,17 @@ class AgentService:
         # Voice only: a second request for the same turn after this many seconds. 0 = off.
         self.voice_hedge_after_s = voice_hedge_after_s
 
-    async def process_message(self, message: InboundMessage) -> AgentResponse:
+    async def process_message(
+        self, message: InboundMessage, *, checkpoint: Callable[[], Awaitable[None]] | None = None
+    ) -> AgentResponse:
+        """One customer turn.
+
+        `checkpoint` (the worker passes its session's commit) is called after the customer's
+        message is stored and before the model is asked, so no transaction stays open for the
+        seconds the model takes. A turn cut off after that point is resumed by the retried job:
+        the stored message without a reply is answered, not replayed as empty.
+        """
+
         started = time.perf_counter()
         steps: list[str] = []
         timings: dict[str, int] = {}
@@ -164,11 +175,19 @@ class AgentService:
         conversation = await self._conversation(customer.id, message, business.id)
         if message.message_id:
             seen = await self.messages.find_by_external_id(conversation.id, message.message_id)
-            if seen is not None:
+            resumed = seen is not None and checkpoint is not None and await self.messages.reply_after(seen) is None
+            if seen is not None and not resumed:
                 # Webhook retry: answer with the stored reply, do not run or bill twice.
                 return await self._replay(seen, customer.id, language, correlation_id, started)
+        else:
+            seen, resumed = None, False
         try:
-            incoming = await self._store_user_message(message, customer.id, conversation.id)
+            if resumed:
+                # The worker stored this message and stopped before replying: finish the same turn.
+                incoming = seen
+                steps.append("resumed_turn")
+            else:
+                incoming = await self._store_user_message(message, customer.id, conversation.id)
         except DuplicateMessage:
             # The same retry is being processed right now by another request.
             seen = await self.messages.find_by_external_id(conversation.id, message.message_id or "")
@@ -226,6 +245,8 @@ class AgentService:
             route = RouteDecision(RouteModel.big, "uncertain_stt", route.confidence)
         generations: list[LLMGeneration] = []
         budget = self.voice_budget_s if message.channel == Channel.voice else self.chat_budget_s
+        if checkpoint is not None:
+            await checkpoint()
         generation, route = await self._generate(context, route, generations, started + budget)
         model_failed = not generations and not generation.model_used.startswith("rules:")
         steps.append(f"route:{route.model}:{route.reason}")
@@ -307,6 +328,13 @@ class AgentService:
             response_text = which_offer_phrase([item.title for item in ambiguous_offers(context)], language)
             steps.append("clarify_object")
             validation = self.validator.validate(response_text, context, extra=extra)
+        if not validation.safe and validation.reason in ("invented_number", "misattributed_fact", "invented_detail"):
+            corrected = correct_named(context)
+            if corrected is not None and self.validator.validate(corrected, context, extra=extra).safe:
+                # The customer named a listing and the draft got its numbers wrong: give the real ones.
+                response_text = corrected
+                steps.append(f"corrected:{validation.reason}")
+                validation = self.validator.validate(response_text, context, extra=extra)
         if not validation.safe and wants_listings:
             response_text = quote_knowledge(context)
             validation = self.validator.validate(response_text, context, extra=extra)

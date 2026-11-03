@@ -666,8 +666,8 @@ async def test_long_agent_reply_goes_out_in_parts_once(stand, monkeypatch):
 
     original = agent_service.AgentService.process_message
 
-    async def long_reply(self, message):
-        response = await original(self, message)
+    async def long_reply(self, message, **options):
+        response = await original(self, message, **options)
         await self.messages.session.execute(
             __import__("sqlalchemy").text("UPDATE messages SET text = :t WHERE id = :i"),
             {"t": long_text, "i": response.reply_message_id},

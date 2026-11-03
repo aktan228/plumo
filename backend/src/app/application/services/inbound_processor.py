@@ -84,7 +84,7 @@ class InboundProcessor:
         if event.kind == InboundKind.text:
             message.limit_reason = await self._limit(session, event, connection.business_id)
         agent = self.build_agent(session, self.runtime)
-        response = await agent.process_message(message)
+        response = await agent.process_message(message, checkpoint=session.commit)
         if event.kind == InboundKind.text and not message.limit_reason:
             await SpendLimits(session, self.runtime.settings).settle(event.id, response.usage.estimated_cost)
         conversations = ConversationRepository(session)
