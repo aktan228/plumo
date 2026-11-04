@@ -32,6 +32,44 @@
         }
       }
     },
+    "/health/db": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "База данных отвечает",
+        "operationId": "health_db_health_db_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ops/status": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Служебная сводка для мониторинга (OPS_TOKEN)",
+        "operationId": "ops_status_ops_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/messages": {
       "post": {
         "tags": [
@@ -592,6 +630,47 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WizardOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads": {
+      "post": {
+        "tags": [
+          "leads"
+        ],
+        "summary": "Заявка на пилот с сайта",
+        "operationId": "create_lead_api_v1_leads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadOut"
                 }
               }
             }
@@ -1626,6 +1705,86 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handoffs/{handoff_id}/notification/resolve": {
+      "post": {
+        "tags": [
+          "operations"
+        ],
+        "summary": "Ручное решение по неотправленному или неизвестному уведомлению менеджеру",
+        "operationId": "resolve_handoff_notification_api_v1_handoffs__handoff_id__notification_resolve_post",
+        "parameters": [
+          {
+            "name": "handoff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Handoff Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveDeliveryIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoffOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Нет такой передачи у этого бизнеса"
+          },
+          "409": {
+            "description": "Решать нечего"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/limits": {
+      "get": {
+        "tags": [
+          "operations"
+        ],
+        "summary": "Дневной лимит ответов агента этого бизнеса",
+        "operationId": "get_limits_api_v1_limits_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimitsOut"
                 }
               }
             }
@@ -2785,6 +2944,96 @@
         }
       }
     },
+    "/api/v1/manager-notifications": {
+      "get": {
+        "tags": [
+          "manager-notifications"
+        ],
+        "summary": "Получатель уведомлений менеджеру этого бизнеса",
+        "operationId": "get_recipient_api_v1_manager_notifications_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerNotificationsOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/manager-notifications/link": {
+      "post": {
+        "tags": [
+          "manager-notifications"
+        ],
+        "summary": "Новый одноразовый код привязки (15 минут)",
+        "operationId": "issue_link_api_v1_manager_notifications_link_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerLinkOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/manager-notifications/confirm": {
+      "post": {
+        "tags": [
+          "manager-notifications"
+        ],
+        "summary": "Подтвердить чат, приславший код",
+        "operationId": "confirm_recipient_api_v1_manager_notifications_confirm_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerConfirmOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Нет чата, ожидающего подтверждения (no_candidate)"
+          }
+        }
+      }
+    },
+    "/api/v1/manager-notifications/disconnect": {
+      "post": {
+        "tags": [
+          "manager-notifications"
+        ],
+        "summary": "Отключить уведомления менеджеру",
+        "operationId": "disconnect_recipient_api_v1_manager_notifications_disconnect_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerNotificationsOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не настроено"
+          }
+        }
+      }
+    },
     "/api/v1/webhooks/manager-telegram": {
       "post": {
         "tags": [
@@ -2842,6 +3091,30 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/telegram-manager": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Служебный бот уведомлений: код привязки менеджера",
+        "description": "Binds the chat that sent `/start plumo_mgr_<code>` as a candidate; the operator confirms it.\n\nThe reply goes back in the webhook answer, so the handler makes no outgoing call.",
+        "operationId": "telegram_manager_webhook_api_v1_webhooks_telegram_manager_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Telegram Manager Webhook Api V1 Webhooks Telegram Manager Post"
                 }
               }
             }
@@ -5126,6 +5399,53 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "notify_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Status",
+            "description": "Уведомление менеджеру: queued/sending/sent/failed/unknown/cancelled. sent — Telegram принял, не «прочитано»."
+          },
+          "notify_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Error"
+          },
+          "notify_attempted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Attempted At"
+          },
+          "notified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notified At"
           }
         },
         "type": "object",
@@ -5385,6 +5705,117 @@
         ],
         "title": "LastMessageOut"
       },
+      "LeadIn": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,64}$",
+            "title": "Idempotency Key"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^(landing|wizard)$",
+            "title": "Source"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "company": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Company",
+            "default": ""
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Message",
+            "default": ""
+          },
+          "plan": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Plan",
+            "default": ""
+          },
+          "locale": {
+            "type": "string",
+            "pattern": "^(ru|en|ky)$",
+            "title": "Locale",
+            "default": "ru"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "source",
+          "name",
+          "email"
+        ],
+        "title": "LeadIn"
+      },
+      "LeadOut": {
+        "properties": {
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "accepted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "number"
+        ],
+        "title": "LeadOut"
+      },
+      "LimitsOut": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "title": "Day",
+            "description": "UTC-день, за который считается расход"
+          },
+          "calls": {
+            "type": "integer",
+            "title": "Calls"
+          },
+          "calls_limit": {
+            "type": "integer",
+            "title": "Calls Limit"
+          },
+          "spent_usd": {
+            "type": "number",
+            "title": "Spent Usd",
+            "description": "Потрачено и зарезервировано идущими ответами"
+          },
+          "limit_usd": {
+            "type": "number",
+            "title": "Limit Usd"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "calls",
+          "calls_limit",
+          "spent_usd",
+          "limit_usd"
+        ],
+        "title": "LimitsOut"
+      },
       "LoginIn": {
         "properties": {
           "email": {
@@ -5436,6 +5867,299 @@
           "token"
         ],
         "title": "LoginOut"
+      },
+      "ManagerChatOut": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "title": "ManagerChatOut"
+      },
+      "ManagerConfirmOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "waiting_code",
+              "awaiting_confirmation",
+              "ready",
+              "needs_attention"
+            ],
+            "title": "Status"
+          },
+          "recipient": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Чат, приславший код; ждёт подтверждения оператором."
+          },
+          "attention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attention"
+          },
+          "code_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Expires At"
+          },
+          "bot_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Username"
+          },
+          "service_bot_configured": {
+            "type": "boolean",
+            "title": "Service Bot Configured"
+          },
+          "control_delivery": {
+            "type": "string",
+            "enum": [
+              "sent",
+              "failed",
+              "rejected"
+            ],
+            "title": "Control Delivery"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "service_bot_configured",
+          "control_delivery"
+        ],
+        "title": "ManagerConfirmOut"
+      },
+      "ManagerLinkOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "waiting_code",
+              "awaiting_confirmation",
+              "ready",
+              "needs_attention"
+            ],
+            "title": "Status"
+          },
+          "recipient": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Чат, приславший код; ждёт подтверждения оператором."
+          },
+          "attention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attention"
+          },
+          "code_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Expires At"
+          },
+          "bot_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Username"
+          },
+          "service_bot_configured": {
+            "type": "boolean",
+            "title": "Service Bot Configured"
+          },
+          "command": {
+            "type": "string",
+            "title": "Command",
+            "description": "Сообщение для служебного бота. Показывается один раз, в БД только хеш кода."
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link",
+            "description": "Ссылка t.me с кодом, если известно имя служебного бота."
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "service_bot_configured",
+          "command"
+        ],
+        "title": "ManagerLinkOut"
+      },
+      "ManagerNotificationsOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "waiting_code",
+              "awaiting_confirmation",
+              "ready",
+              "needs_attention"
+            ],
+            "title": "Status"
+          },
+          "recipient": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Чат, приславший код; ждёт подтверждения оператором."
+          },
+          "attention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attention"
+          },
+          "code_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Expires At"
+          },
+          "bot_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Username"
+          },
+          "service_bot_configured": {
+            "type": "boolean",
+            "title": "Service Bot Configured"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "service_bot_configured"
+        ],
+        "title": "ManagerNotificationsOut"
       },
       "ManagerSendIn": {
         "properties": {

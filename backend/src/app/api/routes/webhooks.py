@@ -24,6 +24,14 @@ from app.infrastructure.channels.gateway import channel_secret_key, telegram_web
 from app.infrastructure.channels.instagram import parse_entry, valid_signature
 from app.infrastructure.channels.telegram import parse_update
 from app.application.services.telegram_verification import verification_data
+from app.application.services.spend_limits import SpendLimits
+from app.application.services.manager_recipients import (
+    BOUND_REPLY,
+    UNKNOWN_CODE_REPLY,
+    ManagerRecipients,
+    manager_webhook_secret,
+    parse_start,
+)
 
 logger = logging.getLogger("plumo.webhooks")
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -42,6 +50,9 @@ async def manager_telegram(request: Request, services: Services = Depends(get_se
     update = _json(await _body(request))
     if isinstance(update, dict):
         await ManagerRecipientService(services.session).discover(update)
+        start = parse_start(update)
+        if start is not None:
+            await ManagerRecipients(services.session).accept_start(start)
     await services.session.commit()
     return {"ok": True}
 
@@ -68,6 +79,33 @@ async def telegram_webhook(connection_id: UUID, request: Request, services: Serv
         await _store(services, connection, event)
     await services.session.commit()
     return {"ok": True}
+
+
+@router.post("/telegram-manager", summary="Служебный бот уведомлений: код привязки менеджера")
+async def telegram_manager_webhook(request: Request, services: Services = Depends(get_services)) -> dict:
+    """Binds the chat that sent `/start plumo_mgr_<code>` as a candidate; the operator confirms it.
+
+    The reply goes back in the webhook answer, so the handler makes no outgoing call.
+    """
+
+    key = channel_secret_key()
+    if not key:
+        raise NotConfigured("CHANNEL_SECRET_KEY is not set", code="secret_key_missing")
+    given = request.headers.get("x-telegram-bot-api-secret-token", "")
+    if not hmac.compare_digest(given.encode(), manager_webhook_secret(key).encode()):
+        raise Unauthorized("webhook secret does not match")
+    update = _json(await _body(request))
+    start = parse_start(update)
+    if start is None:
+        from app.application.services.manager_recipient import ManagerRecipientService
+        if isinstance(update, dict):
+            await ManagerRecipientService(services.session).discover(update)
+            await services.session.commit()
+        return {"ok": True}
+    bound = await ManagerRecipients(services.session).accept_start(start)
+    await services.session.commit()
+    logger.info("manager_start_code", extra={"accepted": bound})
+    return {"method": "sendMessage", "chat_id": start.chat_id, "text": BOUND_REPLY if bound else UNKNOWN_CODE_REPLY}
 
 
 @router.get("/instagram", summary="Meta: проверка callback URL (hub.challenge)", response_class=PlainTextResponse)
@@ -136,7 +174,11 @@ async def _store(services: Services, connection: ChannelConnection, event: Chann
         provider_time=event.provider_time,
     )
     created = await services.inbound_events.add_if_new(inbound)
-    if created and actionable:
+    if created and actionable and not verification and await SpendLimits(services.session, services.runtime.settings).queue_full(connection.business_id):
+        # Too much waiting for this business: the message is kept, the queue does not grow.
+        await services.inbound_events.mark(inbound.id, InboundStatus.failed, "queue_full")
+        logger.warning("inbound_queue_full", extra={"business_id": str(connection.business_id)})
+    elif created and actionable:
         await services.jobs.enqueue(
             kind=JobKind.verify_telegram if verification else JobKind.process_inbound,
             business_id=connection.business_id,

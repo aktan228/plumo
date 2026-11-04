@@ -20,7 +20,7 @@ import { apiErrorText } from "./api-messages";
 import { conversationHref, dashboardConversation } from "./navigation";
 import {
   channelName, customerName, deliveryLabel, deliveryReason, eventText, formatTime, initials, mergeMessages,
-  draftAfterAcceptance, loadDialogWindow, modeLabel, replyHint, sendKey, textFits, textUsage, unsupportedText, type PendingSend,
+  notificationText, notificationTone, draftAfterAcceptance, loadDialogWindow, modeLabel, replyHint, sendKey, textFits, textUsage, unsupportedText, type PendingSend,
 } from "./dialogue-model";
 
 const labels = {
@@ -35,7 +35,7 @@ const labels = {
     agent: "Plumo", manager: "Менеджер", reply: "Написать сообщение…", send: "Отправить", replyVia: "Ответ уйдёт в",
     unread: "непрочитанных", messages: "Сообщения", details: "Информация о клиенте",
     offline: "Нет связи с сервером. Показаны последние загруженные данные, повторяем запрос…", retry: "Повторить",
-    markSent: "Клиент получил", markFailed: "Не дошло", resend: "Отправить ещё раз", unknownHint: "Проверьте в канале, дошло ли сообщение.",
+    markSent: "Клиент получил", markFailed: "Не дошло", resend: "Отправить ещё раз", managerGotIt: "Менеджер получил", notifyAgain: "Уведомить ещё раз", unknownHint: "Проверьте в канале, дошло ли сообщение.",
     tooLong: "Текст длиннее, чем разрешает канал.", waitingHandoff: "Агент запросил менеджера",
     retryWarning: "Первая попытка могла дойти. Повторная отправка может создать дубликат. Отправить ещё раз?",
     resumeWarning: "Неотправленные ответы менеджера будут отменены. Вернуть диалог агенту?",
@@ -55,7 +55,7 @@ const labels = {
     agent: "Plumo", manager: "Manager", reply: "Write a message…", send: "Send", replyVia: "Reply goes to",
     unread: "unread", messages: "Messages", details: "Customer information",
     offline: "No connection to the server. Showing the last loaded data, retrying…", retry: "Retry",
-    markSent: "Customer got it", markFailed: "Did not arrive", resend: "Send again", unknownHint: "Check in the channel whether the message arrived.",
+    markSent: "Customer got it", markFailed: "Did not arrive", resend: "Send again", managerGotIt: "Manager got it", notifyAgain: "Notify again", unknownHint: "Check in the channel whether the message arrived.",
     tooLong: "The text is longer than the channel allows.", waitingHandoff: "The agent asked for a manager",
     retryWarning: "The first attempt may have arrived. Sending again may create a duplicate. Send again?",
     resumeWarning: "Unsent manager replies will be cancelled. Return the conversation to the agent?",
@@ -76,7 +76,7 @@ function ChannelBadge({ channel }: { channel: string }) {
   return <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-medium ${channelColors[channel] ?? "bg-plumo-line/60 text-plumo-muted"}`}><span className="size-1.5 rounded-full bg-current" />{channelName(channel)}</span>;
 }
 
-export function Dialogues({ active }: { active: boolean }) {
+export function Dialogues({ active, initialId = null }: { active: boolean; initialId?: string | null }) {
   const { locale } = useLanguage();
   const c = labels[locale];
   const [items, setItems] = useState<DialogItem[]>([]);
@@ -354,7 +354,13 @@ export function Dialogues({ active }: { active: boolean }) {
       <div className="flex items-center justify-between"><h2 className="m-0 text-sm font-semibold">{c.customer}</h2><button type="button" aria-label={c.close} onClick={() => setDetailsOpen(false)} className={`${iconButton} xl:hidden`}><PlumoIcon icon={Cancel01Icon} size={18} /></button></div>
       <div className="mt-6 flex items-center gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-plumo-soft text-sm font-semibold text-plumo-blue">{initials(name(dialog))}</span><div><p className="m-0 text-sm font-semibold">{name(dialog)}</p><p className="mb-0 mt-1 text-xs text-plumo-muted">{channelName(dialog.channel)}</p></div></div>
       <dl className="mb-0 mt-6 space-y-5">{rows.map(([label, text]) => <div key={label}><dt className="text-xs text-plumo-muted">{label}</dt><dd className="mb-0 ml-0 mt-1.5 break-words text-[13px] leading-6">{text}</dd></div>)}</dl>
-      {value.handoff && <div className="mt-6 rounded-xl bg-plumo-soft p-4"><h3 className="m-0 text-xs font-semibold text-plumo-blue">{c.handoff}</h3><p className="mb-0 mt-2 text-[13px] leading-6">{c.reasons[value.handoff.reason] ?? value.handoff.reason}</p></div>}
+      {value.handoff && <div className="mt-6 rounded-xl bg-plumo-soft p-4"><h3 className="m-0 text-xs font-semibold text-plumo-blue">{c.handoff}</h3><p className="mb-0 mt-2 text-[13px] leading-6">{c.reasons[value.handoff.reason] ?? value.handoff.reason}</p>
+        {notificationText(value.handoff.notify_status, locale) && <p className={`mb-0 mt-2 text-xs leading-5 ${notificationTone(value.handoff.notify_status) === "error" ? "text-red-700" : notificationTone(value.handoff.notify_status) === "ok" ? "text-emerald-700" : "text-plumo-muted"}`} role="status">{notificationText(value.handoff.notify_status, locale)}</p>}
+        {(value.handoff.notify_status === "failed" || value.handoff.notify_status === "unknown") && <div className="mt-3 flex flex-wrap gap-2">
+          {value.handoff.notify_status === "unknown" && <button type="button" className={button} disabled={busy !== null} onClick={() => action(`notify:${value.handoff!.id}`, () => api(`handoffs/${value.handoff!.id}/notification/resolve`, { method: "POST", body: { action: "mark_sent" } }))}>{c.managerGotIt}</button>}
+          <button type="button" className={button} disabled={busy !== null} onClick={() => action(`notify:${value.handoff!.id}`, () => api(`handoffs/${value.handoff!.id}/notification/resolve`, { method: "POST", body: { action: "retry" } }))}>{c.notifyAgain}</button>
+        </div>}
+      </div>}
       <CustomerHistory key={value.customer.id} customerId={value.customer.id} locale={locale} openConversation={openConversation} />
     </>;
   }

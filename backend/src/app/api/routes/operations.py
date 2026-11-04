@@ -6,7 +6,11 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import Services, current_operator, get_services
 from app.api.mappers import handoff_out, knowledge_out, meeting_out, metrics_out
+from app.api.dashboard_schemas import ResolveDeliveryIn
 from app.api.schemas import HandoffOut, KnowledgeIn, KnowledgeOut, MeetingIn, MeetingOut, MetricsOut
+from app.application.services.handoff_notifier import resolve_notification
+from app.application.services.spend_limits import SpendLimits
+from pydantic import BaseModel, Field
 from app.application.services.auth_service import OperatorContext
 from app.domain.errors import BusinessNotFound, CustomerNotFound
 from app.domain.models import KnowledgeItem, utcnow
@@ -49,6 +53,39 @@ async def resolve_handoff(
     )
     await services.session.commit()
     return handoff_out(handoff)
+
+
+@router.post(
+    "/handoffs/{handoff_id}/notification/resolve",
+    response_model=HandoffOut,
+    summary="Ручное решение по неотправленному или неизвестному уведомлению менеджеру",
+    responses={404: {"description": "Нет такой передачи у этого бизнеса"}, 409: {"description": "Решать нечего"}},
+)
+async def resolve_handoff_notification(
+    handoff_id: UUID,
+    body: ResolveDeliveryIn,
+    operator: OperatorContext = Depends(current_operator),
+    services: Services = Depends(get_services),
+) -> HandoffOut:
+    await resolve_notification(services.session, handoff_id, operator.business_id, body.action)
+    await services.session.commit()
+    return handoff_out(await services.handoff_requests.get(handoff_id))
+
+
+class LimitsOut(BaseModel):
+    day: str = Field(description="UTC-день, за который считается расход")
+    calls: int
+    calls_limit: int
+    spent_usd: float = Field(description="Потрачено и зарезервировано идущими ответами")
+    limit_usd: float
+
+
+@router.get("/limits", response_model=LimitsOut, summary="Дневной лимит ответов агента этого бизнеса")
+async def get_limits(
+    operator: OperatorContext = Depends(current_operator),
+    services: Services = Depends(get_services),
+) -> LimitsOut:
+    return LimitsOut(**await SpendLimits(services.session, services.runtime.settings).usage(operator.business_id))
 
 
 @router.get("/knowledge", response_model=list[KnowledgeOut], summary="База знаний")

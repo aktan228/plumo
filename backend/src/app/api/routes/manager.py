@@ -84,6 +84,11 @@ async def resolve(handoff_id: UUID, body: ResolveIn, operator: OperatorContext =
         ManagerNotificationRow.handoff_id == handoff_id, ManagerNotificationRow.business_id == operator.business_id
     ).with_for_update())
     handoff = await session.get(HandoffRequestRow, handoff_id)
+    if attempt is None:
+        from app.application.services.handoff_notifier import resolve_notification
+        await resolve_notification(session, handoff_id, operator.business_id, body.action)
+        await session.commit()
+        return {"ok": True}
     if job.status != "failed" or handoff.notified_at is not None:
         raise InvalidState("Refresh the notification state before resolving it")
     if body.action == "retry":
@@ -94,15 +99,18 @@ async def resolve(handoff_id: UUID, body: ResolveIn, operator: OperatorContext =
             attempt.state, attempt.updated_at = "retryable", utcnow()
         job.status, job.attempts, job.last_error = "queued", 0, None
         job.run_at, job.finished_at, job.locked_by, job.locked_until = utcnow(), None, None, None
+        handoff.notify_status, handoff.notify_error = "queued", None
     else:
         if not attempt or attempt.state != "unknown":
             raise InvalidState("Only an unknown delivery can be marked manually")
         attempt.state = "sent" if body.action == "mark_sent" else "failed"
+        handoff.notify_status = attempt.state
         attempt.updated_at = utcnow()
         job.last_error = "confirmed_by_operator" if body.action == "mark_sent" else "marked_failed"
         if body.action == "mark_sent":
             handoff.notified_at, job.status = utcnow(), "done"
     job.updated_at = utcnow()
+    handoff.notify_generation += 1
     await session.commit()
     return {"ok": True}
 

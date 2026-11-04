@@ -7,7 +7,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.enums import ConnectionStatus, InboundStatus, JobStatus, OutboundStatus
+from app.domain.enums import ConnectionStatus, InboundStatus, JobKind, JobStatus, OutboundStatus
 from app.domain.models import (
     ChannelConnection,
     InboundEvent,
@@ -469,6 +469,29 @@ class JobQueue:
                 locked_until=None,
                 locked_by=None,
                 last_error=error[:300],
+                updated_at=utcnow(),
+            )
+        )
+        return (result.rowcount or 0) == 1
+
+    async def requeue_notification(self, handoff_id: UUID) -> bool:
+        """Run a handoff's finished notification job again (one job per handoff), after a person decided to."""
+
+        result = await self.session.execute(
+            update(JobRow)
+            .where(
+                JobRow.handoff_id == handoff_id,
+                JobRow.kind == JobKind.notify_handoff,
+                JobRow.status.in_((JobStatus.done, JobStatus.failed)),
+            )
+            .values(
+                status=JobStatus.queued,
+                attempts=0,
+                run_at=utcnow(),
+                locked_until=None,
+                locked_by=None,
+                last_error=None,
+                finished_at=None,
                 updated_at=utcnow(),
             )
         )

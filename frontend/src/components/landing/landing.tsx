@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n";
 import "./landing.css";
@@ -12,7 +12,7 @@ import { SetupPipeline } from "./setup-pipeline";
 import { Statistics } from "./statistics";
 import { PilotCTA } from "./pilot-cta";
 import { FAQ } from "./faq";
-import { Pricing, pricingRequestLabel, type PricingRequest } from "./pricing";
+import { Pricing, type PricingRequest } from "./pricing";
 import { DemoChoice } from "./demo-choice";
 import { DemoContactForm } from "./demo-contact-form";
 
@@ -32,7 +32,7 @@ const copy = {
     channelLabel: "04 / КАНАЛЫ", channelTitle: "Там, где начинается\nваш следующий разговор.", channelDesc: "Начинаем с одного канала. Остальные подключаем по результатам пилота и технической проверки.", channels: [["↗", "Веб-чат", "Демо на этой странице"], ["↗", "WhatsApp", "Планируется"], ["◎", "Instagram", "Планируется"], ["➤", "Telegram", "Планируется"], ["↗", "Телефония", "Техническая проверка впереди"]],
     statsLabel: "05 / РЕЗУЛЬТАТ В ЦИФРАХ", statsTitle: "Видно не только разговор.\nВиден следующий шаг.", statsDesc: "Обращения, заявки и передачи менеджеру — показатели, по которым будем оценивать пилот.", statsBadge: "Пример данных · не результаты клиентов", statsPeriod: "Обращения за неделю", statsUnits: "обращений", days: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"], metrics: ["Обращений", "Заявок на встречу", "Передано человеку"],
     faqLabel: "06 / ВОПРОСЫ", faqTitle: "Давайте проясним.", faqs: [["Plumo заменит моего менеджера?", "Задача Plumo — обработать первичный запрос и собрать контекст. Сложные вопросы, переговоры и завершение сделки остаются у вашей команды."], ["Откуда агент знает цены и условия?", "Из утверждённых данных вашего бизнеса. Если нужной информации нет, сценарий должен предусматривать уточнение у менеджера."], ["Какие языки предусмотрены?", "Продукт ориентирован на русский и кыргызский, включая смешанную речь. Качество агента проверяется отдельно перед пилотом. Интерфейс сайта сейчас доступен на русском и английском; кыргызская версия будет добавлена позже."], ["Можно подключить существующий номер?", "Это проверяется с вашим оператором и провайдером телефонии. До технического теста мы не обещаем подключение любого номера."], ["Демо действительно создаёт заявку на просмотр?", "Нет. На этой странице показан сценарий с вымышленными данными. Демо не отправляет уведомления менеджеру и не резервирует время."], ["Как попасть в пилот?", "Расскажите о бизнесе через форму ниже. Мы обсудим канал, задачу, условия и критерии результата до запуска."]],
-    ctaLabel: "НАЧНЁМ С ВАШЕГО БИЗНЕСА", ctaTitle: "Дадим следующему\nразговору продолжение.", ctaDesc: "Расскажите, какие обращения приходят вашей команде. Вместе выберем сценарий для первого пилота.", name: "Ваше имя", business: "Компания", email: "Электронная почта", message: "Что хотите автоматизировать?", send: "Подготовить письмо", mailNote: "Откроется ваша почта с заполненным письмом. Отправку подтверждаете вы.", mailReady: "Почтовая программа запрошена. Если она не открылась, напишите на contact@plumo.app. Заявка через сайт не отправлялась.", subject: "Заявка на пилот Plumo",
+    ctaLabel: "НАЧНЁМ С ВАШЕГО БИЗНЕСА", ctaTitle: "Дадим следующему\nразговору продолжение.", ctaDesc: "Расскажите, какие обращения приходят вашей команде. Вместе выберем сценарий для первого пилота.", name: "Ваше имя", business: "Компания", email: "Электронная почта", message: "Что хотите автоматизировать?",
   },
   en: {
     label: "FOR CONVERSATIONS THAT MATTER", title: "Your customer", title2: "started a conversation.", title3: "Plumo takes it further.", intro: "An AI assistant for inbound inquiries. From the first question to a qualified request, with care for your customer and context for your team.", try: "Explore the demo", pilot: "Discuss a pilot", note: "Meet the product · No sign-up needed", sample: "Illustrative scenario", person: "Aibek", incoming: "New inquiry", question: "Looking for an apartment for my family. Any options?", answer: "Let's find a fit. Which area and how many rooms are you looking for?", lead: "Request for the manager", need: "Family apartment", rooms: "2 rooms · south of the city", context: "Needs and history, in one place", next: "Next step", nextValue: "Arrange a viewing", strip: ["Attention to every inquiry", "Context across conversations", "A human within reach"],
@@ -42,7 +42,7 @@ const copy = {
     channelLabel: "04 / CHANNELS", channelTitle: "Where your next\nconversation begins.", channelDesc: "We start with one channel. More follow after the pilot and technical validation.", channels: [["↗", "Web chat", "Demo on this page"], ["↗", "WhatsApp", "Planned"], ["◎", "Instagram", "Planned"], ["➤", "Telegram", "Planned"], ["↗", "Phone calls", "Technical validation pending"]],
     statsLabel: "05 / MEASURE WHAT MATTERS", statsTitle: "See the conversation.\nUnderstand the next step.", statsDesc: "Inquiries, meeting requests and human handoffs — the metrics we will use to evaluate a pilot.", statsBadge: "Sample data · not customer results", statsPeriod: "Weekly inquiries", statsUnits: "inquiries", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], metrics: ["Inquiries", "Meeting requests", "Human handoffs"],
     faqLabel: "06 / QUESTIONS", faqTitle: "Let's clear things up.", faqs: [["Will Plumo replace my sales manager?", "Plumo is designed to handle initial inquiries and gather context. Complex questions, negotiation and closing the deal stay with your team."], ["Where do prices and terms come from?", "From your approved business information. When a fact is missing, the workflow should ask a manager rather than invent an answer."], ["Which languages are planned?", "The product targets Russian and Kyrgyz, including mixed speech. Agent quality is evaluated separately before a pilot. This website is available in Russian and English; Kyrgyz will follow."], ["Can we use our existing phone number?", "That needs to be checked with your carrier and telephony provider. Compatibility is confirmed through a technical test."], ["Does the demo actually book a viewing?", "No. It illustrates a workflow using fictional data. It does not notify a manager or reserve a time slot."], ["How can I join a pilot?", "Tell us about your business using the form below. We will discuss the channel, workflow, terms and success criteria before launch."]],
-    ctaLabel: "LET'S START WITH YOUR BUSINESS", ctaTitle: "Give the next conversation\na next chapter.", ctaDesc: "Tell us what your customers ask. Together, we'll choose a workflow for your first pilot.", name: "Your name", business: "Company", email: "Email address", message: "What would you like to automate?", send: "Prepare an email", mailNote: "Opens your email app with a draft. You review and send it.", mailReady: "Your email app has been requested. If it didn't open, write to contact@plumo.app. No request was submitted through this website.", subject: "Plumo pilot inquiry",
+    ctaLabel: "LET'S START WITH YOUR BUSINESS", ctaTitle: "Give the next conversation\na next chapter.", ctaDesc: "Tell us what your customers ask. Together, we'll choose a workflow for your first pilot.", name: "Your name", business: "Company", email: "Email address", message: "What would you like to automate?",
   },
 };
 
@@ -50,7 +50,6 @@ export function Landing() {
   const router = useRouter();
   const { locale } = useLanguage();
   const c = copy[locale];
-  const [mailReady, setMailReady] = useState(false);
   const [pricingChoice, setPricingChoice] = useState<PricingRequest | null>(null);
   const [demoOpen, setDemoOpen] = useState(false);
   const [demoStep, setDemoStep] = useState<"choice" | "expert">("choice");
@@ -59,7 +58,6 @@ export function Landing() {
   function openDemo(request: PricingRequest | null = null, step: "choice" | "expert" = "choice") {
     setPricingChoice(request);
     setDemoStep(step);
-    setMailReady(false);
     setDemoOpen(true);
   }
 
@@ -74,14 +72,6 @@ export function Landing() {
     }
   }
 
-  function prepareMail(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const pathLabel = demoPath ? (locale === "ru" ? (demoPath === "self" ? "После самостоятельного демо" : "Демо с сотрудником") : (demoPath === "self" ? "After the self-guided demo" : "Demo with the team")) : "";
-    const body = `${pathLabel ? `${pathLabel}\n\n` : ""}${c.name}: ${data.get("name")}\n${c.business}: ${data.get("company")}\n${c.email}: ${data.get("email")}\n\n${data.get("message")}`;
-    window.location.href = `mailto:contact@plumo.app?subject=${encodeURIComponent(c.subject)}&body=${encodeURIComponent(pricingChoice ? `${locale === "ru" ? "Тариф / запрос" : "Plan / inquiry"}: ${pricingRequestLabel(locale, pricingChoice)}\n\n${body}` : body)}`;
-    setMailReady(true);
-  }
   return <main id="main" className="landing">
     <Hero onDemo={() => openDemo()} />
     <CustomerSituations />
@@ -100,6 +90,6 @@ export function Landing() {
 
     <PilotCTA onDemo={() => openDemo(pricingChoice)} />
     {demoOpen && <DemoChoice onClose={() => setDemoOpen(false)} onSelect={followPath} step={demoStep} onBack={() => setDemoStep("choice")}
-      expertForm={<DemoContactForm onSubmit={prepareMail} selection={pricingChoice} mailReady={mailReady} formCopy={c} />} />}
+      expertForm={<DemoContactForm source={demoPath === "self" ? "wizard" : "landing"} selection={pricingChoice} formCopy={c} />} />}
   </main>;
 }

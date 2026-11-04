@@ -2,6 +2,8 @@
 
 import re
 
+from app.application.services.knowledge_retriever import OFFER_CATEGORIES, names
+
 from app.domain.models import AgentContext
 from app.domain.phrases import unknown_phrase
 from app.domain.text_signals import normalize_text
@@ -77,6 +79,23 @@ def quote_knowledge(context: AgentContext) -> str:
         return f"Смотрите, есть {parts[0]} Интересно посмотреть?"
     lines = "\n".join(f"• {part}" for part in parts)
     return f"Смотрите, что есть:\n{lines}\nКакой вариант ближе?"
+
+
+def correct_named(context: AgentContext) -> str | None:
+    """The customer named one listing and the draft got its facts wrong: state them from the data.
+
+    "Чуй за 80 тысяч, да?" deserves "Квартира на Чуй — 85 000 USD", not a generic dodge.
+    None when the message names no listing, or more than one.
+    """
+
+    named = [
+        hit.item for hit in context.knowledge
+        if hit.item.category in OFFER_CATEGORIES and not _hidden(hit.item.content) and names(hit.item, context.current_message)
+    ]
+    if len(named) != 1:
+        return None
+    item = named[0]
+    return f"По данным компании: {item.title} — {_STATUS.sub(' ', item.content).strip()}"
 
 
 def _wants_rent(context: AgentContext) -> bool:

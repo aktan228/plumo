@@ -168,6 +168,30 @@ class IntegrationsOut(BaseModel):
     ai_mode: str
 
 
+class ManagerChatOut(BaseModel):
+    label: str
+    at: DateTime | None = None
+
+
+class ManagerNotificationsOut(BaseModel):
+    status: Literal["not_configured", "waiting_code", "awaiting_confirmation", "ready", "needs_attention"]
+    recipient: ManagerChatOut | None = None
+    candidate: ManagerChatOut | None = Field(default=None, description="Чат, приславший код; ждёт подтверждения оператором.")
+    attention: str | None = None
+    code_expires_at: DateTime | None = None
+    bot_username: str | None = None
+    service_bot_configured: bool
+
+
+class ManagerLinkOut(ManagerNotificationsOut):
+    command: str = Field(description="Сообщение для служебного бота. Показывается один раз, в БД только хеш кода.")
+    link: str | None = Field(default=None, description="Ссылка t.me с кодом, если известно имя служебного бота.")
+
+
+class ManagerConfirmOut(ManagerNotificationsOut):
+    control_delivery: Literal["sent", "failed", "rejected"]
+
+
 class TelegramConnectIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     token: SecretStr | None = Field(default=None, max_length=160)

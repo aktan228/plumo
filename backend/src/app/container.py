@@ -124,7 +124,7 @@ def build_agent(session: AsyncSession, runtime: Runtime) -> AgentService:
     logs = LogRepository(session)
     memory = MemoryService(customers, summaries)
     meeting_service = MeetingService(meetings, runtime.events)
-    handoff_service = HandoffService(handoffs, customers, runtime.handoff_provider, runtime.events, JobQueue(session))
+    handoff_service = HandoffService(handoffs, customers, runtime.events, JobQueue(session))
     return AgentService(
         resolver=CustomerResolver(customers, runtime.events),
         memory=memory,
@@ -177,7 +177,6 @@ def build_handoffs(session: AsyncSession, runtime: Runtime) -> HandoffService:
     return HandoffService(
         HandoffRepository(session),
         CustomerRepository(session),
-        runtime.handoff_provider,
         runtime.events,
         JobQueue(session),
     )
@@ -204,7 +203,7 @@ def _handoff_provider(settings: Settings) -> HumanHandoffProvider:
     # on the mock model still pings the real manager chat.
     if settings.handoff_provider == "telegram":
         from app.application.services.manager_recipient import manager_token
-        return TelegramHandoffProvider(token=manager_token(), chat_id="")
+        return TelegramHandoffProvider(token=manager_token())
     if settings.mock_mode or settings.handoff_provider == "mock":
         return MockHandoffProvider()
     raise ProviderUnavailable(

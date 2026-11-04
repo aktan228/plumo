@@ -102,7 +102,7 @@ class Stand:
             id=uuid4(),
             business_id=business_id or self.business.id,
             channel="telegram",
-            credential_ref="tg-test",
+            credential_ref="tg-test" if business_id is None else "tg-other",
             external_account_id=str(self.providers.bot["id"]) if business_id is None else str(uuid4().int)[:9],
             display_name="Plumo Test",
             username="plumo_test_bot",

@@ -139,6 +139,8 @@ class InboundMessage:
     # "text", "start" (Telegram /start) or "unsupported" (photo, voice...): the last two skip the model.
     kind: str = "text"
     # False: store the message, do not answer (agent switched off on the connection).
+    # Set by the worker when a rate or spend limit is reached: store the message, call no paid model.
+    limit_reason: str | None = None
     auto_reply: bool = True
     reply_to: str | None = None
     contact_name: str | None = None
@@ -270,6 +272,10 @@ class HandoffRequest:
     updated_at: datetime
     # When the manager was told. None: the notification job has not succeeded yet.
     notified_at: datetime | None = None
+    # queued -> sending -> sent | failed | unknown | cancelled (NotifyStatus). None: nothing was planned.
+    notify_status: str | None = None
+    notify_error: str | None = None
+    notify_attempted_at: datetime | None = None
 
 
 @dataclass(slots=True)

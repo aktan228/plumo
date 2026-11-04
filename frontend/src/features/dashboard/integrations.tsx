@@ -9,17 +9,17 @@ import Loading03Icon from "@hugeicons/core-free-icons/Loading03Icon";
 import Refresh01Icon from "@hugeicons/core-free-icons/Refresh01Icon";
 import { PlumoIcon } from "@/components/ui/plumo-icon";
 import { ApiError, api, goToLogin } from "@/lib/api/client";
-import type { ChannelIntegration, Connection, IntegrationChannel, IntegrationsResponse } from "@/lib/api/types";
+import type { ChannelIntegration, Connection, IntegrationChannel, IntegrationsResponse, Limits } from "@/lib/api/types";
 import { usePolling } from "@/lib/api/use-polling";
 import { useLanguage } from "@/lib/i18n";
 import { apiErrorText } from "./api-messages";
 import { formatTime } from "./dialogue-model";
-import { cardStatus, statusLabel, statusTone } from "./integration-model";
+import { cardStatus, limitReached, limitText, statusLabel, statusTone } from "./integration-model";
 import { TelegramSetup } from "./telegram-setup";
 import { ChannelSetup } from "./channel-setup";
 import { WhatsAppSetup } from "./whatsapp-setup";
 import { initialWhatsAppDraft } from "./whatsapp-setup-model";
-import { ManagerRecipient } from "./manager-recipient";
+import { ManagerNotifications } from "./manager-notifications";
 
 const copy = {
   ru: {
@@ -108,12 +108,14 @@ export function Integrations({ onDialogues, onStateChange, onLoadStateChange, re
   const [confirming, setConfirming] = useState<string | null>(null);
   const [whatsappDraft, setWhatsappDraft] = useState(initialWhatsAppDraft);
   const [whatsappSaved, setWhatsappSaved] = useState(false);
+  const [limits, setLimits] = useState<Limits | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const containerRef = useRef<HTMLElement>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
       const result = await api<IntegrationsResponse>("integrations", { signal });
+      api<Limits>("limits", { signal }).then(setLimits, () => setLimits(null));
       setData(result);
       onStateChange?.(result);
       onLoadStateChange?.("ready");
@@ -183,6 +185,7 @@ export function Integrations({ onDialogues, onStateChange, onLoadStateChange, re
         : <>
           <h1 ref={titleRef} tabIndex={-1} className="m-0 text-2xl font-semibold tracking-tight outline-none">{c.title}</h1>
           <p className="mb-0 mt-2 text-sm leading-6 text-plumo-muted">{c.description}</p>
+          {limits && <p className={`mb-0 mt-3 text-xs ${limitReached(limits) ? "text-red-700" : "text-plumo-muted"}`}>{limitText(limits, locale)}</p>}
           {data?.ai_mode === "mock" && <p className="mb-0 mt-3 inline-flex rounded-md bg-amber-50 px-2.5 py-1 text-xs text-amber-800">{c.mock}</p>}
           {!data && !loadError && <p role="status" className="mt-8 flex items-center gap-2 text-sm text-plumo-muted"><PlumoIcon icon={Loading03Icon} size={18} className="animate-spin" />{c.loading}</p>}
           {loadError && <div role="alert" className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-solid border-red-200 bg-red-50 p-4 text-sm text-red-800"><span>{c.loadError} {apiErrorText(loadError.code, locale)}</span><button type="button" className={secondary} onClick={refresh}><PlumoIcon icon={Refresh01Icon} size={16} />{c.retry}</button></div>}
@@ -197,7 +200,7 @@ export function Integrations({ onDialogues, onStateChange, onLoadStateChange, re
             </article>
             {channels.map(item => renderCard(item))}
           </div>
-          <ManagerRecipient />
+          <ManagerNotifications />
           <div className="mt-8 flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-solid border-plumo-line bg-white p-6"><div className="max-w-[650px]"><h2 className="m-0 text-sm font-medium">{c.help}</h2><p className="mb-0 mt-2 text-sm leading-6 text-plumo-muted">{c.helpText}</p></div><button type="button" className={secondary} onClick={onDialogues}><PlumoIcon icon={Chatting01Icon} size={17} />{c.dialogues}</button></div>
         </>}
     </div>

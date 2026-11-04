@@ -124,6 +124,10 @@ def handoff_out(handoff: HandoffRequest) -> HandoffOut:
         status=handoff.status,
         created_at=handoff.created_at,
         updated_at=handoff.updated_at,
+        notify_status=handoff.notify_status,
+        notify_error=handoff.notify_error,
+        notify_attempted_at=handoff.notify_attempted_at,
+        notified_at=handoff.notified_at,
     )
 
 

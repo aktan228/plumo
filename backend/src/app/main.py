@@ -17,8 +17,24 @@ from app.api.routes import statistics
 from app.api.routes import kanban
 from app.api.routes import improvements
 from app.api.routes import scenarios
-from app.api.routes import auth, customers, dialogs, integrations, manager, messages, onboarding, operations, readiness, telephony, testing, voice, webhooks
-from app.application.services.handoff_service import drain_notifications
+from app.api.routes import manager
+from app.api.routes import (
+    auth,
+    customers,
+    dialogs,
+    integrations,
+    leads,
+    manager_notifications,
+    messages,
+    ops,
+    onboarding,
+    operations,
+    readiness,
+    telephony,
+    testing,
+    voice,
+    webhooks,
+)
 from app.config import Settings, get_settings
 from app.container import Runtime, build_runtime
 from app.correlation import correlation_id, request_id
@@ -62,7 +78,6 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
                     worker_task.cancel()
                     with suppress(asyncio.CancelledError):
                         await worker_task
-        await drain_notifications()
         await app.state.runtime.providers.aclose()
         close = getattr(app.state.runtime.handoff_provider, "aclose", None)
         if close is not None:
@@ -134,12 +149,15 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    app.include_router(ops.router)
+
     protected = [Depends(require_api_key)]
     app.include_router(messages.router, prefix="/api/v1", dependencies=protected)
     app.include_router(voice.router, prefix="/api/v1", dependencies=protected)
     # Dashboard routes: the service key of the Next.js server and an operator session.
     app.include_router(auth.router, prefix="/api/v1", dependencies=protected)
     app.include_router(onboarding.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(leads.router, prefix="/api/v1", dependencies=protected)
     app.include_router(testing.router, prefix="/api/v1", dependencies=protected)
     app.include_router(readiness.router, prefix="/api/v1", dependencies=protected)
     app.include_router(statistics.router, prefix="/api/v1", dependencies=protected)
@@ -151,6 +169,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     app.include_router(dialogs.router, prefix="/api/v1", dependencies=protected)
     app.include_router(integrations.router, prefix="/api/v1", dependencies=protected)
     app.include_router(manager.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(manager_notifications.router, prefix="/api/v1", dependencies=protected)
     # Provider callbacks authenticate themselves (secret header, signature).
     app.include_router(webhooks.router, prefix="/api/v1")
     app.include_router(telephony.router, prefix="/api/v1")

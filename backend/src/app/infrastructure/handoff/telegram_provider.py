@@ -1,8 +1,10 @@
 """Telegram notification to the manager when a dialog needs a human.
 
-Runs in the worker from a `notify_handoff` job, after the handoff is committed. A failure
-uses ProviderTransientError only when a retry is safe (connection failure or 429).
-Ambiguous outcomes use ProviderDeliveryUnknown; explicit refusals use ProviderUnavailable.
+Runs in the worker from a `notify_handoff` job, after the handoff is committed. The chat
+is the business's confirmed recipient (`manager_recipients`), passed in by the caller; this
+class knows only the service bot's token. A failure is raised so the job retries:
+ProviderTransientError for a network error, 429 or 5xx, ProviderUnavailable for any other
+refusal (chat not found, bot blocked by the manager, revoked token).
 """
 
 import html
@@ -12,14 +14,15 @@ import os
 import httpx
 
 from app.domain.errors import ProviderDeliveryUnknown, ProviderTransientError, ProviderUnavailable
-from app.infrastructure.channels.base import ChannelError
-from app.infrastructure.channels.telegram import _result
 from app.domain.models import HandoffRequest
 
 logger = logging.getLogger("plumo.handoff")
 
 _REASONS = {
     "hot_lead": "🔥 Горячий клиент",
+    "sender_rate_limit": "⏸ Клиент пишет слишком часто, агент приостановлен",
+    "business_budget": "⏸ Дневной лимит расходов бизнеса исчерпан, агент молчит",
+    "service_budget": "⏸ Общий дневной лимит Plumo исчерпан, агент молчит",
     "ready_for_meeting": "📅 Готов к встрече",
     "user_requested_human": "🙋 Просит менеджера",
     "no_knowledge": "❓ Вопрос вне базы",
@@ -35,50 +38,66 @@ class TelegramHandoffProvider:
         self,
         *,
         token: str | None = None,
-        chat_id: str | None = None,
         dashboard_url: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.token = (token if token is not None else os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
-        self.chat_id = (chat_id or "").strip()
         self.dashboard_url = (dashboard_url or os.getenv("DASHBOARD_URL", "")).rstrip("/")
         if not self.token:
-            raise ProviderUnavailable("The manager bot token is required")
+            raise ProviderUnavailable("TELEGRAM_BOT_TOKEN of the service bot is required")
         self._client = httpx.AsyncClient(timeout=10.0, transport=transport)
 
-    async def notify(self, handoff: HandoffRequest) -> None:
-        if not self.chat_id:
-            raise ProviderUnavailable("A tenant-specific recipient is required")
-        await self.notify_to(handoff, self.chat_id)
+    async def notify(self, handoff: HandoffRequest, chat_id: str | None = None) -> None:
+        if not chat_id:
+            raise ProviderUnavailable("A confirmed business recipient is required")
+        await self._send(chat_id, render(handoff, self.dashboard_url), "HTML", str(handoff.id))
 
     async def notify_to(self, handoff: HandoffRequest, chat_id: str) -> None:
+        await self.notify(handoff, chat_id)
+
+    async def send_text(self, chat_id: str, text: str) -> None:
+        await self._send(chat_id, text, None, "")
+
+    async def _send(self, chat_id: str, text: str, parse_mode: str | None, handoff_id: str) -> None:
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
-        body = {
-            "chat_id": chat_id,
-            "text": render(handoff, self.dashboard_url),
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        }
+        body: dict = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
+        if parse_mode:
+            body["parse_mode"] = parse_mode
         try:
             response = await self._client.post(url, json=body)
-        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout):
-            logger.warning("telegram_unreachable", extra={"handoff_id": str(handoff.id)})
-            raise ProviderTransientError("Telegram is unreachable") from None
-        except httpx.HTTPError:
-            raise ProviderDeliveryUnknown("Telegram delivery outcome is unknown") from None
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
+            # The request never left: safe to repeat.
+            logger.warning("telegram_unreachable", extra={"handoff_id": handoff_id})
+            raise ProviderTransientError("Telegram is unreachable") from exc
+        except httpx.HTTPError as exc:
+            # Sent, but no answer: Telegram may have delivered it.
+            logger.warning("telegram_no_answer", extra={"handoff_id": handoff_id})
+            raise ProviderDeliveryUnknown("Telegram did not answer after the request was sent") from exc
+        if response.status_code >= 400:
+            logger.warning("telegram_notify_failed", extra={"status": response.status_code, "handoff_id": handoff_id})
+            if response.status_code >= 500:
+                raise ProviderDeliveryUnknown("Telegram server error after send; delivery is unknown")
+            if response.status_code == 429:
+                raise ProviderTransientError(f"Telegram answered {response.status_code}", retry_after=_retry_after(response))
+            raise ProviderUnavailable(f"Telegram refused the notification: {response.status_code}")
         try:
-            result = _result(response, sends=True)
-        except ChannelError as exc:
-            if exc.kind == "ambiguous":
-                raise ProviderDeliveryUnknown("Telegram delivery outcome is unknown") from None
-            if exc.retryable:
-                raise ProviderTransientError("Telegram temporarily refused the notification") from None
-            raise ProviderUnavailable("Telegram refused the notification") from None
-        if not isinstance(result, dict) or type(result.get("message_id")) is not int or result["message_id"] <= 0:
-            raise ProviderDeliveryUnknown("Telegram delivery outcome is unknown")
+            payload = response.json()
+            message_id = payload.get("result", {}).get("message_id")
+            if payload.get("ok") is not True or type(message_id) is not int:
+                raise ValueError("missing receipt")
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ProviderDeliveryUnknown("Telegram returned no valid delivery receipt") from exc
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    try:
+        value = response.json().get("parameters", {}).get("retry_after")
+    except (ValueError, AttributeError):
+        return None
+    return float(value) if isinstance(value, (int, float)) and value >= 0 else None
 
 
 def render(handoff: HandoffRequest, dashboard_url: str = "") -> str:
@@ -96,6 +115,7 @@ def render(handoff: HandoffRequest, dashboard_url: str = "") -> str:
             lines.append(f"<b>{who}:</b> {html.escape(str(item.get('text') or '')[:200])}")
     lines.append("")
     if dashboard_url:
+        # The dashboard opens this dialog after sign-in; another business's dialog answers 404.
         lines.append(f'<a href="{html.escape(dashboard_url, quote=True)}/dashboard?conversation={handoff.conversation_id}#chats">Открыть диалог</a>')
     lines.append(f"<code>{handoff.id}</code>")
     return "\n".join(lines)

@@ -24,7 +24,7 @@ import type { IntegrationsResponse, Session } from "@/lib/api/types";
 const pages = groups.flatMap(group => [...group.items]);
 const controlClass = "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-1 text-plumo-muted transition-colors hover:bg-plumo-line/65 hover:text-plumo-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue";
 
-export function DashboardShell({ session }: { session: Session }) {
+export function DashboardShell({ session, conversation = null }: { session: Session; conversation?: string | null }) {
   const { locale, t } = useLanguage();
   const [collapsed, setCollapsed] = useState(false);
   const [inboxView, setInboxView] = useState<"list" | "kanban">("list");

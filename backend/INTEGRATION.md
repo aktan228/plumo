@@ -281,9 +281,9 @@ actions=GoogleCalendarActionExecutor(...)
 
 ## Handoff-уведомление
 
-`HumanHandoffProvider.notify(handoff)` вызывается после добавления записи в сессию, фоновой задачей процесса, ещё до commit транзакции. Перевести уведомление на очередь заданий, чтобы оно не терялось и не уходило по откатившейся передаче, — первый пункт плана MVP.
+`HandoffService` кладёт задание `notify_handoff` в ту же транзакцию, что и передачу; worker после commit берёт подтверждённый чат менеджера этого бизнеса (`manager_recipients`) и вызывает `HumanHandoffProvider.notify(handoff, chat_id)`. Бизнес без подтверждённого чата не уведомляется: задание закрывается с `recipient_not_configured`, общего чата нет. Привязка чата — [../docs/manager-notifications.md](../docs/manager-notifications.md).
 
-Готовые транспорты: `TelegramHandoffProvider` (`infrastructure/handoff/telegram_provider.py`, при `HANDOFF_PROVIDER=telegram`) и mock, который пишет structured log. Свой транспорт — класс с `async def notify(self, handoff)`, подключается в `_handoff_provider`. Создание записи, статусы `PENDING / ACCEPTED / RESOLVED / CANCELLED` и причины остаются в `HandoffService`.
+Готовые транспорты: `TelegramHandoffProvider` (`infrastructure/handoff/telegram_provider.py`, при `HANDOFF_PROVIDER=telegram`) и mock, который пишет structured log. Свой транспорт — класс с `async def notify(self, handoff, chat_id)` и `async def send_text(self, chat_id, text)`, подключается в `_handoff_provider`. Создание записи, статусы `PENDING / ACCEPTED / RESOLVED / CANCELLED` и причины остаются в `HandoffService`.
 
 ## База знаний
 

@@ -73,11 +73,14 @@ class LanguageDetector(Protocol):
 
 
 class HumanHandoffProvider(Protocol):
-    async def notify(self, handoff: HandoffRequest) -> None:
-        """Tell a human that a dialog is waiting. Mock only logs.
+    async def notify(self, handoff: HandoffRequest, chat_id: str) -> None:
+        """Tell the business's confirmed recipient that a dialog is waiting. Mock only logs.
 
         Raises ProviderTransientError when a retry may work, ProviderUnavailable when it will not.
         """
+
+    async def send_text(self, chat_id: str, text: str) -> None:
+        """Control message to a newly confirmed recipient. Same errors as `notify`."""
 
 
 class JobEnqueuer(Protocol):

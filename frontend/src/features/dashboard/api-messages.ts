@@ -41,6 +41,8 @@ const texts: Record<Locale, Record<string, string>> = {
     delivery_not_resolvable: "Для этой отправки действие уже недоступно.",
     channel_unavailable: "Сервис канала временно недоступен. Повторите позже.",
     invalid_message: "Проверьте введённые данные.",
+    no_candidate: "Менеджер ещё не отправил код боту. Отправьте ему ссылку или получите новую, если прошло больше 15 минут.",
+    recipient_not_found: "Уведомления менеджеру уже отключены.",
   },
   en: {
     network_error: "No connection to the server. Check the internet and retry.",
@@ -81,6 +83,8 @@ const texts: Record<Locale, Record<string, string>> = {
     delivery_not_resolvable: "This action is no longer available for the delivery.",
     channel_unavailable: "The channel service is temporarily unavailable. Retry later.",
     invalid_message: "Check the entered data.",
+    no_candidate: "The manager has not sent the code to the bot yet. Send them the link, or get a new one after 15 minutes.",
+    recipient_not_found: "Manager notifications are already off.",
   },
 };
 

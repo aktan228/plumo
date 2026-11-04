@@ -258,6 +258,17 @@ def unknown_phrase(topic: str | None, language: str, seed: str = "") -> str:
     return _pick(UNKNOWN_FACT_RU, seed)
 
 
+def which_offer_phrase(titles: list[str], language: str) -> str:
+    """Several listings fit the question: ask which one instead of guessing. Kyrgyz needs a native check."""
+
+    names = [title.strip() for title in titles if title.strip()][:3]
+    if language == "ky":
+        return f"Кайсы вариантты сурап жатасыз: {' же '.join(names)}?"
+    if language == "en":
+        return f"Which one do you mean: {' or '.join(names)}?"
+    return f"Уточните, пожалуйста, какой вариант вас интересует: {' или '.join(names)}?"
+
+
 def fallback_phrase(intent: str, language: str, seed: str = "") -> str:
     """Safe line when the model draft is unusable, chosen by what the customer wants.
 

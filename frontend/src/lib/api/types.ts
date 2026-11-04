@@ -38,6 +38,22 @@ export type ChannelIntegration = {
 };
 export type IntegrationsResponse = { channels: ChannelIntegration[]; ai_mode: string };
 
+export type Limits = { day: string; calls: number; calls_limit: number; spent_usd: number; limit_usd: number };
+
+export type ManagerStatus = "not_configured" | "waiting_code" | "awaiting_confirmation" | "ready" | "needs_attention";
+export type ManagerChat = { label: string; at: string | null };
+export type ManagerNotifications = {
+  status: ManagerStatus;
+  recipient: ManagerChat | null;
+  candidate: ManagerChat | null;
+  attention: string | null;
+  code_expires_at: string | null;
+  bot_username: string | null;
+  service_bot_configured: boolean;
+};
+export type ManagerLink = ManagerNotifications & { command: string; link: string | null };
+export type ManagerConfirm = ManagerNotifications & { control_delivery: "sent" | "failed" | "rejected" };
+
 export type DialogMode = "ai" | "waiting" | "human";
 export type DeliveryStatus = "queued" | "sending" | "sent" | "failed" | "unknown" | "cancelled";
 export type Delivery = { id: string; status: DeliveryStatus; attempts: number; error_code: string | null; sent_at: string | null; updated_at: string };
@@ -82,7 +98,10 @@ export type DialogDetail = {
   older_cursor: string | null;
   customer: { id: string; phone: string | null; contact_phone: string | null; language: string; status: string; need: string | null };
   summary: { summary: string; need: string | null; language: string; status: string; important_facts: string[]; updated_at: string } | null;
-  handoff: { id: string; reason: string; priority: string; status: string; summary: string; created_at: string } | null;
+  handoff: {
+    id: string; reason: string; priority: string; status: string; summary: string; created_at: string;
+    notify_status: "queued" | "sending" | "sent" | "failed" | "unknown" | "cancelled" | null; notify_error: string | null; notified_at: string | null;
+  } | null;
   connection: { id: string; channel: string; status: ConnectionStatus; agent_enabled: boolean; account: Account } | null;
   reply: ReplyState;
 };

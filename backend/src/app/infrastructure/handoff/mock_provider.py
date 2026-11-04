@@ -8,7 +8,7 @@ logger = logging.getLogger("plumo.handoff")
 
 
 class MockHandoffProvider:
-    async def notify(self, handoff: HandoffRequest) -> None:
+    async def notify(self, handoff: HandoffRequest, chat_id: str) -> None:
         logger.info(
             "handoff_saved",
             extra={
@@ -19,3 +19,6 @@ class MockHandoffProvider:
                 "status": handoff.status,
             },
         )
+
+    async def send_text(self, chat_id: str, text: str) -> None:
+        logger.info("manager_control_message", extra={"length": len(text)})

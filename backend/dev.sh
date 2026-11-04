@@ -47,8 +47,15 @@ case "$cmd" in
                 exit 1
             }
         fi
-        "$PY" -m pip install --upgrade pip
-        "$PY" -m pip install -e ".[dev]"
+        if "$PY" -m pip --version >/dev/null 2>&1; then
+            "$PY" -m pip install --upgrade pip
+            "$PY" -m pip install -e ".[dev]"
+        elif command -v uv >/dev/null 2>&1; then
+            # A .venv made by uv has no pip; uv installs into it directly.
+            uv pip install --python "$PY" -e ".[dev]"
+        else
+            "$PY" -m ensurepip --upgrade && "$PY" -m pip install -e ".[dev]"
+        fi
         if [ ! -f .env ]; then cp .env.example .env && echo "Created .env from .env.example"; fi
         echo
         echo "Ready. Next: ./dev.sh up"

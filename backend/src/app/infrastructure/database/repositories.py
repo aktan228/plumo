@@ -644,6 +644,9 @@ class HandoffRepository:
         row.summary = handoff.summary
         row.priority = handoff.priority
         row.notified_at = handoff.notified_at
+        row.notify_status = handoff.notify_status
+        row.notify_error = handoff.notify_error
+        row.notify_attempted_at = handoff.notify_attempted_at
         await self.session.flush()
         return _handoff(row)
 
@@ -1078,6 +1081,9 @@ def _handoff(row: HandoffRequestRow) -> HandoffRequest:
         created_at=row.created_at,
         updated_at=row.updated_at,
         notified_at=row.notified_at,
+        notify_status=row.notify_status,
+        notify_error=row.notify_error,
+        notify_attempted_at=row.notify_attempted_at,
     )
 
 
@@ -1093,6 +1099,7 @@ def _handoff_row(handoff: HandoffRequest) -> HandoffRequestRow:
         status=handoff.status,
         created_at=handoff.created_at,
         updated_at=handoff.updated_at,
+        notify_status=handoff.notify_status,
     )
 
 

@@ -20,7 +20,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from app.domain.models import utcnow
 from app.infrastructure.database.base import Base
@@ -47,19 +47,6 @@ class ScenarioRevisionRow(Base):
     settings: Mapped[dict] = mapped_column(JSONB)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-
-class ManagerRecipientRow(Base):
-    __tablename__ = "manager_recipients"
-    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
-    version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    pending_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    candidate_chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    candidate_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
 
 
 class ManagerNotificationRow(Base):
@@ -216,6 +203,11 @@ class HandoffRequestRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Manager notification: queued/sending/sent/failed/unknown/cancelled; None when none was planned.
+    notify_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    notify_error: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    notify_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notify_generation: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class MeetingRow(Base):
@@ -308,6 +300,104 @@ class OperatorRow(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ManagerRecipientRow(Base):
+    """Telegram chat that gets the business's handoff notifications through the service bot.
+
+    `chat_id` is the confirmed recipient. A chat that sent a binding code waits in
+    `candidate_*` until an operator of the same business confirms it; until then the
+    previous recipient, if any, keeps getting notifications.
+    """
+
+    __tablename__ = "manager_recipients"
+    version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    pending_hash = synonym("code_hash")
+    expires_at = synonym("code_expires_at")
+    display_name = synonym("chat_label")
+    candidate_name = synonym("candidate_label")
+
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
+    code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    candidate_chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    candidate_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    candidate_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    chat_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("operators.id", ondelete="SET NULL"), nullable=True)
+    attention: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    attention_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
+
+
+class SpendBudgetRow(Base):
+    """Paid model spend of one scope for one UTC day: `business:<id>` or `service`.
+
+    `reserved` is held by turns in flight, `spent` is settled. A reservation of a turn
+    that crashed stays counted: the call may have been billed.
+    """
+
+    __tablename__ = "spend_budgets"
+
+    scope: Mapped[str] = mapped_column(String(64), primary_key=True)
+    day: Mapped[str] = mapped_column(String(10), primary_key=True)
+    calls: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    reserved: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=0, server_default="0")
+    spent: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
+
+
+class SpendReservationRow(Base):
+    """One customer turn's hold on the budget. Unique per inbound event: a redelivered event pays once."""
+
+    __tablename__ = "spend_reservations"
+
+    inbound_event_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("inbound_events.id", ondelete="CASCADE"), primary_key=True
+    )
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    day: Mapped[str] = mapped_column(String(10))
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 6))
+    actual: Mapped[Decimal | None] = mapped_column(Numeric(14, 6), nullable=True)
+    status: Mapped[str] = mapped_column(String(16))  # reserved | settled
+    cost_version: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WorkerHeartbeatRow(Base):
+    """Last sign of life of each worker process. Several workers each have their own row."""
+
+    __tablename__ = "worker_heartbeats"
+
+    worker_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class LeadRow(Base):
+    """A pilot request from the website. Not tied to a business: the visitor has no account yet."""
+
+    __tablename__ = "leads"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
+    source: Mapped[str] = mapped_column(String(16))  # landing | wizard
+    name: Mapped[str] = mapped_column(String(100))
+    company: Mapped[str] = mapped_column(String(200), default="")
+    email: Mapped[str] = mapped_column(String(254))
+    message: Mapped[str] = mapped_column(Text, default="")
+    plan: Mapped[str] = mapped_column(String(200), default="")
+    locale: Mapped[str] = mapped_column(String(8), default="ru")
+    # Team notification: queued -> sent | failed | cancelled (no team chat configured).
+    notify_status: Mapped[str] = mapped_column(String(16), default="queued")
+    notify_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    notify_error: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    notify_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class AuthEmailTokenRow(Base):
