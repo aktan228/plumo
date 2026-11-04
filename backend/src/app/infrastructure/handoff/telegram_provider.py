@@ -13,7 +13,7 @@ import os
 
 import httpx
 
-from app.domain.errors import DeliveryUnknown, ProviderTransientError, ProviderUnavailable
+from app.domain.errors import ProviderDeliveryUnknown, ProviderTransientError, ProviderUnavailable
 from app.domain.models import HandoffRequest
 
 logger = logging.getLogger("plumo.handoff")
@@ -47,8 +47,13 @@ class TelegramHandoffProvider:
             raise ProviderUnavailable("TELEGRAM_BOT_TOKEN of the service bot is required")
         self._client = httpx.AsyncClient(timeout=10.0, transport=transport)
 
-    async def notify(self, handoff: HandoffRequest, chat_id: str) -> None:
+    async def notify(self, handoff: HandoffRequest, chat_id: str | None = None) -> None:
+        if not chat_id:
+            raise ProviderUnavailable("A confirmed business recipient is required")
         await self._send(chat_id, render(handoff, self.dashboard_url), "HTML", str(handoff.id))
+
+    async def notify_to(self, handoff: HandoffRequest, chat_id: str) -> None:
+        await self.notify(handoff, chat_id)
 
     async def send_text(self, chat_id: str, text: str) -> None:
         await self._send(chat_id, text, None, "")
@@ -67,12 +72,21 @@ class TelegramHandoffProvider:
         except httpx.HTTPError as exc:
             # Sent, but no answer: Telegram may have delivered it.
             logger.warning("telegram_no_answer", extra={"handoff_id": handoff_id})
-            raise DeliveryUnknown("Telegram did not answer after the request was sent") from exc
+            raise ProviderDeliveryUnknown("Telegram did not answer after the request was sent") from exc
         if response.status_code >= 400:
             logger.warning("telegram_notify_failed", extra={"status": response.status_code, "handoff_id": handoff_id})
-            if response.status_code == 429 or response.status_code >= 500:
+            if response.status_code >= 500:
+                raise ProviderDeliveryUnknown("Telegram server error after send; delivery is unknown")
+            if response.status_code == 429:
                 raise ProviderTransientError(f"Telegram answered {response.status_code}", retry_after=_retry_after(response))
             raise ProviderUnavailable(f"Telegram refused the notification: {response.status_code}")
+        try:
+            payload = response.json()
+            message_id = payload.get("result", {}).get("message_id")
+            if payload.get("ok") is not True or type(message_id) is not int:
+                raise ValueError("missing receipt")
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ProviderDeliveryUnknown("Telegram returned no valid delivery receipt") from exc
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -102,6 +116,6 @@ def render(handoff: HandoffRequest, dashboard_url: str = "") -> str:
     lines.append("")
     if dashboard_url:
         # The dashboard opens this dialog after sign-in; another business's dialog answers 404.
-        lines.append(f'<a href="{dashboard_url}/dashboard?conversation={handoff.conversation_id}">Открыть диалог</a>')
+        lines.append(f'<a href="{html.escape(dashboard_url, quote=True)}/dashboard?conversation={handoff.conversation_id}#chats">Открыть диалог</a>')
     lines.append(f"<code>{handoff.id}</code>")
     return "\n".join(lines)

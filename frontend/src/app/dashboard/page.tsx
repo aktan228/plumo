@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DashboardShell } from "@/features/dashboard/dashboard-shell";
-import { dashboardLoginPath, linkedConversation } from "@/features/dashboard/dialogue-model";
 import { currentSession } from "@/lib/server/backend";
+import { conversationHref, customerHref, knowledgeHref, improvementHref, testingHref } from "@/features/dashboard/navigation";
 
 export const metadata: Metadata = {
   title: "Кабинет — Plumo",
@@ -13,11 +13,13 @@ export const metadata: Metadata = {
 // Real customer messages: the page is rendered only for a session the backend accepts.
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  // A manager's notification links to one dialog; it survives the sign-in. Another business's id answers 404 later.
-  const conversation = linkedConversation((await searchParams).conversation);
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ conversation?: string | string[]; source?: string | string[]; customer?: string | string[]; issue?: string | string[]; test?: string | string[] }> }) {
   const check = await currentSession();
-  if (check.state === "anonymous") redirect(dashboardLoginPath(conversation));
+  if (check.state === "anonymous") {
+    const query = await searchParams;
+    const next = typeof query.issue === "string" ? improvementHref(query.issue) : typeof query.test === "string" ? testingHref(query.test) : typeof query.customer === "string" ? customerHref(query.customer) : typeof query.source === "string" ? knowledgeHref(query.source) : typeof query.conversation === "string" ? conversationHref(query.conversation) : "/dashboard";
+    redirect(`/login?next=${encodeURIComponent(next)}`);
+  }
   if (check.state === "unavailable") {
     return <main className="flex min-h-svh items-center justify-center bg-plumo-line/15 px-4 text-plumo-ink">
       <div className="max-w-md rounded-2xl border border-solid border-plumo-line bg-white p-8 text-center">
@@ -27,5 +29,5 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </div>
     </main>;
   }
-  return <DashboardShell session={check.session} conversation={conversation} />;
+  return <DashboardShell session={check.session} />;
 }

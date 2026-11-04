@@ -290,12 +290,14 @@ class ConversationRepository:
         await self.session.flush()
         return conversation
 
-    async def list_for_customer(self, customer_id: UUID) -> list[Conversation]:
+    async def list_for_customer(self, customer_id: UUID, *, business_id: UUID | None = None) -> list[Conversation]:
         stmt = (
             select(ConversationRow)
             .where(ConversationRow.customer_id == customer_id)
             .order_by(ConversationRow.started_at.asc())
         )
+        if business_id is not None:
+            stmt = stmt.where(ConversationRow.business_id == business_id)
         rows = (await self.session.scalars(stmt)).all()
         return [_conversation(row) for row in rows]
 
@@ -447,13 +449,17 @@ class MessageRepository:
         rows.reverse()
         return [_message(row) for row in rows]
 
-    async def list_for_customer(self, customer_id: UUID, limit: int = 100) -> list[Message]:
+    async def list_for_customer(self, customer_id: UUID, limit: int = 100, *, business_id: UUID | None = None) -> list[Message]:
         stmt = (
             select(MessageRow)
             .where(MessageRow.customer_id == customer_id)
             .order_by(MessageRow.timestamp.desc())
             .limit(limit)
         )
+        if business_id is not None:
+            stmt = stmt.join(ConversationRow, ConversationRow.id == MessageRow.conversation_id).where(
+                ConversationRow.business_id == business_id, ConversationRow.customer_id == customer_id
+            )
         rows = list((await self.session.scalars(stmt)).all())
         rows.reverse()
         return [_message(row) for row in rows]

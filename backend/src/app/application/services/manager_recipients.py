@@ -118,6 +118,7 @@ class ManagerRecipients:
         row.code_expires_at = now + CODE_TTL
         row.candidate_chat_id = row.candidate_label = row.candidate_seen_at = None
         row.updated_at = now
+        row.version += 1
         await self.session.flush()
         return row, code
 
@@ -138,6 +139,7 @@ class ManagerRecipients:
         row.candidate_label = start.label
         row.candidate_seen_at = now
         row.updated_at = now
+        row.version += 1
         await self.session.flush()
         return True
 
@@ -151,6 +153,7 @@ class ManagerRecipients:
         row.confirmed_at, row.confirmed_by = now, operator_id
         row.attention = row.attention_at = None
         row.updated_at = now
+        row.version += 1
         await self.session.flush()
         return row
 
@@ -158,7 +161,12 @@ class ManagerRecipients:
         row = await self.get(business_id, lock=True)
         if row is None:
             raise NotFound("Manager notifications are not set up.", code="recipient_not_found")
-        await self.session.delete(row)
+        row.code_hash = row.code_expires_at = None
+        row.candidate_chat_id = row.candidate_label = row.candidate_seen_at = None
+        row.chat_id = row.chat_label = row.confirmed_at = row.confirmed_by = None
+        row.attention = row.attention_at = None
+        row.updated_at = utcnow()
+        row.version += 1
         await self.session.flush()
 
     async def chat_for(self, business_id) -> str | None:

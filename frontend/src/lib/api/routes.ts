@@ -8,20 +8,31 @@ const allowed: Record<string, RegExp[]> = {
   GET: [
     /^auth\/me$/,
     /^dashboard\/readiness$/,
+    /^dashboard\/statistics$/,
+    /^dashboard\/kanban$/,
+    /^knowledge$/,
     /^onboarding$/,
     /^testing\/sessions$/,
     new RegExp(`^testing/sessions/${id}$`),
     /^integrations$/,
+    /^manager-recipient$/,
     /^manager-notifications$/,
     /^limits$/,
     /^conversations$/,
+    /^customers$/,
+    /^improvements$/,
+    /^scenarios$/,
+    new RegExp(`^improvements/${id}$`),
     new RegExp(`^conversations/${id}$`),
     new RegExp(`^conversations/${id}/messages$`),
     new RegExp(`^outbound-messages/${id}$`),
     new RegExp(`^customers/${id}(/history)?$`),
   ],
   POST: [
+    /^improvements$/,
     /^onboarding\/complete$/,
+    /^manager-recipient\/(link|confirm|disconnect|cancel)$/,
+    new RegExp(`^manager-recipient/notifications/${id}/resolve$`),
     /^testing\/sessions$/,
     new RegExp(`^testing/sessions/${id}/messages$`),
     /^integrations\/(telegram|instagram)\/connect$/,
@@ -31,7 +42,7 @@ const allowed: Record<string, RegExp[]> = {
     new RegExp(`^outbound-messages/${id}/resolve$`),
     new RegExp(`^handoffs/${id}/notification/resolve$`),
   ],
-  PATCH: [/^onboarding$/, new RegExp(`^integrations/${id}$`)],
+  PATCH: [/^onboarding$/, new RegExp(`^integrations/${id}$`), new RegExp(`^conversations/${id}/stage$`), new RegExp(`^improvements/${id}$`)],
 };
 
 export function isAllowedRoute(method: string, path: string): boolean {
@@ -40,7 +51,7 @@ export function isAllowedRoute(method: string, path: string): boolean {
 }
 
 // Query keys forwarded with GET; anything else is dropped.
-export const allowedQuery = new Set(["channel", "mode", "q", "cursor", "limit", "before"]);
+export const allowedQuery = new Set(["channel", "mode", "q", "cursor", "limit", "before", "date_from", "date_to", "stage", "status"]);
 
 export function forwardQuery(search: URLSearchParams): string {
   const kept = new URLSearchParams();

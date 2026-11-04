@@ -4,10 +4,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import and_, func, select
 from app.api.deps import Services, current_operator, get_services
 from app.application.services.auth_service import OperatorContext
+from app.application.services.manager_recipient import manager_configured
 from app.infrastructure.database.models import (
     BusinessRow,
     ChannelConnectionRow,
     KnowledgeItemRow,
+    ManagerRecipientRow,
     OutboundMessageRow,
     TestSessionRow,
     TestTurnRow,
@@ -93,4 +95,9 @@ async def readiness(operator: OperatorContext = Depends(current_operator), servi
         },
     ]
     completed = sum(item["ready"] for item in items)
-    return {"items": items, "completed": completed, "total": 4, "ready": completed == 4, "running": running}
+    recipient = await db.get(ManagerRecipientRow, business_id)
+    configured = services.runtime.settings.handoff_provider == "telegram" and manager_configured()
+    confirmed = bool(recipient and recipient.chat_id)
+    return {"items": items, "completed": completed, "total": 4, "ready": completed == 4, "running": running,
+            "publication_version": version, "technical_only": True, "quality_accepted": False,
+            "manager": {"configured": configured, "recipient_confirmed": confirmed, "ready": configured and confirmed}}

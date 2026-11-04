@@ -275,27 +275,29 @@ async def test_telegram_card_and_failures_are_raised_for_the_job_to_retry() -> N
     card = render(handoff, "https://app.plumo.kg")
     assert "Вопрос вне базы" in card
     assert "&lt;есть&gt;" in card
-    # The page that exists in the frontend: /dashboard opens the dialog from the query after sign-in.
-    assert f'href="https://app.plumo.kg/dashboard?conversation={handoff.conversation_id}"' in card
+    assert f"/dashboard?conversation={handoff.conversation_id}#chats" in card
 
     sent = []
 
     def ok(request: httpx.Request) -> httpx.Response:
         sent.append(json.loads(request.content))
-        return httpx.Response(200, json={"ok": True})
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})
 
     provider = TelegramHandoffProvider(token="t", transport=httpx.MockTransport(ok))
     await provider.notify(handoff, "42")
     assert sent[0]["chat_id"] == "42"
 
     # The notification job retries what may work next time and stops at what will not.
-    from app.domain.errors import ProviderTransientError, ProviderUnavailable
+    from app.domain.errors import ProviderDeliveryUnknown, ProviderTransientError, ProviderUnavailable
 
     def failing(status: int) -> TelegramHandoffProvider:
         return TelegramHandoffProvider(token="t", transport=httpx.MockTransport(lambda r: httpx.Response(status)))
 
-    for status in (429, 500, 502):
+    for status in (429,):
         with pytest.raises(ProviderTransientError):
+            await failing(status).notify(handoff, "42")
+    for status in (500, 502):
+        with pytest.raises(ProviderDeliveryUnknown):
             await failing(status).notify(handoff, "42")
     for status in (400, 401, 403):
         with pytest.raises(ProviderUnavailable) as refused:

@@ -8,6 +8,7 @@ from app.infrastructure.database.models import (
     ChannelConnectionRow,
     TestSessionRow as SandboxSession,
     TestTurnRow as SandboxTurn,
+    ManagerRecipientRow,
 )
 
 
@@ -30,6 +31,8 @@ async def test_empty_and_published_readiness_is_tenant_scoped(wizard):
     own = await state(wizard)
     assert own["completed"] == 2 and part(own, "materials")["count"] == 2
     assert part(own, "test")["status"] == "pending" and own["ready"] is False
+    assert own["technical_only"] is True and own["quality_accepted"] is False
+    assert own["publication_version"] is not None
     assert (await state(wizard, 1))["completed"] == 0
     guessed = await wizard.http.get("/api/v1/dashboard/readiness", params={"business_id": str(wizard.ids[1])})
     assert guessed.json() == own
@@ -73,6 +76,7 @@ async def test_mock_rules_and_obsolete_tests_are_not_live_model_evidence(wizard)
         row.result = {"mock": False, "model": "controlled-provider:test"}
         await db.commit()
     assert part(await state(wizard), "test")["ready"] is True
+    assert (await state(wizard))["quality_accepted"] is False
     assert part(await state(wizard, 1), "test")["ready"] is False
     await publish(wizard)
     assert part(await state(wizard), "test")["status"] == "pending"
@@ -115,3 +119,19 @@ async def test_connected_channel_needs_proof_and_errors_revoke_readiness(wizard)
         row.status = "error"
         await db.commit()
     assert part(await state(wizard), "channel")["ready"] is False
+
+
+async def test_manager_warning_is_tenant_scoped_and_requires_live_configuration(wizard, monkeypatch):
+    import app.api.routes.readiness as readiness_module
+
+    assert (await state(wizard))["manager"]["ready"] is False
+    async with wizard.factory() as db:
+        db.add(ManagerRecipientRow(business_id=wizard.ids[0], chat_id="123456", version=1))
+        await db.commit()
+    own = (await state(wizard))["manager"]
+    assert own["recipient_confirmed"] is True and own["ready"] is False
+    monkeypatch.setattr(readiness_module, "manager_configured", lambda: True)
+    monkeypatch.setattr(wizard.runtime.settings, "handoff_provider", "telegram")
+    assert (await state(wizard))["manager"]["ready"] is True
+    assert (await state(wizard, 1))["manager"]["recipient_confirmed"] is False
+    assert (await state(wizard, 1))["manager"]["ready"] is False

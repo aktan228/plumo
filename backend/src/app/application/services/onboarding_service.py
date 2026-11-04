@@ -6,8 +6,9 @@ from sqlalchemy.dialects.postgresql import insert
 from app.api.onboarding_schemas import WizardData
 from app.application.services.publish_knowledge import publish_knowledge
 from app.domain.errors import BusinessNotFound, InvalidMessage, VersionConflict
+from app.domain.agent_settings import published_settings, scenario_snapshot
 from app.domain.models import utcnow
-from app.infrastructure.database.models import BusinessRow, OnboardingDraftRow
+from app.infrastructure.database.models import BusinessRow, OnboardingDraftRow, ScenarioRevisionRow
 
 
 class OnboardingService:
@@ -77,6 +78,17 @@ class OnboardingService:
         knowledge_count = await publish_knowledge(self.session, business_id, data)
         now = utcnow()
         business.name = settings.company.strip()
+        old_version = publication.get("draft_version")
+        if isinstance(old_version, int) and not isinstance(old_version, bool) and old_version > 0:
+            await self.session.execute(insert(ScenarioRevisionRow).values(
+                business_id=business_id, publication_version=old_version,
+                settings=scenario_snapshot(published_settings(business.profile)),
+                published_at=None, captured_at=now,
+            ).on_conflict_do_nothing())
+        self.session.add(ScenarioRevisionRow(
+            business_id=business_id, publication_version=row.version + 1,
+            settings=scenario_snapshot(settings.model_dump()), published_at=now, captured_at=now,
+        ))
         business.description = settings.description.strip()
         # Preserve other business fields and provider configuration. This action does not enable any channel.
         business.contacts = {**(business.contacts or {}), "assistant_name": settings.name.strip()}

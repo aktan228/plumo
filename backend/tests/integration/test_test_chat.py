@@ -180,6 +180,17 @@ async def test_stale_pending_recovery_and_published_version(wizard):
     assert (await send(wizard, ident)).json()["status"] == "succeeded"
     await publish(wizard, payload())
     assert (await send(wizard, ident)).json()["code"] == "test_settings_changed"
+    history = (await wizard.http.get(f"/api/v1/testing/sessions/{ident}")).json()
+    listing = (await wizard.http.get("/api/v1/testing/sessions")).json()
+    assert history["stale"] is True
+    assert history["publication_version"] != history["current_publication_version"]
+    assert listing["publication_version"] == history["current_publication_version"]
+    assert history["turns"]  # The old evidence remains readable, not repurposed as a new test.
+    other = (await wizard.http.get("/api/v1/testing/sessions", headers={"authorization": f"Bearer {wizard.tokens[1]}"})).json()
+    assert other["publication_version"] is None and other["sessions"] == []
+    fresh = (await wizard.http.post("/api/v1/testing/sessions", json={"id": str(uuid4())})).json()
+    assert fresh["stale"] is False
+    assert fresh["publication_version"] == listing["publication_version"]
 
 
 async def test_model_receives_only_own_published_context_and_reloaded_history(wizard, monkeypatch):

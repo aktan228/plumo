@@ -1,15 +1,16 @@
-export type Source = { id: string; kind: "website" | "instagram" | "text" | "file" | "faq"; title: string; content: string; question?: string };
+export type Source = { id: string; kind: "website" | "instagram" | "text" | "file" | "faq"; title: string; content: string; question?: string; enabled?: boolean };
 export type AgentDraft = {
   purpose: "sales" | "support";
   company: string; description: string; audience: string;
   color: string; logo: string; logoName: string;
   name: string; tone: "friendly" | "formal"; language: "ru" | "en";
   greeting: string; goal: string; fallback: string; handoffRules: string;
+  qualificationPrompt: string; openingQuestion: string; handoffKeywords: string;
 };
 export const MAX_SOURCE_BYTES = 100_000;
 export const MAX_TOTAL_BYTES = 200_000;
 export const MAX_SOURCES = 10;
-export const emptyDraft: AgentDraft = { purpose: "sales", company: "", description: "", audience: "", color: "#2b55ff", logo: "", logoName: "", name: "Plumo", tone: "friendly", language: "ru", greeting: "", goal: "", fallback: "", handoffRules: "" };
+export const emptyDraft: AgentDraft = { purpose: "sales", company: "", description: "", audience: "", color: "#2b55ff", logo: "", logoName: "", name: "Plumo", tone: "friendly", language: "ru", greeting: "", goal: "", fallback: "", handoffRules: "", qualificationPrompt: "", openingQuestion: "", handoffKeywords: "" };
 
 export function sourceUrl(value: string, instagram = false): string | null {
   try {
@@ -40,7 +41,7 @@ export function demoReply(question: string, draft: AgentDraft, sources: Source[]
   if (/\b(human|manager|person|operator)\b/i.test(q) || /(^|\s)(человек\S*|менеджер\S*|сотрудник\S*|оператор\S*)(\s|$)/u.test(q)) {
     return { text: draft.language === "ru" ? "Автоматические ответы в этом тестовом разговоре остановлены. В рабочем сценарии диалог продолжит сотрудник. Демо не отправляет уведомлений." : "Automatic replies in this test conversation are paused. In a live workflow, a team member would continue. This demo sends no notifications.", handoff: true };
   }
-  const match = sources.find(source => source.kind === "faq" && normalize(source.question ?? "") === q);
+  const match = sources.find(source => source.enabled !== false && source.kind === "faq" && normalize(source.question ?? "") === q);
   if (match) return { text: match.content, source: match.title };
   return { text: draft.fallback || makeScript(draft).fallback };
 }

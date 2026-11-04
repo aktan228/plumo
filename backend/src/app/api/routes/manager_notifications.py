@@ -19,7 +19,7 @@ _ERRORS = {409: {"description": "Нет чата, ожидающего подт�
 
 
 def _bot_username() -> str | None:
-    return os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@") or None
+    return (os.getenv("MANAGER_BOT_USERNAME") or os.getenv("TELEGRAM_BOT_USERNAME", "")).strip().lstrip("@") or None
 
 
 def _out(row, services: Services) -> dict:
@@ -33,7 +33,7 @@ def _out(row, services: Services) -> dict:
         "code_expires_at": row.code_expires_at if row and status_of(row) == "waiting_code" else None,
         "bot_username": _bot_username(),
         "service_bot_configured": services.runtime.settings.handoff_provider != "telegram"
-        or bool(os.getenv("TELEGRAM_BOT_TOKEN", "").strip()),
+        or bool((os.getenv("MANAGER_BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()),
     }
 
 

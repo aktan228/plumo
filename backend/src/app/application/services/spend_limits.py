@@ -135,4 +135,3 @@ class SpendLimits:
             "spent_usd": float((row.spent + row.reserved) if row else 0),
             "limit_usd": self.settings.limit_business_daily_usd,
         }
-

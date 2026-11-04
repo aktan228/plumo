@@ -202,6 +202,30 @@ class SummaryOut(BaseModel):
     updated_at: DateTime
 
 
+class CustomerListItemOut(BaseModel):
+    id: UUID
+    name: str | None
+    handle: str | None
+    phone: str | None
+    contact_phone: str | None
+    language: str
+    need: str | None
+    status: str
+    created_at: DateTime
+    channels: list[str]
+
+
+class CustomerListOut(BaseModel):
+    items: list[CustomerListItemOut]
+    next_cursor: str | None
+
+
+class CustomerCardOut(CustomerOut):
+    name: str | None
+    handle: str | None
+    channels: list[str]
+
+
 class HistoryOut(BaseModel):
     customer: CustomerOut
     summary: SummaryOut | None

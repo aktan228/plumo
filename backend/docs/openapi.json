@@ -32,6 +32,44 @@
         }
       }
     },
+    "/health/db": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "База данных отвечает",
+        "operationId": "health_db_health_db_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ops/status": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Служебная сводка для мониторинга (OPS_TOKEN)",
+        "operationId": "ops_status_ops_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/messages": {
       "post": {
         "tags": [
@@ -609,6 +647,47 @@
         }
       }
     },
+    "/api/v1/leads": {
+      "post": {
+        "tags": [
+          "leads"
+        ],
+        "summary": "Заявка на пилот с сайта",
+        "operationId": "create_lead_api_v1_leads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/testing/sessions": {
       "get": {
         "tags": [
@@ -776,6 +855,614 @@
         }
       }
     },
+    "/api/v1/dashboard/statistics": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Статистика мессенджеров своего бизнеса по дням Бишкека",
+        "operationId": "statistics_api_v1_dashboard_statistics_get",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatisticsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/kanban": {
+      "get": {
+        "tags": [
+          "kanban"
+        ],
+        "summary": "Колонка канбана: полный счётчик, фильтры, курсор",
+        "operationId": "column_api_v1_dashboard_kanban_get",
+        "parameters": [
+          {
+            "name": "stage",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "unassigned",
+                "new",
+                "discovery",
+                "qualified",
+                "meeting_requested",
+                "meeting_confirmed"
+              ],
+              "type": "string",
+              "title": "Stage"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ai",
+                    "human",
+                    "waiting"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ColumnOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{ident}/stage": {
+      "patch": {
+        "tags": [
+          "kanban"
+        ],
+        "summary": "Изменить только стадию с проверкой версии",
+        "operationId": "move_api_v1_conversations__ident__stage_patch",
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ident"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StageIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/improvements": {
+      "post": {
+        "tags": [
+          "improvements"
+        ],
+        "summary": "Замечание к своему ответу: неизменяемый снимок и идемпотентный ID",
+        "operationId": "create_api_v1_improvements_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "improvements"
+        ],
+        "summary": "Замечания своего бизнеса: статус и курсор",
+        "operationId": "listing_api_v1_improvements_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "new",
+                    "in_progress",
+                    "fixed",
+                    "verified"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/improvements/{ident}": {
+      "get": {
+        "tags": [
+          "improvements"
+        ],
+        "summary": "Карточка замечания с исходным ответом и историей проверки",
+        "operationId": "detail_api_v1_improvements__ident__get",
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ident"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "improvements"
+        ],
+        "summary": "Статус замечания: новая публикация и свежая повторная проверка",
+        "operationId": "update_api_v1_improvements__ident__patch",
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Ident"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios": {
+      "get": {
+        "tags": [
+          "scenarios"
+        ],
+        "summary": "Scenarios",
+        "operationId": "scenarios_api_v1_scenarios_get",
+        "parameters": [
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2000000000,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/customers": {
+      "get": {
+        "tags": [
+          "customers"
+        ],
+        "summary": "Клиенты своего бизнеса: поиск, канал, курсор",
+        "operationId": "list_customers_api_v1_customers_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Channel"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerListOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/customers/{customer_id}": {
       "get": {
         "tags": [
@@ -801,7 +1488,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CustomerOut"
+                  "$ref": "#/components/schemas/CustomerCardOut"
                 }
               }
             }
@@ -1018,6 +1705,86 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handoffs/{handoff_id}/notification/resolve": {
+      "post": {
+        "tags": [
+          "operations"
+        ],
+        "summary": "Ручное решение по неотправленному или неизвестному уведомлению менеджеру",
+        "operationId": "resolve_handoff_notification_api_v1_handoffs__handoff_id__notification_resolve_post",
+        "parameters": [
+          {
+            "name": "handoff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Handoff Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveDeliveryIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoffOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Нет такой передачи у этого бизнеса"
+          },
+          "409": {
+            "description": "Решать нечего"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/limits": {
+      "get": {
+        "tags": [
+          "operations"
+        ],
+        "summary": "Дневной лимит ответов агента этого бизнеса",
+        "operationId": "get_limits_api_v1_limits_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimitsOut"
                 }
               }
             }
@@ -2018,6 +2785,274 @@
         }
       }
     },
+    "/api/v1/manager-recipient": {
+      "get": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Overview",
+        "operationId": "overview_api_v1_manager_recipient_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/manager-recipient/link": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Link",
+        "operationId": "link_api_v1_manager_recipient_link_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/manager-recipient/notifications/{handoff_id}/resolve": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Resolve",
+        "operationId": "resolve_api_v1_manager_recipient_notifications__handoff_id__resolve_post",
+        "parameters": [
+          {
+            "name": "handoff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Handoff Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/manager-recipient/{action}": {
+      "post": {
+        "tags": [
+          "manager"
+        ],
+        "summary": "Change",
+        "operationId": "change_api_v1_manager_recipient__action__post",
+        "parameters": [
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Action"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/manager-notifications": {
+      "get": {
+        "tags": [
+          "manager-notifications"
+        ],
+        "summary": "Получатель уведомлений менеджеру этого бизнеса",
+        "operationId": "get_recipient_api_v1_manager_notifications_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerNotificationsOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/manager-notifications/link": {
+      "post": {
+        "tags": [
+          "manager-notifications"
+        ],
+        "summary": "Новый одноразовый код привязки (15 минут)",
+        "operationId": "issue_link_api_v1_manager_notifications_link_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerLinkOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/manager-notifications/confirm": {
+      "post": {
+        "tags": [
+          "manager-notifications"
+        ],
+        "summary": "Подтвердить чат, приславший код",
+        "operationId": "confirm_recipient_api_v1_manager_notifications_confirm_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerConfirmOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Нет чата, ожидающего подтверждения (no_candidate)"
+          }
+        }
+      }
+    },
+    "/api/v1/manager-notifications/disconnect": {
+      "post": {
+        "tags": [
+          "manager-notifications"
+        ],
+        "summary": "Отключить уведомления менеджеру",
+        "operationId": "disconnect_recipient_api_v1_manager_notifications_disconnect_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerNotificationsOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не настроено"
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/manager-telegram": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Service notification bot: authenticated manager binding",
+        "operationId": "manager_telegram_api_v1_webhooks_manager_telegram_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/webhooks/telegram/{connection_id}": {
       "post": {
         "tags": [
@@ -2056,6 +3091,30 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/telegram-manager": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Служебный бот уведомлений: код привязки менеджера",
+        "description": "Binds the chat that sent `/start plumo_mgr_<code>` as a candidate; the operator confirms it.\n\nThe reply goes back in the webhook answer, so the handler makes no outgoing call.",
+        "operationId": "telegram_manager_webhook_api_v1_webhooks_telegram_manager_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Telegram Manager Webhook Api V1 Webhooks Telegram Manager Post"
                 }
               }
             }
@@ -2609,11 +3668,130 @@
             "maxLength": 1500,
             "title": "Handoffrules",
             "default": ""
+          },
+          "qualificationPrompt": {
+            "type": "string",
+            "maxLength": 1500,
+            "title": "Qualificationprompt",
+            "default": ""
+          },
+          "openingQuestion": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Openingquestion",
+            "default": ""
+          },
+          "handoffKeywords": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Handoffkeywords",
+            "default": ""
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "AgentSettings"
+      },
+      "BoardCard": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "pipeline_stage": {
+            "type": "string",
+            "enum": [
+              "unassigned",
+              "new",
+              "discovery",
+              "qualified",
+              "meeting_requested",
+              "meeting_confirmed"
+            ],
+            "title": "Pipeline Stage"
+          },
+          "stage_version": {
+            "type": "integer",
+            "title": "Stage Version"
+          },
+          "channel": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "ai",
+              "human",
+              "waiting"
+            ],
+            "title": "Mode"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handle"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview"
+          },
+          "activity_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Activity At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "pipeline_stage",
+          "stage_version",
+          "channel",
+          "mode",
+          "name",
+          "handle",
+          "phone",
+          "preview",
+          "activity_at"
+        ],
+        "title": "BoardCard"
       },
       "BusinessBriefOut": {
         "properties": {
@@ -2781,6 +3959,52 @@
           "requirements"
         ],
         "title": "ChannelIntegrationOut"
+      },
+      "ColumnOut": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "unassigned",
+              "new",
+              "discovery",
+              "qualified",
+              "meeting_requested",
+              "meeting_confirmed"
+            ],
+            "title": "Stage"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BoardCard"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "total",
+          "items",
+          "next_cursor"
+        ],
+        "title": "ColumnOut"
       },
       "CompleteWizardIn": {
         "properties": {
@@ -3060,6 +4284,111 @@
         ],
         "title": "ConversationOut"
       },
+      "Counts": {
+        "properties": {
+          "conversations": {
+            "type": "integer",
+            "title": "Conversations",
+            "default": 0
+          },
+          "agent_replies": {
+            "type": "integer",
+            "title": "Agent Replies",
+            "default": 0
+          },
+          "handoffs": {
+            "type": "integer",
+            "title": "Handoffs",
+            "default": 0
+          },
+          "manager_replies": {
+            "type": "integer",
+            "title": "Manager Replies",
+            "default": 0
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "default": 0
+          },
+          "unknown": {
+            "type": "integer",
+            "title": "Unknown",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "Counts"
+      },
+      "CreateIn": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "incorrect_fact",
+              "missing_answer",
+              "handoff",
+              "language_tone"
+            ],
+            "title": "Category"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Note"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "test_session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Session Id"
+          },
+          "test_request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Request Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "note"
+        ],
+        "title": "CreateIn"
+      },
       "CreateTestIn": {
         "properties": {
           "id": {
@@ -3092,6 +4421,273 @@
           "label"
         ],
         "title": "CredentialOut"
+      },
+      "CustomerCardOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "business_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Id"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone",
+            "description": "Номер, который клиент написал сам. Для обратного звонка; карточки по нему не склеиваются."
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "need": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Need"
+          },
+          "preferred_contact_channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Contact Channel"
+          },
+          "merged_into_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merged Into Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handle"
+          },
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Channels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "phone",
+          "language",
+          "status",
+          "need",
+          "preferred_contact_channel",
+          "merged_into_id",
+          "created_at",
+          "updated_at",
+          "name",
+          "handle",
+          "channels"
+        ],
+        "title": "CustomerCardOut"
+      },
+      "CustomerListItemOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handle"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "need": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Need"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Channels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "handle",
+          "phone",
+          "contact_phone",
+          "language",
+          "need",
+          "status",
+          "created_at",
+          "channels"
+        ],
+        "title": "CustomerListItemOut"
+      },
+      "CustomerListOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerListItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "CustomerListOut"
       },
       "CustomerOut": {
         "properties": {
@@ -3201,6 +4797,50 @@
           "updated_at"
         ],
         "title": "CustomerOut"
+      },
+      "Day": {
+        "properties": {
+          "conversations": {
+            "type": "integer",
+            "title": "Conversations",
+            "default": 0
+          },
+          "agent_replies": {
+            "type": "integer",
+            "title": "Agent Replies",
+            "default": 0
+          },
+          "handoffs": {
+            "type": "integer",
+            "title": "Handoffs",
+            "default": 0
+          },
+          "manager_replies": {
+            "type": "integer",
+            "title": "Manager Replies",
+            "default": 0
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "default": 0
+          },
+          "unknown": {
+            "type": "integer",
+            "title": "Unknown",
+            "default": 0
+          },
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day"
+        ],
+        "title": "Day"
       },
       "DeliveryOut": {
         "properties": {
@@ -3759,6 +5399,53 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "notify_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Status",
+            "description": "Уведомление менеджеру: queued/sending/sent/failed/unknown/cancelled. sent — Telegram принял, не «прочитано»."
+          },
+          "notify_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Error"
+          },
+          "notify_attempted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Attempted At"
+          },
+          "notified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notified At"
           }
         },
         "type": "object",
@@ -4018,6 +5705,117 @@
         ],
         "title": "LastMessageOut"
       },
+      "LeadIn": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,64}$",
+            "title": "Idempotency Key"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^(landing|wizard)$",
+            "title": "Source"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "company": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Company",
+            "default": ""
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Message",
+            "default": ""
+          },
+          "plan": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Plan",
+            "default": ""
+          },
+          "locale": {
+            "type": "string",
+            "pattern": "^(ru|en|ky)$",
+            "title": "Locale",
+            "default": "ru"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "source",
+          "name",
+          "email"
+        ],
+        "title": "LeadIn"
+      },
+      "LeadOut": {
+        "properties": {
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "accepted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "number"
+        ],
+        "title": "LeadOut"
+      },
+      "LimitsOut": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "title": "Day",
+            "description": "UTC-день, за который считается расход"
+          },
+          "calls": {
+            "type": "integer",
+            "title": "Calls"
+          },
+          "calls_limit": {
+            "type": "integer",
+            "title": "Calls Limit"
+          },
+          "spent_usd": {
+            "type": "number",
+            "title": "Spent Usd",
+            "description": "Потрачено и зарезервировано идущими ответами"
+          },
+          "limit_usd": {
+            "type": "number",
+            "title": "Limit Usd"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "calls",
+          "calls_limit",
+          "spent_usd",
+          "limit_usd"
+        ],
+        "title": "LimitsOut"
+      },
       "LoginIn": {
         "properties": {
           "email": {
@@ -4069,6 +5867,299 @@
           "token"
         ],
         "title": "LoginOut"
+      },
+      "ManagerChatOut": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "title": "ManagerChatOut"
+      },
+      "ManagerConfirmOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "waiting_code",
+              "awaiting_confirmation",
+              "ready",
+              "needs_attention"
+            ],
+            "title": "Status"
+          },
+          "recipient": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Чат, приславший код; ждёт подтверждения оператором."
+          },
+          "attention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attention"
+          },
+          "code_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Expires At"
+          },
+          "bot_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Username"
+          },
+          "service_bot_configured": {
+            "type": "boolean",
+            "title": "Service Bot Configured"
+          },
+          "control_delivery": {
+            "type": "string",
+            "enum": [
+              "sent",
+              "failed",
+              "rejected"
+            ],
+            "title": "Control Delivery"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "service_bot_configured",
+          "control_delivery"
+        ],
+        "title": "ManagerConfirmOut"
+      },
+      "ManagerLinkOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "waiting_code",
+              "awaiting_confirmation",
+              "ready",
+              "needs_attention"
+            ],
+            "title": "Status"
+          },
+          "recipient": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Чат, приславший код; ждёт подтверждения оператором."
+          },
+          "attention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attention"
+          },
+          "code_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Expires At"
+          },
+          "bot_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Username"
+          },
+          "service_bot_configured": {
+            "type": "boolean",
+            "title": "Service Bot Configured"
+          },
+          "command": {
+            "type": "string",
+            "title": "Command",
+            "description": "Сообщение для служебного бота. Показывается один раз, в БД только хеш кода."
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link",
+            "description": "Ссылка t.me с кодом, если известно имя служебного бота."
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "service_bot_configured",
+          "command"
+        ],
+        "title": "ManagerLinkOut"
+      },
+      "ManagerNotificationsOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "waiting_code",
+              "awaiting_confirmation",
+              "ready",
+              "needs_attention"
+            ],
+            "title": "Status"
+          },
+          "recipient": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagerChatOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Чат, приславший код; ждёт подтверждения оператором."
+          },
+          "attention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attention"
+          },
+          "code_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Expires At"
+          },
+          "bot_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Username"
+          },
+          "service_bot_configured": {
+            "type": "boolean",
+            "title": "Service Bot Configured"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "service_bot_configured"
+        ],
+        "title": "ManagerNotificationsOut"
       },
       "ManagerSendIn": {
         "properties": {
@@ -4757,6 +6848,25 @@
         ],
         "title": "ResolveDeliveryIn"
       },
+      "ResolveIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "mark_sent",
+              "mark_failed",
+              "retry"
+            ],
+            "title": "Action"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "ResolveIn"
+      },
       "SaveWizardIn": {
         "properties": {
           "version": {
@@ -4838,6 +6948,142 @@
         "additionalProperties": false,
         "type": "object",
         "title": "SourceEntry"
+      },
+      "StageIn": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "unassigned",
+              "new",
+              "discovery",
+              "qualified",
+              "meeting_requested",
+              "meeting_confirmed"
+            ],
+            "title": "Stage"
+          },
+          "version": {
+            "type": "integer",
+            "maximum": 2000000000.0,
+            "minimum": 0.0,
+            "title": "Version"
+          },
+          "confirm_meeting": {
+            "type": "boolean",
+            "title": "Confirm Meeting",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stage",
+          "version"
+        ],
+        "title": "StageIn"
+      },
+      "StageOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "pipeline_stage": {
+            "type": "string",
+            "enum": [
+              "unassigned",
+              "new",
+              "discovery",
+              "qualified",
+              "meeting_requested",
+              "meeting_confirmed"
+            ],
+            "title": "Pipeline Stage"
+          },
+          "stage_version": {
+            "type": "integer",
+            "title": "Stage Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "pipeline_stage",
+          "stage_version"
+        ],
+        "title": "StageOut"
+      },
+      "StatisticsOut": {
+        "properties": {
+          "date_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Date From"
+          },
+          "date_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Date To"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/Counts"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/Day"
+            },
+            "type": "array",
+            "title": "Days"
+          },
+          "logged_ai_estimate_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logged Ai Estimate Usd"
+          },
+          "logged_interactions": {
+            "type": "integer",
+            "title": "Logged Interactions"
+          },
+          "mock_interactions": {
+            "type": "integer",
+            "title": "Mock Interactions"
+          },
+          "cost_coverage": {
+            "type": "string",
+            "title": "Cost Coverage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date_from",
+          "date_to",
+          "timezone",
+          "generated_at",
+          "totals",
+          "days",
+          "logged_ai_estimate_usd",
+          "logged_interactions",
+          "mock_interactions",
+          "cost_coverage"
+        ],
+        "title": "StatisticsOut"
       },
       "SummaryOut": {
         "properties": {
@@ -5055,6 +7301,63 @@
         ],
         "title": "TranscriptOut"
       },
+      "UpdateIn": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "maximum": 2000000000.0,
+            "minimum": 0.0,
+            "title": "Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "new",
+              "in_progress",
+              "fixed",
+              "verified"
+            ],
+            "title": "Status"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Note",
+            "default": ""
+          },
+          "test_session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Session Id"
+          },
+          "test_request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Request Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "status"
+        ],
+        "title": "UpdateIn"
+      },
       "UsageOut": {
         "properties": {
           "input_tokens": {
@@ -5122,6 +7425,22 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VersionIn": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "maximum": 2000000000.0,
+            "minimum": 0.0,
+            "title": "Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "VersionIn"
       },
       "VoiceRespondIn": {
         "properties": {
@@ -5343,6 +7662,11 @@
               }
             ],
             "title": "Question"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
           }
         },
         "additionalProperties": false,

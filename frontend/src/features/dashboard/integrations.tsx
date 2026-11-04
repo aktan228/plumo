@@ -97,7 +97,7 @@ function Logo({ channel }: { channel: keyof typeof logos }) {
   return <Image src={logos[channel]} alt={names[channel]} width={48} height={48} className="size-12 shrink-0 object-contain" />;
 }
 
-export function Integrations({ onDialogues, onStateChange }: { onDialogues: () => void; onStateChange?: (data: IntegrationsResponse) => void }) {
+export function Integrations({ onDialogues, onStateChange, onLoadStateChange, refreshVersion = 0 }: { onDialogues: () => void; onStateChange?: (data: IntegrationsResponse) => void; onLoadStateChange?: (state: "loading" | "ready" | "error") => void; refreshVersion?: number }) {
   const { locale } = useLanguage();
   const c = copy[locale];
   const [data, setData] = useState<IntegrationsResponse | null>(null);
@@ -118,17 +118,20 @@ export function Integrations({ onDialogues, onStateChange }: { onDialogues: () =
       api<Limits>("limits", { signal }).then(setLimits, () => setLimits(null));
       setData(result);
       onStateChange?.(result);
+      onLoadStateChange?.("ready");
       setLoadError(null);
     } catch (error) {
+      if (signal?.aborted) throw error;
+      onLoadStateChange?.("error");
       if (error instanceof ApiError) {
         if (error.unauthenticated) goToLogin();
         setLoadError(error);
       }
       throw error;
     }
-  }, [onStateChange]);
+  }, [onStateChange, onLoadStateChange]);
   // Statuses also change on the server (a revoked token found by the worker): refresh now and then.
-  const refresh = usePolling(load, 15_000, "integrations");
+  const refresh = usePolling(load, 15_000, `integrations:${refreshVersion}`);
 
   function focusTitle() {
     requestAnimationFrame(() => {

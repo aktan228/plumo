@@ -32,7 +32,7 @@ DATABASE_URL=postgresql+asyncpg://plumo:plumo@localhost:5432/plumo_migcheck .ven
 docker compose exec -T db psql -U plumo -d plumo -c "DROP DATABASE plumo_migcheck;"
 ```
 
-Ожидаемо: 17 миграций, head — `017_leads`.
+Ожидаемо: 21 миграция, head — `021_scenario_revisions`. Миграции 013–017 из main сохранены; Dashboard добавляет 018–021.
 
 ### Тестовая база
 
@@ -47,7 +47,7 @@ Integration-тесты удаляют и пересоздают все табл�
 | Зависимости | `npm install` | без ошибок |
 | TypeScript | `npm run typecheck` | без ошибок |
 | Сборка | `npm run build` | `Compiled successfully` |
-| Тесты | `npm test` | 32 теста, 0 падений |
+| Тесты | `npm test` | 74 теста, 0 падений |
 
 `npm run build` и `npm run dev` по очереди переписывают пути в `frontend/next-env.d.ts`. Это изменение не коммитим.
 

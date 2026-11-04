@@ -71,7 +71,7 @@ async def wizard(engine, settings, monkeypatch):
             base_url="http://test",
             headers={"x-api-key": "wizard-test-service-key", "authorization": f"Bearer {tokens[0]}"},
         ) as http:
-            yield SimpleNamespace(http=http, factory=factory, ids=ids, tokens=tokens)
+            yield SimpleNamespace(http=http, factory=factory, ids=ids, tokens=tokens, runtime=runtime)
 
 
 async def test_legacy_account_get_creates_one_empty_draft(wizard):
@@ -82,6 +82,40 @@ async def test_legacy_account_get_creates_one_empty_draft(wizard):
         assert response.json()["business_id"] == str(wizard.ids[0])
     async with wizard.factory() as session:
         assert await session.scalar(select(func.count()).select_from(OnboardingDraftRow)) == 1
+
+
+async def test_knowledge_editor_disable_republish_and_stale_wizard_are_isolated(wizard):
+    saved = (await wizard.http.patch("/api/v1/onboarding", json=payload())).json()
+    live = (await wizard.http.post("/api/v1/onboarding/complete", json={"version": saved["version"]})).json()
+    assert len((await wizard.http.get("/api/v1/knowledge")).json()) == 2
+    stale = {"version": live["version"], "step": live["step"], "data": copy.deepcopy(live["data"])}
+    edited = {"version": live["version"], "step": live["step"], "data": copy.deepcopy(live["data"])}
+    edited["data"]["sources"][0]["enabled"] = False
+    edited["data"]["sources"][1]["content"] = "Updated approved facts."
+    saved_response = await wizard.http.patch("/api/v1/onboarding", json=edited)
+    assert saved_response.status_code == 200, saved_response.text
+    saved = saved_response.json()
+    assert saved["data"]["sources"][0]["enabled"] is False
+    # Draft changes do not affect the running agent until publication.
+    assert len((await wizard.http.get("/api/v1/knowledge")).json()) == 2
+    published = await wizard.http.post("/api/v1/onboarding/complete", json={"version": saved["version"]})
+    assert published.status_code == 200, published.text
+    active = (await wizard.http.get("/api/v1/knowledge")).json()
+    assert len(active) == 1 and active[0]["content"] == "Updated approved facts."
+    # An older wizard tab cannot restore the disabled source or old price/fact.
+    stale["data"]["sources"][1]["content"] = "Stale wizard edit."
+    assert (await wizard.http.patch("/api/v1/onboarding", json=stale)).status_code == 409
+    assert (await wizard.http.post("/api/v1/onboarding/complete", json={"version": stale["version"]})).status_code == 409
+    other = await wizard.http.get("/api/v1/knowledge", headers={"authorization": f"Bearer {wizard.tokens[1]}"})
+    assert other.json() == []
+    assert (await wizard.http.get("/api/v1/knowledge", params={"business_id": str(wizard.ids[0])}, headers={"authorization": f"Bearer {wizard.tokens[1]}"})).status_code == 404
+    # Disabling retains the source for later reactivation, with no database migration.
+    row = published.json()
+    row["data"]["sources"][0]["enabled"] = True
+    response = await wizard.http.patch("/api/v1/onboarding", json={"version": row["version"], "step": row["step"], "data": row["data"]})
+    assert response.status_code == 200, response.text
+    assert (await wizard.http.post("/api/v1/onboarding/complete", json={"version": response.json()["version"]})).status_code == 200
+    assert len((await wizard.http.get("/api/v1/knowledge")).json()) == 2
 
 
 async def test_all_fields_sources_logo_and_step_survive_readback(wizard):

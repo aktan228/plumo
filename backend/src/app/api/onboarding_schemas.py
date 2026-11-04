@@ -2,6 +2,7 @@
 
 import base64
 import binascii
+import re
 from datetime import datetime
 from typing import Literal
 from urllib.parse import urlsplit
@@ -48,6 +49,17 @@ class AgentSettings(StrictModel):
     goal: str = Field(default="", max_length=1500)
     fallback: str = Field(default="", max_length=1000)
     handoffRules: str = Field(default="", max_length=1500)
+    qualificationPrompt: str = Field(default="", max_length=1500)
+    openingQuestion: str = Field(default="", max_length=300)
+    handoffKeywords: str = Field(default="", max_length=1000)
+
+    @field_validator("handoffKeywords")
+    @classmethod
+    def bounded_phrases(cls, value):
+        phrases = [line.strip() for line in value.splitlines() if line.strip()]
+        if len(phrases) > 10 or any(not 2 <= len(line) <= 100 or not re.search(r"[^\W_]", line) for line in phrases):
+            raise ValueError("Use at most 10 phrases, each 2–100 characters")
+        return "\n".join(phrases)
 
     @field_validator("logo")
     @classmethod
@@ -80,6 +92,7 @@ class WizardSource(StrictModel):
     title: str = Field(min_length=1, max_length=300)
     content: str = Field(min_length=1, max_length=100_000)
     question: str | None = Field(default=None, max_length=300)
+    enabled: bool = True
 
     @model_validator(mode="after")
     def validate_content(self):
