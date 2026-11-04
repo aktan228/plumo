@@ -78,6 +78,9 @@ class LimitsOut(BaseModel):
     calls_limit: int
     spent_usd: float = Field(description="Потрачено и зарезервировано идущими ответами")
     limit_usd: float
+    window_s: int = Field(description="Длина короткого окна частоты, секунд")
+    window_turns: int = Field(description="Платных ответов этого бизнеса в текущем окне")
+    window_turns_limit: int = Field(description="Предел ответов бизнеса за окно; сверх него ответ ждёт следующего окна")
 
 
 @router.get("/limits", response_model=LimitsOut, summary="Дневной лимит ответов агента этого бизнеса")

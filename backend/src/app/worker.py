@@ -27,7 +27,7 @@ from app.container import Runtime, build_agent, build_runtime
 from app.domain.enums import InboundStatus, JobKind, OutboundStatus
 from app.domain.models import Job, utcnow
 from app.infrastructure.database.channel_repositories import InboundEventRepository, JobQueue, OutboundRepository
-from app.infrastructure.database.models import HandoffRequestRow, WorkerHeartbeatRow
+from app.infrastructure.database.models import HandoffRequestRow, RateWindowRow, WorkerHeartbeatRow
 from app.infrastructure.logging.setup import setup_logging
 
 logger = logging.getLogger("plumo.worker")
@@ -146,6 +146,8 @@ class Worker:
             )
             # Rows of workers gone for a day are history, not workers.
             await session.execute(delete(WorkerHeartbeatRow).where(WorkerHeartbeatRow.seen_at < utcnow() - timedelta(days=1)))
+            # Rate windows only matter while they are current; a day of them is plenty for a look back.
+            await session.execute(delete(RateWindowRow).where(RateWindowRow.window_start < utcnow() - timedelta(days=1)))
             await session.commit()
 
     async def redact_old_events(self) -> int:

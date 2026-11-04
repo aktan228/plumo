@@ -350,6 +350,16 @@ class SpendBudgetRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
 
 
+class RateWindowRow(Base):
+    """Paid turns started in one scope (`business:<id>` or `service`) in one fixed window."""
+
+    __tablename__ = "rate_windows"
+
+    scope: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
 class SpendReservationRow(Base):
     """One customer turn's hold on the budget. Unique per inbound event: a redelivered event pays once."""
 
