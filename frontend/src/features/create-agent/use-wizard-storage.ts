@@ -6,6 +6,7 @@ import { blankSnapshot, GUEST_KEY, guestSnapshot, restoredSnapshot, snapshotBody
 
 type Status = "loading" | "saved" | "dirty" | "saving" | "error" | "conflict" | "expired";
 export type WizardMode = "account" | "guest" | "unavailable";
+export type WizardStorage = ReturnType<typeof useWizardStorage>;
 
 export function useWizardStorage(mode: WizardMode) {
   const [snapshot, setSnapshot] = useState<Snapshot>(blankSnapshot);

@@ -13,7 +13,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.deps import require_api_key
-from app.api.routes import auth, customers, dialogs, integrations, messages, onboarding, operations, readiness, telephony, testing, voice, webhooks
+from app.api.routes import statistics
+from app.api.routes import kanban
+from app.api.routes import improvements
+from app.api.routes import scenarios
+from app.api.routes import auth, customers, dialogs, integrations, manager, messages, onboarding, operations, readiness, telephony, testing, voice, webhooks
 from app.application.services.handoff_service import drain_notifications
 from app.config import Settings, get_settings
 from app.container import Runtime, build_runtime
@@ -138,10 +142,15 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     app.include_router(onboarding.router, prefix="/api/v1", dependencies=protected)
     app.include_router(testing.router, prefix="/api/v1", dependencies=protected)
     app.include_router(readiness.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(statistics.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(kanban.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(improvements.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(scenarios.router, prefix="/api/v1", dependencies=protected)
     app.include_router(customers.router, prefix="/api/v1", dependencies=protected)
     app.include_router(operations.router, prefix="/api/v1", dependencies=protected)
     app.include_router(dialogs.router, prefix="/api/v1", dependencies=protected)
     app.include_router(integrations.router, prefix="/api/v1", dependencies=protected)
+    app.include_router(manager.router, prefix="/api/v1", dependencies=protected)
     # Provider callbacks authenticate themselves (secret header, signature).
     app.include_router(webhooks.router, prefix="/api/v1")
     app.include_router(telephony.router, prefix="/api/v1")

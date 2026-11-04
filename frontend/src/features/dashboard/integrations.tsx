@@ -19,6 +19,7 @@ import { TelegramSetup } from "./telegram-setup";
 import { ChannelSetup } from "./channel-setup";
 import { WhatsAppSetup } from "./whatsapp-setup";
 import { initialWhatsAppDraft } from "./whatsapp-setup-model";
+import { ManagerRecipient } from "./manager-recipient";
 
 const copy = {
   ru: {
@@ -96,7 +97,7 @@ function Logo({ channel }: { channel: keyof typeof logos }) {
   return <Image src={logos[channel]} alt={names[channel]} width={48} height={48} className="size-12 shrink-0 object-contain" />;
 }
 
-export function Integrations({ onDialogues, onStateChange }: { onDialogues: () => void; onStateChange?: (data: IntegrationsResponse) => void }) {
+export function Integrations({ onDialogues, onStateChange, onLoadStateChange, refreshVersion = 0 }: { onDialogues: () => void; onStateChange?: (data: IntegrationsResponse) => void; onLoadStateChange?: (state: "loading" | "ready" | "error") => void; refreshVersion?: number }) {
   const { locale } = useLanguage();
   const c = copy[locale];
   const [data, setData] = useState<IntegrationsResponse | null>(null);
@@ -115,17 +116,20 @@ export function Integrations({ onDialogues, onStateChange }: { onDialogues: () =
       const result = await api<IntegrationsResponse>("integrations", { signal });
       setData(result);
       onStateChange?.(result);
+      onLoadStateChange?.("ready");
       setLoadError(null);
     } catch (error) {
+      if (signal?.aborted) throw error;
+      onLoadStateChange?.("error");
       if (error instanceof ApiError) {
         if (error.unauthenticated) goToLogin();
         setLoadError(error);
       }
       throw error;
     }
-  }, [onStateChange]);
+  }, [onStateChange, onLoadStateChange]);
   // Statuses also change on the server (a revoked token found by the worker): refresh now and then.
-  const refresh = usePolling(load, 15_000, "integrations");
+  const refresh = usePolling(load, 15_000, `integrations:${refreshVersion}`);
 
   function focusTitle() {
     requestAnimationFrame(() => {
@@ -193,6 +197,7 @@ export function Integrations({ onDialogues, onStateChange }: { onDialogues: () =
             </article>
             {channels.map(item => renderCard(item))}
           </div>
+          <ManagerRecipient />
           <div className="mt-8 flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-solid border-plumo-line bg-white p-6"><div className="max-w-[650px]"><h2 className="m-0 text-sm font-medium">{c.help}</h2><p className="mb-0 mt-2 text-sm leading-6 text-plumo-muted">{c.helpText}</p></div><button type="button" className={secondary} onClick={onDialogues}><PlumoIcon icon={Chatting01Icon} size={17} />{c.dialogues}</button></div>
         </>}
     </div>

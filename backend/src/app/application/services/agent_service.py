@@ -9,13 +9,14 @@ from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from app.application.services.context_builder import ContextBuilder, assistant_name
+from app.application.services.answer_evidence import answer_evidence
 from app.application.services.customer_resolver import CustomerResolver
 from app.application.services.grounded_reply import is_unusable_reply, is_weasel_reply, quote_knowledge
 from app.application.services.handoff_service import evaluate_handoff
 from app.application.services.memory_service import MemoryService, read_unclear_count, write_unclear_count
 from app.application.services.response_validator import ResponseValidator
 from app.correlation import get_correlation_id, get_request_id
-from app.domain.agent_settings import configured_text, published_settings
+from app.domain.agent_settings import configured_text, opening_reply, published_settings, scenario_handoff
 from app.domain.enums import PHONE_CHANNELS, ActionType, Channel, ConversationMode, InboundKind, MessageRole, RouteModel
 from app.domain.errors import (
     BusinessNotFound,
@@ -336,6 +337,9 @@ class AgentService:
                 decision = HandoffDecision(required=True, reason="ready_for_meeting", priority="high")
             else:
                 decision = HandoffDecision(required=True, reason="no_knowledge", priority="normal")
+        if message.channel != Channel.voice and not decision.required and scenario_handoff(business.profile, message.text):
+            decision = HandoffDecision(required=True, reason="scenario_rule", priority="normal")
+            response_text = human_phrase(language, message.channel, seed)
         if decision.required and decision.reason:
             actions.append(
                 Action(
@@ -392,6 +396,7 @@ class AgentService:
                     "route_reason": route.reason,
                     "model": generation.model_used,
                     "handoff": decision.required,
+                    **answer_evidence(business, knowledge),
                 }
             ),
             created_at=utcnow(),
@@ -555,6 +560,7 @@ class AgentService:
         else:
             text = fallback_phrase("greeting", language, str(conversation.id))
             greeting = configured_text(business.profile, "greeting", 1000)
+            greeting = opening_reply(business.profile, greeting) if greeting else greeting
             if greeting and not said_before and message.channel != Channel.voice:
                 customer = await self._reload_customer(customer_id)
                 context = self.context_builder.build(business=business, customer=customer,
@@ -572,7 +578,7 @@ class AgentService:
             role=MessageRole.assistant,
             text=text,
             timestamp=now,
-            metadata={"service": kind, "model": f"rules:{kind}", "route": "rules", "handoff": False},
+            metadata={"service": kind, "model": f"rules:{kind}", "route": "rules", "handoff": False, **answer_evidence(business)},
             created_at=now,
         )
         await self.messages.add(assistant)
@@ -609,6 +615,7 @@ class AgentService:
             item.role == MessageRole.assistant for item in context.recent_messages
         ):
             greeting = configured_text(context.business.profile, "greeting", 1000)
+            greeting = opening_reply(context.business.profile, greeting) if greeting else greeting
             if greeting and self.validator.validate(greeting, context).safe:
                 return LLMGeneration(greeting, [], False, None, 1.0, "rules:business_greeting", 0, 0, 0.0), route
         if route.reason == "human_request" or (

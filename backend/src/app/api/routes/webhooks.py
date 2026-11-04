@@ -32,6 +32,20 @@ MAX_BODY = 1_000_000
 _ACTIONABLE = (InboundKind.text, InboundKind.start, InboundKind.unsupported)
 
 
+@router.post("/manager-telegram", summary="Service notification bot: authenticated manager binding")
+async def manager_telegram(request: Request, services: Services = Depends(get_services)):
+    from app.application.services.manager_recipient import ManagerRecipientService
+    expected = os.getenv("MANAGER_WEBHOOK_SECRET", "").strip()
+    given = request.headers.get("x-telegram-bot-api-secret-token", "")
+    if not expected or not hmac.compare_digest(expected.encode(), given.encode()):
+        raise Unauthorized("webhook secret does not match")
+    update = _json(await _body(request))
+    if isinstance(update, dict):
+        await ManagerRecipientService(services.session).discover(update)
+    await services.session.commit()
+    return {"ok": True}
+
+
 @router.post("/telegram/{connection_id}", summary="Telegram Bot API webhook (X-Telegram-Bot-Api-Secret-Token)")
 async def telegram_webhook(connection_id: UUID, request: Request, services: Services = Depends(get_services)) -> dict:
     connection = await services.connections.get(connection_id)

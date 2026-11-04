@@ -11,13 +11,16 @@ import SentIcon from "@hugeicons/core-free-icons/SentIcon";
 import UserIcon from "@hugeicons/core-free-icons/UserIcon";
 import { PlumoIcon } from "@/components/ui/plumo-icon";
 import { ApiError, api, goToLogin } from "@/lib/api/client";
-import type { DialogDetail, DialogItem, DialogList, DialogMessage, DialogMessages, DialogMode, ManagerSend } from "@/lib/api/types";
+import type { DialogDetail, DialogItem, DialogList, DialogMessage, DialogMessages, DialogMode, DialogState, ManagerSend } from "@/lib/api/types";
+import { ReportAnswer } from "./report-answer";
+import { CustomerHistory } from "./customer-history";
 import { usePolling } from "@/lib/api/use-polling";
 import { useLanguage } from "@/lib/i18n";
 import { apiErrorText } from "./api-messages";
+import { conversationHref, dashboardConversation } from "./navigation";
 import {
   channelName, customerName, deliveryLabel, deliveryReason, eventText, formatTime, initials, mergeMessages,
-  modeLabel, replyHint, sendKey, textFits, textUsage, unsupportedText, type PendingSend,
+  draftAfterAcceptance, loadDialogWindow, modeLabel, replyHint, sendKey, textFits, textUsage, unsupportedText, type PendingSend,
 } from "./dialogue-model";
 
 const labels = {
@@ -34,8 +37,12 @@ const labels = {
     offline: "Нет связи с сервером. Показаны последние загруженные данные, повторяем запрос…", retry: "Повторить",
     markSent: "Клиент получил", markFailed: "Не дошло", resend: "Отправить ещё раз", unknownHint: "Проверьте в канале, дошло ли сообщение.",
     tooLong: "Текст длиннее, чем разрешает канал.", waitingHandoff: "Агент запросил менеджера",
+    retryWarning: "Первая попытка могла дойти. Повторная отправка может создать дубликат. Отправить ещё раз?",
+    resumeWarning: "Неотправленные ответы менеджера будут отменены. Вернуть диалог агенту?",
+    pendingHint: "Результат предыдущего запроса не подтверждён. Повторите его с прежним текстом; текущий черновик сохранится.",
+    retryPrevious: "Повторить прежний запрос",
     languages: { ru: "Русский", ky: "Кыргызский", mixed: "Смешанный" } as Record<string, string>,
-    reasons: { user_requested_human: "клиент просит менеджера", hot_lead: "горячий клиент", ready_for_meeting: "готов к встрече", no_knowledge: "вопрос вне базы знаний", customer_dissatisfied: "клиент недоволен", agent_unclear_twice: "агент дважды не понял", model_unavailable: "модель недоступна", manager_takeover: "менеджер взял диалог" } as Record<string, string>,
+    reasons: { scenario_rule: "условие сценария", user_requested_human: "клиент просит менеджера", hot_lead: "горячий клиент", ready_for_meeting: "готов к встрече", no_knowledge: "вопрос вне базы знаний", customer_dissatisfied: "клиент недоволен", agent_unclear_twice: "агент дважды не понял", model_unavailable: "модель недоступна", manager_takeover: "менеджер взял диалог" } as Record<string, string>,
   },
   en: {
     title: "Conversations", all: "All channels", allModes: "All conversations", searchLabel: "Search name, contact or message", searchPlaceholder: "Search conversations",
@@ -50,8 +57,12 @@ const labels = {
     offline: "No connection to the server. Showing the last loaded data, retrying…", retry: "Retry",
     markSent: "Customer got it", markFailed: "Did not arrive", resend: "Send again", unknownHint: "Check in the channel whether the message arrived.",
     tooLong: "The text is longer than the channel allows.", waitingHandoff: "The agent asked for a manager",
+    retryWarning: "The first attempt may have arrived. Sending again may create a duplicate. Send again?",
+    resumeWarning: "Unsent manager replies will be cancelled. Return the conversation to the agent?",
+    pendingHint: "The previous request is unconfirmed. Retry it with its original text; your current draft will be kept.",
+    retryPrevious: "Retry previous request",
     languages: { ru: "Russian", ky: "Kyrgyz", mixed: "Mixed" } as Record<string, string>,
-    reasons: { user_requested_human: "customer asks for a manager", hot_lead: "hot lead", ready_for_meeting: "ready to meet", no_knowledge: "question outside the knowledge base", customer_dissatisfied: "customer is unhappy", agent_unclear_twice: "agent did not understand twice", model_unavailable: "model unavailable", manager_takeover: "manager took the conversation" } as Record<string, string>,
+    reasons: { scenario_rule: "scenario condition", user_requested_human: "customer asks for a manager", hot_lead: "hot lead", ready_for_meeting: "ready to meet", no_knowledge: "question outside the knowledge base", customer_dissatisfied: "customer is unhappy", agent_unclear_twice: "agent did not understand twice", model_unavailable: "model unavailable", manager_takeover: "manager took the conversation" } as Record<string, string>,
   },
 };
 
@@ -75,7 +86,7 @@ export function Dialogues({ active }: { active: boolean }) {
   const [mode, setMode] = useState<DialogMode | "all">("all");
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
-  const [pageLimit, setPageLimit] = useState(PAGE);
+  const [pagination, setPagination] = useState({ key: "", limit: PAGE });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DialogDetail | null>(null);
   const [older, setOlder] = useState<{ messages: DialogMessage[]; cursor: string | null }>({ messages: [], cursor: null });
@@ -84,14 +95,42 @@ export function Dialogues({ active }: { active: boolean }) {
   const [pending, setPending] = useState<Record<string, PendingSend>>({});
   const [sendErrors, setSendErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const busyRef = useRef(false);
   const [mobileChat, setMobileChat] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const readSent = useRef<Record<string, number>>({});
   const selectedRef = useRef<string | null>(null);
+  const selectConversation = useCallback((id: string | null) => {
+    if (selectedRef.current !== id) {
+      setDetail(null);
+      setOlder({ messages: [], cursor: null });
+      setDetailError(null);
+      setDetailsOpen(false);
+    }
+    selectedRef.current = id;
+    setSelectedId(id);
+    setMobileChat(id !== null);
+  }, []);
   // Declared before the pollers: they read the selected id when a request starts.
   useEffect(() => { selectedRef.current = selectedId; }, [selectedId]);
+  useEffect(() => {
+    const read = () => {
+      const id = dashboardConversation(window.location.search);
+      if (active) selectConversation(id);
+    };
+    read(); window.addEventListener("popstate", read);
+    return () => window.removeEventListener("popstate", read);
+  }, [active, selectConversation]);
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (Object.values(drafts).some(text => text.trim()) || Object.keys(pending).length) event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [drafts, pending]);
 
   // Search runs on the server; wait for a pause in typing.
   useEffect(() => {
@@ -100,19 +139,23 @@ export function Dialogues({ active }: { active: boolean }) {
   }, [search]);
 
   const filters = { channel: channel === "all" ? undefined : channel, mode: mode === "all" ? undefined : mode, q: query || undefined };
+  const filterKey = `${filters.channel}|${filters.mode}|${filters.q}`;
+  const pageLimit = pagination.key === filterKey ? pagination.limit : PAGE;
   const listKey = `${filters.channel}|${filters.mode}|${filters.q}|${pageLimit}`;
 
   const loadList = useCallback(async (signal: AbortSignal) => {
     try {
-      const data = await api<DialogList>("conversations", { query: { ...filters, limit: Math.min(pageLimit, 100) }, signal });
+      const data = await loadDialogWindow(pageLimit, (limit, cursor) => api<DialogList>("conversations", { query: { ...filters, limit, cursor }, signal }));
+      if (signal.aborted) return;
       setItems(data.items);
       setNextCursor(data.next_cursor);
       setListState("ready");
     } catch (error) {
+      if (signal.aborted) throw error;
       if (error instanceof ApiError) {
         if (error.unauthenticated) goToLogin();
         setListState(state => state === "loading" && !error.unavailable ? "ready" : "offline");
-      }
+      } else setListState("offline");
       throw error;
     }
   }, [listKey]); // listKey carries the filters and the page size
@@ -124,12 +167,15 @@ export function Dialogues({ active }: { active: boolean }) {
     try {
       const data = await api<DialogDetail>(`conversations/${id}`, { signal });
       if (selectedRef.current !== id) return;
-      setDetail(data);
+      setDetail(value => value?.dialog.id === id && value.dialog.mode_version > data.dialog.mode_version ? value : data);
       setDetailError(null);
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.unauthenticated) goToLogin();
-        if (selectedRef.current === id) setDetailError(apiErrorText(error.code, locale, error.message));
+        if (selectedRef.current === id) {
+          if (error.status === 404) { setDetail(null); setOlder({ messages: [], cursor: null }); }
+          setDetailError(apiErrorText(error.code, locale, error.message));
+        }
       }
       throw error;
     }
@@ -153,21 +199,22 @@ export function Dialogues({ active }: { active: boolean }) {
     endRef.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
   }, [selectedId, current?.messages.length, mobileChat]);
 
-  function openConversation(item: DialogItem) {
-    if (item.id !== selectedId) {
-      setDetail(null);
-      setOlder({ messages: [], cursor: null });
-      setDetailError(null);
-    }
-    setSelectedId(item.id);
-    setMobileChat(true);
+  function openConversation(item: { id: string }) {
+    if (item.id !== selectedRef.current) window.history.pushState(null, "", conversationHref(item.id));
+    selectConversation(item.id);
     setDetailsOpen(false);
     requestAnimationFrame(() => backRef.current?.focus());
   }
 
+  function backToList() {
+    window.history.pushState(null, "", "/dashboard#chats");
+    selectConversation(null);
+  }
+
   async function action(key: string, run: () => Promise<unknown>) {
-    if (!current) return;
+    if (!current || busyRef.current) return;
     const id = current.dialog.id;
+    busyRef.current = true;
     setBusy(key);
     setSendErrors(values => ({ ...values, [id]: "" }));
     try {
@@ -178,6 +225,7 @@ export function Dialogues({ active }: { active: boolean }) {
         setSendErrors(values => ({ ...values, [id]: apiErrorText(error.code, locale, error.message) }));
       }
     } finally {
+      busyRef.current = false;
       setBusy(null);
       refreshDetail();
       refreshList();
@@ -186,7 +234,14 @@ export function Dialogues({ active }: { active: boolean }) {
 
   function changeMode(next: "takeover" | "resume") {
     if (!current) return;
-    void action(next, () => api(`conversations/${current.dialog.id}/${next}`, { method: "POST" }));
+    if (next === "resume" && !window.confirm(c.resumeWarning)) return;
+    const id = current.dialog.id;
+    void action(next, async () => {
+      const state = await api<DialogState>(`conversations/${id}/${next}`, { method: "POST" });
+      setDetail(value => value?.dialog.id === id && value.dialog.mode_version <= state.mode_version
+        ? { ...value, dialog: { ...value.dialog, ...state }, reply: { ...value.reply, allowed: false, reason: state.mode === "human" ? null : "take_dialog_first" } }
+        : value);
+    });
   }
 
   async function loadOlder() {
@@ -199,48 +254,50 @@ export function Dialogues({ active }: { active: boolean }) {
       if (selectedRef.current !== id) return;
       setOlder(value => ({ messages: mergeMessages(value.messages, page.messages), cursor: page.older_cursor ?? "" }));
     } catch (error) {
-      if (error instanceof ApiError) setDetailError(apiErrorText(error.code, locale, error.message));
+      if (error instanceof ApiError && selectedRef.current === id) {
+        if (error.unauthenticated) goToLogin();
+        setDetailError(apiErrorText(error.code, locale, error.message));
+      }
     }
   }
 
-  async function loadMore() {
-    if (!nextCursor) return;
-    try {
-      const page = await api<DialogList>("conversations", { query: { ...filters, limit: PAGE, cursor: nextCursor } });
-      setItems(value => [...value, ...page.items.filter(item => !value.some(known => known.id === item.id))]);
-      setNextCursor(page.next_cursor);
-      setPageLimit(value => value + PAGE);
-    } catch {
-      setListState("offline");
-    }
+  function loadMore() {
+    if (!nextCursor || listState === "loading") return;
+    setListState("loading");
+    setPagination({ key: filterKey, limit: pageLimit + PAGE });
   }
 
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!current || busy) return;
+    if (!current || busyRef.current) return;
     const id = current.dialog.id;
-    const text = (drafts[id] ?? "").trim();
+    const text = pending[id]?.text ?? (drafts[id] ?? "").trim();
     if (!text || !current.reply.allowed) return;
     if (!textFits(current.reply, text)) {
       setSendErrors(values => ({ ...values, [id]: c.tooLong }));
       return;
     }
     const attempt = sendKey(pending[id], text, () => crypto.randomUUID());
+    busyRef.current = true;
     setPending(values => ({ ...values, [id]: attempt }));
     setBusy("send");
     setSendErrors(values => ({ ...values, [id]: "" }));
     try {
       const result = await api<ManagerSend>(`conversations/${id}/messages`, { method: "POST", body: { text, idempotency_key: attempt.key } });
       // Accepted by the server: the text now belongs to one delivery operation.
-      setDrafts(values => ({ ...values, [id]: "" }));
+      setDrafts(values => ({ ...values, [id]: draftAfterAcceptance(values[id] ?? "", text) }));
       setPending(values => { const next = { ...values }; delete next[id]; return next; });
       setDetail(value => value && value.dialog.id === id ? { ...value, messages: mergeMessages(value.messages, [result.message]) } : value);
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.unauthenticated) goToLogin();
+        if (error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status)) {
+          setPending(values => { const next = { ...values }; delete next[id]; return next; });
+        }
         setSendErrors(values => ({ ...values, [id]: apiErrorText(error.code, locale, error.message) }));
       }
     } finally {
+      busyRef.current = false;
       setBusy(null);
       refreshDetail();
       refreshList();
@@ -268,13 +325,14 @@ export function Dialogues({ active }: { active: boolean }) {
           : <p className="m-0 whitespace-pre-wrap break-words text-[13px] leading-[1.65] [overflow-wrap:anywhere]">{message.text}</p>}
         <p className="mb-0 mt-1.5 text-right text-[10px] text-plumo-muted">{formatTime(message.timestamp, locale)}</p>
       </div>
+      {message.role === "assistant" && <ReportAnswer source={{ message_id: message.id }} />}
       {delivery && <div className={`mt-1 text-right text-[10px] ${deliveryColors[delivery.status]}`}>
         <span>{deliveryLabel(delivery.status, locale)}{deliveryReason(delivery.error_code, locale) && delivery.status !== "sent" ? ` · ${deliveryReason(delivery.error_code, locale)}` : ""}</span>
         {(delivery.status === "unknown" || (delivery.status === "failed" && message.role === "manager")) && <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
           {delivery.status === "unknown" && <span className="w-full text-plumo-muted">{c.unknownHint}</span>}
           {delivery.status === "unknown" && <button type="button" className={button} disabled={busy !== null} onClick={() => action(`resolve:${delivery.id}`, () => api(`outbound-messages/${delivery.id}/resolve`, { method: "POST", body: { action: "mark_sent" } }))}>{c.markSent}</button>}
           {delivery.status === "unknown" && <button type="button" className={button} disabled={busy !== null} onClick={() => action(`resolve:${delivery.id}`, () => api(`outbound-messages/${delivery.id}/resolve`, { method: "POST", body: { action: "mark_failed" } }))}>{c.markFailed}</button>}
-          {message.role === "manager" && <button type="button" className={button} disabled={busy !== null || !current?.reply.allowed} onClick={() => action(`resolve:${delivery.id}`, () => api(`outbound-messages/${delivery.id}/resolve`, { method: "POST", body: { action: "retry" } }))}>{c.resend}</button>}
+          {message.role === "manager" && <button type="button" className={button} disabled={busy !== null || !current?.reply.allowed} onClick={() => { if (delivery.status !== "unknown" || window.confirm(c.retryWarning)) void action(`resolve:${delivery.id}`, () => api(`outbound-messages/${delivery.id}/resolve`, { method: "POST", body: { action: "retry" } })); }}>{c.resend}</button>}
         </div>}
       </div>}
     </div>;
@@ -286,6 +344,7 @@ export function Dialogues({ active }: { active: boolean }) {
     const rows: [string, string][] = [];
     if (dialog.customer.handle) rows.push([c.contact, dialog.customer.handle]);
     if (dialog.customer.phone) rows.push([c.phone, dialog.customer.phone]);
+    if (value.customer.contact_phone) rows.push([locale === "ru" ? "Номер со слов клиента (не проверен)" : "Customer-provided phone (unverified)", value.customer.contact_phone]);
     if (language) rows.push([c.language, language]);
     if (value.connection) rows.push([c.channel, `${channelName(value.connection.channel)} · ${value.connection.account.username ? `@${value.connection.account.username}` : value.connection.account.display_name}`]);
     if (value.summary?.summary) rows.push([c.summary, value.summary.summary]);
@@ -296,6 +355,7 @@ export function Dialogues({ active }: { active: boolean }) {
       <div className="mt-6 flex items-center gap-3"><span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-plumo-soft text-sm font-semibold text-plumo-blue">{initials(name(dialog))}</span><div><p className="m-0 text-sm font-semibold">{name(dialog)}</p><p className="mb-0 mt-1 text-xs text-plumo-muted">{channelName(dialog.channel)}</p></div></div>
       <dl className="mb-0 mt-6 space-y-5">{rows.map(([label, text]) => <div key={label}><dt className="text-xs text-plumo-muted">{label}</dt><dd className="mb-0 ml-0 mt-1.5 break-words text-[13px] leading-6">{text}</dd></div>)}</dl>
       {value.handoff && <div className="mt-6 rounded-xl bg-plumo-soft p-4"><h3 className="m-0 text-xs font-semibold text-plumo-blue">{c.handoff}</h3><p className="mb-0 mt-2 text-[13px] leading-6">{c.reasons[value.handoff.reason] ?? value.handoff.reason}</p></div>}
+      <CustomerHistory key={value.customer.id} customerId={value.customer.id} locale={locale} openConversation={openConversation} />
     </>;
   }
 
@@ -321,7 +381,7 @@ export function Dialogues({ active }: { active: boolean }) {
             <p className="mb-2 mt-2 truncate text-xs leading-5 text-plumo-muted">{item.last_message?.text ?? "—"}</p>
             <div className="flex items-center justify-between gap-2"><ChannelBadge channel={item.channel} /><span className="flex items-center gap-1.5 text-[10px] text-plumo-muted">{c[item.mode]}{item.unread > 0 && <span aria-label={`${item.unread} ${c.unread}`} className="flex h-4 min-w-4 items-center justify-center rounded-full bg-plumo-blue px-1 text-[9px] text-white">{item.unread}</span>}</span></div>
           </button>)}
-          {nextCursor && <button type="button" className={`${button} mx-auto mt-2 block`} onClick={loadMore}>{c.more}</button>}
+          {nextCursor && <button type="button" className={`${button} mx-auto mt-2 block`} disabled={listState === "loading"} onClick={loadMore}>{c.more}</button>}
           {listState === "ready" && items.length === 0 && (filtered
             ? <div className="px-4 py-12 text-center"><PlumoIcon icon={Search01Icon} /><h2 className="mb-0 mt-3 text-sm font-medium">{c.empty}</h2><p className="text-xs leading-5 text-plumo-muted">{c.emptyText}</p><button type="button" className={button} onClick={() => { setChannel("all"); setMode("all"); setSearch(""); }}>{c.clear}</button></div>
             : <div className="px-4 py-12 text-center"><h2 className="m-0 text-sm font-medium">{c.none}</h2><p className="mb-0 mt-2 text-xs leading-5 text-plumo-muted">{c.noneText}</p></div>)}
@@ -331,11 +391,11 @@ export function Dialogues({ active }: { active: boolean }) {
         {!selectedId ? <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-plumo-muted">{c.pick}</div>
           : !current ? <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-plumo-muted">
             {detailError ? <><span className="text-red-700">{detailError}</span><button type="button" className={button} onClick={refreshDetail}>{c.retry}</button></> : <span className="flex items-center gap-2"><PlumoIcon icon={Loading03Icon} size={16} className="animate-spin" />{c.loading}</span>}
-            <button type="button" className={`${button} md:hidden`} onClick={() => setMobileChat(false)}>{c.back}</button>
+            <button type="button" className={`${button} md:hidden`} onClick={backToList}>{c.back}</button>
           </div>
           : <>
             <div className="flex min-h-[78px] shrink-0 flex-wrap items-center justify-between gap-2 border-0 border-b border-solid border-plumo-line px-4 py-3 sm:px-5">
-              <div className="flex min-w-0 items-center gap-2"><button ref={backRef} type="button" aria-label={c.back} className={`${iconButton} md:hidden`} onClick={() => { setMobileChat(false); setDetailsOpen(false); }}><PlumoIcon icon={ArrowLeft01Icon} size={18} /></button><div className="min-w-0"><h2 className="m-0 truncate text-sm font-semibold">{name(current.dialog)}</h2><div className="mt-1 flex items-center gap-2 text-[10px] text-plumo-muted"><span>{channelName(current.dialog.channel)}</span><span>·</span><span role="status">{modeLabel(current.dialog.mode, locale, agentEnabled)}</span></div></div></div>
+              <div className="flex min-w-0 items-center gap-2"><button ref={backRef} type="button" aria-label={c.back} className={`${iconButton} md:hidden`} onClick={backToList}><PlumoIcon icon={ArrowLeft01Icon} size={18} /></button><div className="min-w-0"><h2 className="m-0 truncate text-sm font-semibold">{name(current.dialog)}</h2><div className="mt-1 flex items-center gap-2 text-[10px] text-plumo-muted"><span>{channelName(current.dialog.channel)}</span><span>·</span><span role="status">{modeLabel(current.dialog.mode, locale, agentEnabled)}</span></div></div></div>
               <div className="flex items-center gap-1.5">
                 <button type="button" disabled={busy !== null} className={`flex cursor-pointer items-center gap-1.5 rounded-lg border border-solid px-3 py-2 font-[inherit] text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue disabled:cursor-wait disabled:opacity-70 ${current.dialog.mode !== "human" ? "border-plumo-blue bg-plumo-blue text-white hover:bg-plumo-blue/90" : "border-plumo-line bg-white text-plumo-ink hover:bg-plumo-soft"}`} onClick={() => changeMode(current.dialog.mode === "human" ? "resume" : "takeover")}>
                   {(busy === "takeover" || busy === "resume") && <PlumoIcon icon={Loading03Icon} size={14} className="animate-spin" />}{current.dialog.mode === "human" ? c.resume : c.take}
@@ -349,13 +409,14 @@ export function Dialogues({ active }: { active: boolean }) {
               <div className="flex flex-col gap-4">{messages.map(message => bubble(message, current.dialog))}</div><div ref={endRef} />
             </div>
             <form onSubmit={send} className="shrink-0 border-0 border-t border-solid border-plumo-line bg-white p-4">
+              {selectedId && pending[selectedId] && busy !== "send" && <p role="status" className="mb-2 mt-0 text-xs leading-5 text-amber-800">{c.pendingHint}</p>}
               <p id="composer-hint" className="mb-2 mt-0 text-[11px] text-plumo-muted">{replyHint(current.reply, locale) ?? `${c.replyVia} ${channelName(current.dialog.channel)}${current.reply.window_expires_at ? ` · ${locale === "ru" ? "окно до" : "window until"} ${formatTime(current.reply.window_expires_at, locale)}` : ""}`}</p>
               <div className="flex items-end gap-2 rounded-xl border border-solid border-plumo-line p-2 focus-within:border-plumo-blue">
                 <textarea aria-label={c.reply} aria-describedby="composer-hint" placeholder={c.reply} value={draft} rows={2} disabled={!current.reply.allowed}
                   onChange={event => { const value = event.target.value; setDrafts(values => ({ ...values, [current.dialog.id]: value })); }}
                   onKeyDown={event => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) event.currentTarget.form?.requestSubmit(); }}
                   className="min-w-0 flex-1 resize-none border-0 bg-transparent p-1.5 font-[inherit] text-[13px] leading-5 text-plumo-ink outline-none disabled:cursor-not-allowed disabled:opacity-50" />
-                <button type="submit" aria-label={c.send} title={c.send} disabled={!current.reply.allowed || !draft.trim() || busy !== null} className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-plumo-blue text-white hover:bg-plumo-blue/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue disabled:cursor-not-allowed disabled:bg-plumo-line disabled:text-plumo-muted">{busy === "send" ? <PlumoIcon icon={Loading03Icon} size={17} className="animate-spin" /> : <PlumoIcon icon={SentIcon} size={17} />}</button>
+                <button type="submit" aria-label={selectedId && pending[selectedId] ? c.retryPrevious : c.send} title={selectedId && pending[selectedId] ? c.retryPrevious : c.send} disabled={!current.reply.allowed || (!draft.trim() && !(selectedId && pending[selectedId])) || busy !== null} className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-plumo-blue text-white hover:bg-plumo-blue/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plumo-blue disabled:cursor-not-allowed disabled:bg-plumo-line disabled:text-plumo-muted">{busy === "send" ? <PlumoIcon icon={Loading03Icon} size={17} className="animate-spin" /> : <PlumoIcon icon={SentIcon} size={17} />}</button>
               </div>
               <div className="mt-1.5 flex justify-between gap-2 text-[11px]"><span role="alert" className="text-red-700">{sendError}</span><span className={textFits(current.reply, draft) ? "text-plumo-muted" : "text-red-700"}>{textUsage(current.reply, draft)}</span></div>
             </form>

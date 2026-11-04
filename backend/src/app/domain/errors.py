@@ -90,6 +90,11 @@ class ProviderTransientError(ProviderUnavailable):
     code = "provider_transient_error"
 
 
+class ProviderDeliveryUnknown(ProviderUnavailable):
+    """The transport may have accepted a message; a blind retry can duplicate it."""
+    code = "provider_delivery_unknown"
+
+
 class UnsafeResponse(AppError):
     """Raised only by strict callers. The message pipeline converts this into a handoff."""
 

@@ -1,5 +1,5 @@
 // Pure helpers for the Conversations view. Server data in, display values out; no demo data.
-import type { DeliveryStatus, DialogItem, DialogMessage, DialogMode, ReplyState } from "@/lib/api/types";
+import type { DeliveryStatus, DialogItem, DialogList, DialogMessage, DialogMode, ReplyState } from "@/lib/api/types";
 
 export type Locale = "ru" | "en";
 export const TIME_ZONE = "Asia/Bishkek";
@@ -112,12 +112,31 @@ export function textUsage(reply: ReplyState, text: string): string | null {
 }
 
 export type PendingSend = { key: string; text: string };
+/** An acknowledgement must not erase edits made while the request was in flight. */
+export function draftAfterAcceptance(draft: string, submitted: string): string {
+  return draft.trim() === submitted ? "" : draft;
+}
+
+/** Rebuild the requested window with cursors; the API caps each page at 100. */
+export async function loadDialogWindow(count: number, fetchPage: (limit: number, cursor?: string) => Promise<DialogList>): Promise<DialogList> {
+  const items = new Map<string, DialogItem>();
+  let cursor: string | undefined;
+  const seen = new Set<string>();
+  do {
+    const page = await fetchPage(Math.min(100, count - items.size), cursor);
+    for (const item of page.items) items.set(item.id, item);
+    if (!page.next_cursor || items.size >= count) return { items: [...items.values()], next_cursor: page.next_cursor };
+    if (seen.has(page.next_cursor)) throw new Error("Repeated conversation cursor");
+    seen.add(page.next_cursor);
+    cursor = page.next_cursor;
+  } while (true);
+}
 /**
- * Idempotency key of a send. A retry of the same text after a failed request reuses the key,
- * so the server returns the first operation instead of creating a second one.
+ * Recover an unacknowledged operation before sending edited text as a new message.
+ * Keep both its key and original body, even when the draft has changed.
  */
 export function sendKey(pending: PendingSend | undefined, text: string, makeKey: () => string): PendingSend {
-  return pending && pending.text === text ? pending : { key: makeKey(), text };
+  return pending ?? { key: makeKey(), text };
 }
 
 const eventLabels: Record<Locale, Record<string, string>> = {

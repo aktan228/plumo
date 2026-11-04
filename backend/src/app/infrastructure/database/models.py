@@ -40,6 +40,38 @@ class BusinessRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ScenarioRevisionRow(Base):
+    __tablename__ = "scenario_revisions"
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
+    publication_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    settings: Mapped[dict] = mapped_column(JSONB)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ManagerRecipientRow(Base):
+    __tablename__ = "manager_recipients"
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    pending_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    candidate_chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    candidate_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
+
+
+class ManagerNotificationRow(Base):
+    __tablename__ = "manager_notifications"
+    handoff_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("handoff_requests.id", ondelete="CASCADE"), primary_key=True)
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    recipient_version: Mapped[int] = mapped_column(Integer)
+    state: Mapped[str] = mapped_column(String(20))
+    generation: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=text("now()"))
+
+
 class OnboardingDraftRow(Base):
     __tablename__ = "onboarding_drafts"
     __table_args__ = (CheckConstraint("step >= 0 AND step <= 5", name="ck_onboarding_step"),)
@@ -106,6 +138,11 @@ class CustomerChannelRow(Base):
 
 class ConversationRow(Base):
     __tablename__ = "conversations"
+    __table_args__ = (
+        CheckConstraint("pipeline_stage IN ('unassigned','new','discovery','qualified','meeting_requested','meeting_confirmed')", name="ck_conversation_stage"),
+        CheckConstraint("stage_version >= 0", name="ck_conversation_stage_version"),
+        Index("ix_conversations_business_stage", "business_id", "pipeline_stage"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id"), index=True)
@@ -125,6 +162,10 @@ class ConversationRow(Base):
     external_chat_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     contact_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     contact_handle: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    pipeline_stage: Mapped[str] = mapped_column(String(32), default="unassigned", server_default="unassigned")
+    stage_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    stage_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    stage_updated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("operators.id"), nullable=True)
 
 
 class MessageRow(Base):
@@ -433,6 +474,33 @@ class ConversationReadRow(Base):
     operator_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("operators.id"), primary_key=True)
     conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"), primary_key=True)
     last_read_seq: Mapped[int] = mapped_column(BigInteger, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ImprovementRow(Base):
+    __tablename__ = "improvements"
+    __table_args__ = (
+        CheckConstraint("status IN ('new','in_progress','fixed','verified')", name="ck_improvement_status"),
+        CheckConstraint("category IN ('incorrect_fact','missing_answer','handoff','language_tone')", name="ck_improvement_category"),
+        CheckConstraint("version >= 0", name="ck_improvement_version"),
+        Index("ix_improvements_business_created", "business_id", "created_at", "id"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"))
+    category: Mapped[str] = mapped_column(String(32))
+    note: Mapped[str] = mapped_column(Text)
+    source_key: Mapped[str] = mapped_column(String(100))
+    snapshot: Mapped[dict] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(16), default="new", server_default="new")
+    version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    fixed_publication_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fixed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    correction_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verification: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    history: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("operators.id"))
+    updated_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("operators.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

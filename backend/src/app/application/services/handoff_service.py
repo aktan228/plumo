@@ -41,6 +41,7 @@ _PRIORITY = {
 }
 
 _STATUS_BY_REASON = {
+    "scenario_rule": "handed_off",
     "hot_lead": "hot",
     "ready_for_meeting": "hot",
     "user_requested_human": "handed_off",

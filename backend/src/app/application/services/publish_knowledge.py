@@ -42,7 +42,7 @@ async def publish_knowledge(session, business_id, data):
     count = 0
     for position, source in enumerate(data.sources, 1):
         # URLs are saved as references; no website fetching or invented website content.
-        if source.kind not in ("text", "file", "faq"):
+        if not source.enabled or source.kind not in ("text", "file", "faq"):
             continue
         for index, chunk in enumerate(source_chunks(source.content), 1):
             base = f"{source.title[:200]} · {position}.{index}"

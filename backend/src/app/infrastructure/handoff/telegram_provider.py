@@ -1,8 +1,8 @@
 """Telegram notification to the manager when a dialog needs a human.
 
 Runs in the worker from a `notify_handoff` job, after the handoff is committed. A failure
-is raised so the job retries: ProviderTransientError for a network error, 429 or 5xx,
-ProviderUnavailable for any other refusal (wrong chat id, revoked token).
+uses ProviderTransientError only when a retry is safe (connection failure or 429).
+Ambiguous outcomes use ProviderDeliveryUnknown; explicit refusals use ProviderUnavailable.
 """
 
 import html
@@ -11,7 +11,9 @@ import os
 
 import httpx
 
-from app.domain.errors import ProviderTransientError, ProviderUnavailable
+from app.domain.errors import ProviderDeliveryUnknown, ProviderTransientError, ProviderUnavailable
+from app.infrastructure.channels.base import ChannelError
+from app.infrastructure.channels.telegram import _result
 from app.domain.models import HandoffRequest
 
 logger = logging.getLogger("plumo.handoff")
@@ -38,30 +40,42 @@ class TelegramHandoffProvider:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.token = (token if token is not None else os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
-        self.chat_id = (chat_id if chat_id is not None else os.getenv("TELEGRAM_MANAGER_CHAT_ID", "")).strip()
+        self.chat_id = (chat_id or "").strip()
         self.dashboard_url = (dashboard_url or os.getenv("DASHBOARD_URL", "")).rstrip("/")
-        if not self.token or not self.chat_id:
-            raise ProviderUnavailable("TELEGRAM_BOT_TOKEN and TELEGRAM_MANAGER_CHAT_ID are required")
+        if not self.token:
+            raise ProviderUnavailable("The manager bot token is required")
         self._client = httpx.AsyncClient(timeout=10.0, transport=transport)
 
     async def notify(self, handoff: HandoffRequest) -> None:
+        if not self.chat_id:
+            raise ProviderUnavailable("A tenant-specific recipient is required")
+        await self.notify_to(handoff, self.chat_id)
+
+    async def notify_to(self, handoff: HandoffRequest, chat_id: str) -> None:
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         body = {
-            "chat_id": self.chat_id,
+            "chat_id": chat_id,
             "text": render(handoff, self.dashboard_url),
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
         }
         try:
             response = await self._client.post(url, json=body)
-        except httpx.HTTPError as exc:
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout):
             logger.warning("telegram_unreachable", extra={"handoff_id": str(handoff.id)})
-            raise ProviderTransientError("Telegram is unreachable") from exc
-        if response.status_code >= 400:
-            logger.warning("telegram_notify_failed", extra={"status": response.status_code, "handoff_id": str(handoff.id)})
-            if response.status_code == 429 or response.status_code >= 500:
-                raise ProviderTransientError(f"Telegram answered {response.status_code}")
-            raise ProviderUnavailable(f"Telegram refused the notification: {response.status_code}")
+            raise ProviderTransientError("Telegram is unreachable") from None
+        except httpx.HTTPError:
+            raise ProviderDeliveryUnknown("Telegram delivery outcome is unknown") from None
+        try:
+            result = _result(response, sends=True)
+        except ChannelError as exc:
+            if exc.kind == "ambiguous":
+                raise ProviderDeliveryUnknown("Telegram delivery outcome is unknown") from None
+            if exc.retryable:
+                raise ProviderTransientError("Telegram temporarily refused the notification") from None
+            raise ProviderUnavailable("Telegram refused the notification") from None
+        if not isinstance(result, dict) or type(result.get("message_id")) is not int or result["message_id"] <= 0:
+            raise ProviderDeliveryUnknown("Telegram delivery outcome is unknown")
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -82,6 +96,6 @@ def render(handoff: HandoffRequest, dashboard_url: str = "") -> str:
             lines.append(f"<b>{who}:</b> {html.escape(str(item.get('text') or '')[:200])}")
     lines.append("")
     if dashboard_url:
-        lines.append(f'<a href="{dashboard_url}/conversations/{handoff.conversation_id}">Открыть диалог</a>')
+        lines.append(f'<a href="{html.escape(dashboard_url, quote=True)}/dashboard?conversation={handoff.conversation_id}#chats">Открыть диалог</a>')
     lines.append(f"<code>{handoff.id}</code>")
     return "\n".join(lines)

@@ -55,5 +55,5 @@ export async function api<T>(path: string, { method = "GET", body, query, signal
 
 /** Redirect to sign-in when the session is gone; keep the current page to come back to. */
 export function goToLogin() {
-  if (typeof window !== "undefined") window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+  if (typeof window !== "undefined") window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`);
 }

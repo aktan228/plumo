@@ -203,7 +203,8 @@ def _handoff_provider(settings: Settings) -> HumanHandoffProvider:
     # Telegram is not an AI provider: it works in AI_MODE=mock too, so a demo
     # on the mock model still pings the real manager chat.
     if settings.handoff_provider == "telegram":
-        return TelegramHandoffProvider()
+        from app.application.services.manager_recipient import manager_token
+        return TelegramHandoffProvider(token=manager_token(), chat_id="")
     if settings.mock_mode or settings.handoff_provider == "mock":
         return MockHandoffProvider()
     raise ProviderUnavailable(

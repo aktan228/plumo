@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  customerName, deliveryLabel, eventText, formatTime, initials, mergeMessages, modeLabel, replyHint, sendKey, textFits, textUsage,
+  customerName, deliveryLabel, draftAfterAcceptance, eventText, formatTime, initials, loadDialogWindow, mergeMessages, modeLabel, replyHint, sendKey, textFits, textUsage,
 } from '../src/features/dashboard/dialogue-model.ts';
 
 const message = (id, timestamp, seq, extra = {}) => ({ id, seq, role: 'user', text: id, timestamp, author: null, event: null, unsupported: null, delivery: null, ...extra });
@@ -17,12 +17,42 @@ test('server pages merge by id and keep the server order', () => {
   assert.equal(older[0].id, 'z');
 });
 
-test('a retried send reuses its idempotency key; an edited text gets a new one', () => {
+test('an unconfirmed send retains its key and original body even after editing the draft', () => {
   let made = 0;
   const make = () => `key-${++made}`;
   const first = sendKey(undefined, 'Здравствуйте', make);
   assert.equal(sendKey(first, 'Здравствуйте', make).key, 'key-1');
-  assert.equal(sendKey(first, 'Здравствуйте!', make).key, 'key-2');
+  assert.deepEqual(sendKey(first, 'Здравствуйте!', make), first);
+  assert.equal(sendKey(undefined, 'Следующее сообщение', make).key, 'key-2');
+});
+
+test('acknowledgement clears only the submitted draft and preserves newer input', () => {
+  assert.equal(draftAfterAcceptance(' Здравствуйте ', 'Здравствуйте'), '');
+  assert.equal(draftAfterAcceptance('Новый ответ', 'Здравствуйте'), 'Новый ответ');
+  assert.equal(draftAfterAcceptance('', 'Здравствуйте'), '');
+});
+
+test('polling reloads all requested conversations beyond the API 100-item cap', async () => {
+  const calls = [];
+  const page = await loadDialogWindow(150, async (limit, cursor) => {
+    calls.push([limit, cursor]);
+    const start = Number(cursor ?? 0);
+    return { items: Array.from({ length: limit }, (_, index) => ({ id: String(start + index) })), next_cursor: String(start + limit) };
+  });
+  assert.deepEqual(calls, [[100, undefined], [50, '100']]);
+  assert.equal(page.items.length, 150);
+  assert.equal(page.items.at(-1).id, '149');
+  assert.equal(page.next_cursor, '150');
+});
+
+test('pagination handles overlap and exhaustion and refuses a looping cursor', async () => {
+  let call = 0;
+  const page = await loadDialogWindow(5, async () => ++call === 1
+    ? { items: [{ id: 'a' }, { id: 'b' }], next_cursor: 'next' }
+    : { items: [{ id: 'b' }, { id: 'c' }], next_cursor: null });
+  assert.deepEqual(page.items.map(item => item.id), ['a', 'b', 'c']);
+  assert.equal(page.next_cursor, null);
+  await assert.rejects(loadDialogWindow(5, async () => ({ items: [{ id: 'a' }], next_cursor: 'same' })), /Repeated/);
 });
 
 test('channel limits: Telegram counts characters, Instagram counts UTF-8 bytes', () => {

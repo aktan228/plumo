@@ -4,12 +4,15 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api/client";
 import { useLanguage } from "@/lib/i18n";
+import { ReportAnswer } from "@/features/dashboard/report-answer";
+import { dashboardTest, knowledgeHref } from "@/features/dashboard/navigation";
+import { testVersionState } from "./test-version";
 
-type Result = { text: string; handoff: boolean; model: string; mock: boolean; sources: { id: string; title: string }[] };
+type Result = { text: string; handoff: boolean; handoff_reason?: string | null; model: string; mock: boolean; sources: { id: string; title: string }[] };
 type Turn = { id: string; text: string; status: "pending" | "succeeded" | "failed"; error: string | null; result: Result | null };
-type Summary = { id: string; created_at: string; paused: boolean; messages: number };
-type Detail = Summary & { turns: Turn[] };
-type Listing = { sessions: Summary[]; mock: boolean; published: boolean; limits: { used_messages: number; daily_messages: number; session_messages: number; charged_usd: number; daily_budget_usd: number } };
+type Summary = { id: string; created_at: string; paused: boolean; messages: number; publication_version: number };
+type Detail = Summary & { turns: Turn[]; current_publication_version: number | null; stale: boolean };
+type Listing = { sessions: Summary[]; mock: boolean; published: boolean; publication_version: number | null; limits: { used_messages: number; daily_messages: number; session_messages: number; charged_usd: number; daily_budget_usd: number } };
 type Pending = { request_id: string; text: string };
 
 const button = "inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl border border-solid border-plumo-line bg-white px-4 py-2 font-[inherit] text-[13px] text-plumo-ink disabled:cursor-default disabled:opacity-50";
@@ -26,6 +29,7 @@ export function AgentTestChat({ prepare }: { prepare?: () => Promise<boolean> })
   const [uncertain, setUncertain] = useState<Pending | null>(null);
   const [sending, setSending] = useState<Pending | null>(null);
   const selected = useRef<string | null>(null);
+  const refreshGeneration = useRef(0);
   const locked = useRef(false);
   const mounted = useRef(true);
   const newId = useRef<string | null>(null);
@@ -47,14 +51,15 @@ export function AgentTestChat({ prepare }: { prepare?: () => Promise<boolean> })
   }
 
   async function refresh(id = selected.current) {
+    const generation = ++refreshGeneration.current;
     const next = await api<Listing>("testing/sessions");
-    if (!mounted.current) return;
+    if (!mounted.current || generation !== refreshGeneration.current) return;
     setListing(next);
     const pick = id ?? next.sessions[0]?.id;
     if (pick) {
       selected.current = pick;
       const value = await api<Detail>(`testing/sessions/${pick}`);
-      if (mounted.current && selected.current === pick) {
+      if (mounted.current && selected.current === pick && generation === refreshGeneration.current) {
         setDetail(value);
         setUncertain(current => current && !value.turns.some(turn => turn.id === current.request_id && turn.status !== "pending") ? current : null);
       }
@@ -63,10 +68,18 @@ export function AgentTestChat({ prepare }: { prepare?: () => Promise<boolean> })
 
   useEffect(() => {
     mounted.current = true;
-    void refresh().catch(e => { if (mounted.current) setError(message(e)); }).finally(() => { if (mounted.current) setLoading(false); });
+    void refresh(dashboardTest(window.location.search)).catch(e => { if (mounted.current) setError(message(e)); }).finally(() => { if (mounted.current) setLoading(false); });
     return () => { mounted.current = false; };
   }, []);
 
+  // Recheck publication after another tab publishes, including while a test is idle.
+  useEffect(() => {
+    const check = () => { if (!document.hidden) void refresh(selected.current).catch(() => {}); };
+    const timer = setInterval(check, 15000);
+    window.addEventListener("focus", check);
+    return () => { clearInterval(timer); window.removeEventListener("focus", check); };
+  }, []);
+  const stale = !!detail && (detail.stale || testVersionState(detail.publication_version, listing?.publication_version) === "stale");
   const pending = detail?.turns.some(turn => turn.status === "pending") ?? false;
   useEffect(() => {
     if (!pending || !detail) return;
@@ -107,7 +120,7 @@ export function AgentTestChat({ prepare }: { prepare?: () => Promise<boolean> })
   }
 
   async function send(replay?: Pending) {
-    if (locked.current || !detail || pending || (detail.paused && !replay)) return;
+    if (locked.current || !detail || pending || ((detail.paused || stale) && !replay)) return;
     const request = replay ?? { request_id: crypto.randomUUID(), text: text.trim() };
     if (!request.text) return;
     locked.current = true; setBusy(true); setError(""); setSending(request); setText("");
@@ -132,10 +145,13 @@ export function AgentTestChat({ prepare }: { prepare?: () => Promise<boolean> })
       <button type="button" disabled={disabled || loading} className={button} onClick={() => void start()}>{busy ? (ru ? "Подождите…" : "Please wait…") : prepare ? (ru ? "Применить настройки и начать тест" : "Apply settings and start a test") : (ru ? "Новый тест" : "New test")}</button>
     </div>
     <div className="space-y-3 p-4">
+      <p className="m-0 text-xs leading-5 text-plumo-muted">{ru ? "Ответ модели — техническая проверка. Качество ответов и языков принимает команда отдельно." : "A model reply is a technical check. The team reviews answer and language quality separately."}</p>
+      {listing && <p className="m-0 text-xs text-plumo-muted">{ru ? "Текущая публикация" : "Current publication"}: {listing.publication_version ?? "—"}{detail && <> · {ru ? "Версия этого теста" : "This test's version"}: {detail.publication_version}</>}</p>}
+      {stale && <p role="status" className="m-0 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{ru ? "Этот тест относится к прежней публикации. Его история сохранена; начните новый тест для текущей версии." : "This test belongs to an older publication. Its history is retained; start a new test for the current version."}</p>}
       {listing && <><p className="m-0 text-[12px] text-plumo-muted">{ru ? "Сегодня использовано" : "Used today"}: {listing.limits.used_messages}/{listing.limits.daily_messages} · {ru ? "бюджет тестов" : "test allowance"}: ${listing.limits.charged_usd.toFixed(2)}/${listing.limits.daily_budget_usd.toFixed(2)} · {ru ? "до" : "up to"} {listing.limits.session_messages} {ru ? "сообщений в диалоге" : "messages per conversation"}</p>
       {listing.mock && <p role="status" className="m-0 rounded-xl bg-plumo-soft p-3 text-[13px]">{ru ? "Сейчас используется демонстрационная модель. Для проверки ответов ИИ подключите рабочую модель." : "A demo model is currently active. Connect a live model to test AI replies."}</p>}
       {!listing.published && !prepare && <p className="m-0 text-[14px]"><Link href="/create/wizard" className="text-plumo-blue underline">{ru ? "Завершить настройку бизнеса" : "Complete business setup"}</Link></p>}
-      {listing.sessions.length > 0 && <label className="flex flex-wrap items-center gap-2 text-[12px] text-plumo-muted">{ru ? "История тестов" : "Test history"}<select aria-label={ru ? "Выбрать тест" : "Select test"} value={detail?.id ?? ""} disabled={disabled} onChange={e => { selected.current = e.target.value; setError(""); void refresh(e.target.value).catch(err => setError(message(err))); }} className="max-w-full rounded-lg border border-solid border-plumo-line bg-white p-2 font-[inherit] text-plumo-ink"><option value="" disabled>{ru ? "Выберите тест" : "Select a test"}</option>{listing.sessions.map((item, index) => <option key={item.id} value={item.id}>{ru ? "Тест" : "Test"} {listing.sessions.length - index} · {item.created_at.slice(0, 16).replace("T", " ")} UTC</option>)}</select></label>}</>}
+      {listing.sessions.length > 0 && <label className="flex flex-wrap items-center gap-2 text-[12px] text-plumo-muted">{ru ? "История тестов" : "Test history"}<select aria-label={ru ? "Выбрать тест" : "Select test"} value={detail?.id ?? ""} disabled={disabled} onChange={e => { selected.current = e.target.value; setError(""); void refresh(e.target.value).catch(err => setError(message(err))); }} className="max-w-full rounded-lg border border-solid border-plumo-line bg-white p-2 font-[inherit] text-plumo-ink"><option value="" disabled>{ru ? "Выберите тест" : "Select a test"}</option>{detail && !listing.sessions.some(item => item.id === detail.id) && <option value={detail.id}>{ru ? "Архивный тест" : "Archived test"} · {detail.publication_version}</option>}{listing.sessions.map((item, index) => <option key={item.id} value={item.id}>{ru ? "Тест" : "Test"} {listing.sessions.length - index} · {item.created_at.slice(0, 16).replace("T", " ")} UTC</option>)}</select></label>}</>}
     </div>
     <div ref={transcript} role="log" aria-live="polite" aria-label={ru ? "Переписка теста" : "Test conversation"} aria-busy={busy || pending} className="flex h-[340px] flex-col gap-4 overflow-y-auto bg-plumo-line/10 p-4">
       {loading && <p role="status" className="m-0 text-[14px] text-plumo-muted">{ru ? "Загружаем тесты…" : "Loading tests…"}</p>}
@@ -143,7 +159,8 @@ export function AgentTestChat({ prepare }: { prepare?: () => Promise<boolean> })
       {detail && detail.turns.length === 0 && <p className="m-0 text-[14px] text-plumo-muted">{ru ? "Напишите первое сообщение, например «Здравствуйте»." : "Send the first message, for example “Hello”."}</p>}
       {detail?.turns.map(turn => <div key={turn.id} className="flex flex-col gap-3">
         <p className="m-0 max-w-[90%] self-end whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-plumo-ink px-4 py-3 text-[14px] text-white">{turn.text}</p>
-        {turn.result && <div className="max-w-[90%] self-start rounded-2xl rounded-tl-sm border border-solid border-plumo-line bg-white px-4 py-3"><p className="m-0 whitespace-pre-wrap break-words text-[14px] leading-relaxed">{turn.result.text}</p>{turn.result.sources.length > 0 && <p className="mb-0 mt-2 text-[11px] text-plumo-muted">{ru ? "Материалы" : "Sources"}: {turn.result.sources.map(source => source.title).join(", ")}</p>}{turn.result.handoff && <p className="mb-0 mt-2 text-[12px] text-plumo-muted">{ru ? "Проверка передачи человеку: реальный менеджер не уведомлён." : "Simulated handoff: no real manager was notified."}</p>}</div>}
+        {turn.result && <div className="max-w-[90%] self-start rounded-2xl rounded-tl-sm border border-solid border-plumo-line bg-white px-4 py-3"><p className="mb-2 mt-0 text-[11px] text-plumo-muted">{turn.result.mock ? (ru ? "Демомодель" : "Demo model") : turn.result.model.startsWith("rules:") ? (ru ? "Правило, без вызова модели" : "Rule, no model call") : (ru ? "Ответ модели" : "Model reply")} · {turn.result.model}</p><p className="m-0 whitespace-pre-wrap break-words text-[14px] leading-relaxed">{turn.result.text}</p>{turn.result.sources.length > 0 && <p className="mb-0 mt-2 text-[11px] text-plumo-muted">{ru ? "Материалы" : "Sources"}: {turn.result.sources.map(source => <Link key={source.id} href={knowledgeHref(source.id)} className="mr-2 text-plumo-blue underline">{source.title}</Link>)}</p>}{turn.result.handoff && <p className="mb-0 mt-2 text-[12px] text-plumo-muted">{ru ? "Проверка передачи человеку: реальный менеджер не уведомлён." : "Simulated handoff: no real manager was notified."}</p>}</div>}
+        {turn.result && detail && <ReportAnswer source={{ test_session_id: detail.id, test_request_id: turn.id }} />}
         {turn.status === "pending" && <p role="status" className="m-0 text-[13px] text-plumo-muted">{ru ? "Агент готовит ответ…" : "The agent is preparing a reply…"}</p>}
         {turn.status === "failed" && <p className="m-0 rounded-xl bg-plumo-soft p-3 text-[13px]">{ru ? "Ответ не получен. Можно повторить сообщение; это будет новая попытка в пределах лимита." : "No reply received. You can retry as a new attempt within the allowance."}</p>}
       </div>)}
@@ -153,8 +170,8 @@ export function AgentTestChat({ prepare }: { prepare?: () => Promise<boolean> })
     <div className="space-y-3 border-0 border-t border-solid border-plumo-line p-4">
       {error && <p role="alert" className="m-0 text-[13px] text-red-700">{error}</p>}
       {uncertain && <button type="button" className={button} disabled={busy || pending} onClick={() => void send(uncertain)}>{ru ? "Проверить отправку" : "Check send status"}</button>}
-      {last?.status === "failed" && !uncertain && <button type="button" className={button} disabled={disabled} onClick={() => void send({ request_id: crypto.randomUUID(), text: last.text })}>{ru ? "Повторить последнее сообщение" : "Retry last message"}</button>}
-      {detail?.paused ? <p role="status" className="m-0 text-[14px]">{ru ? "Агент остановлен после передачи человеку. Для продолжения начните новый тест." : "Agent paused after handoff. Start a new test to continue."}</p> : <form onSubmit={event => { event.preventDefault(); void send(); }} className="flex gap-2"><input aria-label={ru ? "Сообщение агенту" : "Message to agent"} value={text} onChange={event => setText(event.target.value)} disabled={!detail || disabled} maxLength={1000} placeholder={ru ? "Задайте вопрос о бизнесе" : "Ask about your business"} className="min-w-0 flex-1 rounded-xl border border-solid border-plumo-line bg-white px-3 py-3 font-[inherit] text-[16px] text-plumo-ink disabled:opacity-50" /><button type="submit" disabled={!detail || disabled || !text.trim()} className={`${button} !border-plumo-ink !bg-plumo-ink !text-white`}>{ru ? "Отправить" : "Send"}</button></form>}
+      {last?.status === "failed" && !uncertain && <button type="button" className={button} disabled={disabled || stale} onClick={() => void send({ request_id: crypto.randomUUID(), text: last.text })}>{ru ? "Повторить последнее сообщение" : "Retry last message"}</button>}
+      {detail?.paused ? <p role="status" className="m-0 text-[14px]">{ru ? "Агент остановлен после передачи человеку. Для продолжения начните новый тест." : "Agent paused after handoff. Start a new test to continue."}</p> : <form onSubmit={event => { event.preventDefault(); void send(); }} className="flex gap-2"><input aria-label={ru ? "Сообщение агенту" : "Message to agent"} value={text} onChange={event => setText(event.target.value)} disabled={!detail || disabled || stale} maxLength={1000} placeholder={ru ? "Задайте вопрос о бизнесе" : "Ask about your business"} className="min-w-0 flex-1 rounded-xl border border-solid border-plumo-line bg-white px-3 py-3 font-[inherit] text-[16px] text-plumo-ink disabled:opacity-50" /><button type="submit" disabled={!detail || disabled || stale || !text.trim()} className={`${button} !border-plumo-ink !bg-plumo-ink !text-white`}>{ru ? "Отправить" : "Send"}</button></form>}
       {error && !busy && <button type="button" className={button} onClick={() => { setError(""); void refresh().catch(e => setError(message(e))); }}>{ru ? "Обновить историю" : "Refresh history"}</button>}
     </div>
   </section>;

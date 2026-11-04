@@ -101,6 +101,7 @@ class TestChatService:
             "limits": self.limits(budget),
             "mock": self.settings.mock_mode or self.settings.big_model_provider == "mock",
             "published": self.publication(business) is not None,
+            "publication_version": self.publication(business),
         }
 
     async def detail(self, business_id, ident):
@@ -121,7 +122,11 @@ class TestChatService:
                 .order_by(TestTurnRow.created_at, TestTurnRow.request_id)
             )
         ).all()
-        return {**self.summary(row), "turns": [self.turn_out(turn) for turn in turns]}
+        business = await self.business(business_id)
+        current_version = self.publication(business)
+        return {**self.summary(row), "turns": [self.turn_out(turn) for turn in turns],
+                "current_publication_version": current_version,
+                "stale": current_version != row.publication_version}
 
     async def create(self, business_id, ident):
         budget = await self.budget(business_id)
@@ -216,12 +221,15 @@ class TestChatService:
             if reply.model_used.endswith((":timeout", ":unavailable")):
                 error = "test_provider_unavailable"
             else:
+                evidence = next((message.metadata for message in reversed(state.messages)
+                                 if message.id == reply.reply_message_id), {})
                 result = {
                     "text": reply.response_text,
                     "handoff": reply.handoff_required,
                     "handoff_reason": reply.handoff_reason,
                     "model": reply.model_used,
                     "sources": [{"title": item.title, "id": str(item.id)} for item in reply.knowledge_sources],
+                    "source_versions": evidence.get("source_versions", []),
                     "estimated_cost": reply.usage.estimated_cost,
                     "mock": self.settings.mock_mode or reply.model_used.startswith("mock"),
                 }
