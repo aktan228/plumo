@@ -35,6 +35,9 @@ services:
       VOICE_PLATFORM: ${VOICE_PLATFORM:-elevenlabs}
       VOICE_USD_PER_MINUTE: ${VOICE_USD_PER_MINUTE:-0}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # One worker mode: the `worker` service below. The image enables a worker inside the
+      # API for single-container hosts; here it would be a second, unmonitored one.
+      CHANNEL_WORKER_ENABLED: "false"
     ports:
       - "8000:8000"
     depends_on:
