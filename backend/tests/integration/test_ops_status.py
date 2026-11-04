@@ -70,3 +70,21 @@ async def test_no_database_is_unhealthy_without_details(monkeypatch):
     assert status.status_code == 503
     for answer in (db.text, status.text):
         assert "s3cret" not in answer and "127.0.0.1" not in answer and "plumo_nowhere" not in answer
+
+
+async def test_status_names_the_running_code_and_hides_configuration_values(client, monkeypatch):
+    monkeypatch.setenv("OPS_TOKEN", "ops-secret")
+    monkeypatch.setenv("APP_COMMIT", "abc1234def5678")
+    monkeypatch.setenv("RESEND_API_KEY", "re_secret_value")
+    app_runtime = client._transport.app.state.runtime
+    worker = Worker(app_runtime)
+    await worker.beat(utcnow())
+    status = (await client.get("/ops/status", headers=OPS)).json()
+    assert status["commit"] == "abc1234def56"
+    assert status["workers"]["commits"] == ["abc1234def56"]
+    config = status["config"]
+    assert config["present"]["RESEND_API_KEY"] is True and config["present"]["OPS_TOKEN"] is True
+    # Test settings are a development mock: exactly what must never pass as a stand.
+    assert {"app_env_development", "ai_mode_mock", "handoff_provider_mock"} <= set(config["problems"])
+    text = (await client.get("/ops/status", headers=OPS)).text
+    assert "re_secret_value" not in text and "ops-secret" not in text and "postgresql" not in text
