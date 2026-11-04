@@ -2,24 +2,26 @@
 
 import asyncio
 import logging
-import os
 
 from fastapi import APIRouter, Depends
 
 from app.api.dashboard_schemas import ManagerChatOut, ManagerConfirmOut, ManagerLinkOut, ManagerNotificationsOut
 from app.api.deps import Services, current_operator, get_services
 from app.application.services.auth_service import OperatorContext
-from app.application.services.manager_recipients import CONTROL_TEXT, START_PREFIX, ManagerRecipients, status_of
+from app.application.services.manager_recipients import (
+    CONTROL_TEXT,
+    START_PREFIX,
+    ManagerRecipients,
+    service_bot_token,
+    service_bot_username,
+    status_of,
+)
 from app.domain.errors import ProviderTransientError, ProviderUnavailable
 
 logger = logging.getLogger("plumo.handoff")
 router = APIRouter(prefix="/manager-notifications", tags=["manager-notifications"])
 
 _ERRORS = {409: {"description": "Нет чата, ожидающего подтверждения (no_candidate)"}}
-
-
-def _bot_username() -> str | None:
-    return (os.getenv("MANAGER_BOT_USERNAME") or os.getenv("TELEGRAM_BOT_USERNAME", "")).strip().lstrip("@") or None
 
 
 def _out(row, services: Services) -> dict:
@@ -31,9 +33,9 @@ def _out(row, services: Services) -> dict:
         else None,
         "attention": row.attention if row else None,
         "code_expires_at": row.code_expires_at if row and status_of(row) == "waiting_code" else None,
-        "bot_username": _bot_username(),
+        "bot_username": service_bot_username(),
         "service_bot_configured": services.runtime.settings.handoff_provider != "telegram"
-        or bool((os.getenv("MANAGER_BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()),
+        or bool(service_bot_token()),
     }
 
 
@@ -52,7 +54,7 @@ async def issue_link(
     services: Services = Depends(get_services),
 ) -> ManagerLinkOut:
     row, code = await ManagerRecipients(services.session).issue_code(operator.business_id)
-    username = _bot_username()
+    username = service_bot_username()
     return ManagerLinkOut(
         **_out(row, services),
         command=f"/start {START_PREFIX}{code}",

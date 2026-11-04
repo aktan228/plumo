@@ -1,25 +1,51 @@
-"""One confirmed private-chat recipient per tenant; only hashes of binding codes persist."""
+"""The older Dashboard API over the same recipient as `manager_recipients` (one row per business).
+
+State, confirmation and disconnection come from `ManagerRecipients`, so this API and
+/manager-notifications never disagree about who gets the notifications or in what state.
+What stays here is this API's shape: optimistic `version`, `mgr_` codes, cancel.
+Only hashes of binding codes persist.
+"""
 import hashlib
-import os
 import re
 import secrets
-from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
+from app.application.services.manager_recipients import (
+    AWAITING_CONFIRMATION,
+    CODE_TTL,
+    NEEDS_ATTENTION,
+    NOT_CONFIGURED,
+    READY,
+    WAITING_CODE,
+    ManagerRecipients,
+    service_bot_token,
+    service_bot_username,
+    status_of,
+)
 from app.domain.errors import InvalidState, NotConfigured, VersionConflict
 from app.domain.models import utcnow
 from app.infrastructure.database.models import ManagerRecipientRow
 
+# The canonical status as this API names it.
+_STATE = {
+    NOT_CONFIGURED: "not_configured",
+    WAITING_CODE: "awaiting_confirmation",
+    AWAITING_CONFIRMATION: "awaiting_confirmation",
+    READY: "ready",
+    NEEDS_ATTENTION: "attention",
+}
+
 
 def manager_token():
-    return (os.getenv("MANAGER_BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+    return service_bot_token()
 
 
 def manager_configured():
-    return bool(manager_token() and re.fullmatch(r"[A-Za-z0-9_]{5,32}", os.getenv("MANAGER_BOT_USERNAME", ""))
-                and re.fullmatch(r"[A-Za-z0-9_-]{32,256}", os.getenv("MANAGER_WEBHOOK_SECRET", "")))
+    """The service bot can send notifications and hand out t.me links: a token and its @name."""
+
+    return bool(service_bot_token() and re.fullmatch(r"[A-Za-z0-9_]{5,32}", service_bot_username() or ""))
 
 
 class ManagerRecipientService:
@@ -34,13 +60,13 @@ class ManagerRecipientService:
         return await self.session.scalar(stmt)
 
     def output(self, row, *, configured):
-        pending = row.expires_at is not None and row.expires_at > utcnow() and (row.pending_hash or row.candidate_chat_id)
+        status = status_of(row)
         return {
             "version": row.version, "configured": configured,
-            "state": "awaiting_confirmation" if pending else "ready" if row.chat_id and configured else "attention" if row.chat_id else "not_configured",
+            "state": _STATE[status],
             "recipient": {"chat_id": row.chat_id, "name": row.display_name} if row.chat_id else None,
-            "candidate": {"chat_id": row.candidate_chat_id, "name": row.candidate_name} if pending and row.candidate_chat_id else None,
-            "expires_at": row.expires_at if pending else None,
+            "candidate": {"chat_id": row.candidate_chat_id, "name": row.candidate_name} if row.candidate_chat_id else None,
+            "expires_at": row.expires_at if status == WAITING_CODE else None,
         }
 
     async def begin(self, business_id, version):
@@ -52,11 +78,11 @@ class ManagerRecipientService:
             raise InvalidState("Wait before creating another link", code="manager_link_cooldown")
         code = secrets.token_urlsafe(32)
         row.pending_hash = hashlib.sha256(code.encode()).hexdigest()
-        row.expires_at = utcnow() + timedelta(minutes=10)
+        row.expires_at = utcnow() + CODE_TTL
         row.candidate_chat_id = row.candidate_name = None
         self._touch(row)
         await self.session.flush()
-        return row, f"https://t.me/{os.environ['MANAGER_BOT_USERNAME']}?start=mgr_{code}"
+        return row, f"https://t.me/{service_bot_username()}?start=mgr_{code}"
 
     async def discover(self, update):
         message = update.get("message")
@@ -76,20 +102,23 @@ class ManagerRecipientService:
         row.candidate_name = (f"@{username}" if isinstance(username, str) and re.fullmatch(r"[A-Za-z0-9_]+", username)
                               else str(sender.get("first_name") or "Telegram manager"))[:200]
         row.candidate_chat_id = str(chat["id"])
-        row.pending_hash = None  # One genuine event consumes the code; replay cannot replace the candidate.
+        row.candidate_seen_at = utcnow()
+        # One genuine event consumes the code; replay cannot replace the candidate.
+        row.pending_hash = row.expires_at = None
         self._touch(row)
         await self.session.flush()
 
-    async def change(self, business_id, version, action):
+    async def change(self, business_id, version, action, operator_id=None):
         row = await self.get(business_id, lock=True)
         self._version(row, version)
+        recipients = ManagerRecipients(self.session)
         if action == "confirm":
-            if not row.candidate_chat_id or not row.expires_at or row.expires_at <= utcnow():
-                raise InvalidState("The binding expired or has no candidate", code="manager_binding_expired")
-            row.chat_id, row.display_name = row.candidate_chat_id, row.candidate_name
-        elif action == "disconnect":
-            row.chat_id = row.display_name = None
-        row.pending_hash = row.candidate_chat_id = row.candidate_name = row.expires_at = None
+            # The same rule as /manager-notifications/confirm: a candidate that came with a valid code.
+            return await recipients.confirm(business_id, operator_id)
+        if action == "disconnect":
+            await recipients.disconnect(business_id)
+            return await self.get(business_id)
+        row.pending_hash = row.candidate_chat_id = row.candidate_name = row.candidate_seen_at = row.expires_at = None
         self._touch(row)
         await self.session.flush()
         return row

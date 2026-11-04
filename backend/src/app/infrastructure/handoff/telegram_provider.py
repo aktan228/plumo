@@ -2,8 +2,9 @@
 
 Runs in the worker from a `notify_handoff` job, after the handoff is committed. The chat
 is the business's confirmed recipient (`manager_recipients`), passed in by the caller; this
-class knows only the service bot's token. A failure is raised so the job retries:
-ProviderTransientError for a network error, 429 or 5xx, ProviderUnavailable for any other
+class knows only the service bot's token. What the caller does with a failure:
+ProviderTransientError (no connection, 429: retried), ProviderDeliveryUnknown (5xx, no answer
+or no receipt after sending: unknown, no automatic retry), ProviderUnavailable for any other
 refusal (chat not found, bot blocked by the manager, revoked token).
 """
 
