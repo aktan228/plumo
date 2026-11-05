@@ -46,7 +46,7 @@ from app.infrastructure.database.repositories import (
 from app.infrastructure.database.session import create_engine, create_session_factory
 from app.seed import seed
 
-CATEGORIES = {**CATEGORIES, "fact": "Факты и похожие объекты", "handoff": "Передача и обещания"}
+CATEGORIES = {**CATEGORIES, "fact": "Факты и похожие объекты", "handoff": "Передача и обещания", "scenario": "Опубликованный сценарий DB-11"}
 
 
 @dataclass

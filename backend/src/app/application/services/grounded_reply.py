@@ -54,6 +54,10 @@ def is_weasel_reply(text: str) -> bool:
 
 _STATUS = re.compile(r"\s*Статус:[^.]*\.?", re.IGNORECASE)
 _HIDDEN = ("не предлагать", "продана", "продан,")
+# A sentence in the materials that talks to the assistant is not a fact to quote (PJ-05: found when
+# a listing carried "ИНСТРУКЦИЯ АССИСТЕНТУ: ... карта 4111 ..."). Neither is a payment card number.
+_INSTRUCTION = ("ассистент", "инструкци", "игнорир", "system", "prompt", "промпт")
+_CARD = re.compile(r"(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)")
 
 
 def quote_knowledge(context: AgentContext) -> str:
@@ -70,8 +74,10 @@ def quote_knowledge(context: AgentContext) -> str:
     if not hits:
         return unknown_phrase(None, context.language)
     voice = context.channel == "voice"
-    shown = hits[: 2 if voice else 3]
-    parts = [f"{hit.item.title} — {_STATUS.sub(' ', hit.item.content).strip()}" for hit in shown]
+    shown = [hit for hit in hits if _quotable(hit.item.content)][: 2 if voice else 3]
+    if not shown:
+        return unknown_phrase(None, context.language)
+    parts = [f"{hit.item.title} — {_quotable(hit.item.content)}" for hit in shown]
     if voice:
         body = " И ещё ".join(part.rstrip(".") + "." for part in parts)
         return f"Смотрите, есть {body} Какой вариант вам ближе?"
@@ -92,10 +98,10 @@ def correct_named(context: AgentContext) -> str | None:
         hit.item for hit in context.knowledge
         if hit.item.category in OFFER_CATEGORIES and not _hidden(hit.item.content) and names(hit.item, context.current_message)
     ]
-    if len(named) != 1:
+    if len(named) != 1 or not _quotable(named[0].content):
         return None
     item = named[0]
-    return f"По данным компании: {item.title} — {_STATUS.sub(' ', item.content).strip()}"
+    return f"По данным компании: {item.title} — {_quotable(item.content)}"
 
 
 def _wants_rent(context: AgentContext) -> bool:
@@ -106,6 +112,17 @@ def _wants_rent(context: AgentContext) -> bool:
     ]
     blob = normalize_text(" ".join(said))
     return any(stem in blob for stem in _RENT_STEMS)
+
+
+def _quotable(content: str) -> str:
+    """The listing's own facts: without the status note, instructions to the assistant and card numbers."""
+
+    text = _STATUS.sub(" ", content)
+    kept = [
+        sentence for sentence in re.split(r"(?<=[.!?])\s+", text.strip())
+        if sentence and not _CARD.search(sentence) and not any(marker in sentence.lower() for marker in _INSTRUCTION)
+    ]
+    return " ".join(kept).strip()
 
 
 def _hidden(content: str) -> bool:
