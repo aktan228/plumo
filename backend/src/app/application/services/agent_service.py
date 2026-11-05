@@ -109,6 +109,7 @@ class AgentService:
         manager_pause_hours: float = 24.0,
         stt_low_confidence: float = 0.6,
         voice_hedge_after_s: float = 3.0,
+        clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.resolver = resolver
         self.memory = memory
@@ -139,6 +140,9 @@ class AgentService:
         self.stt_low_confidence = stt_low_confidence
         # Voice only: a second request for the same turn after this many seconds. 0 = off.
         self.voice_hedge_after_s = voice_hedge_after_s
+        # Time source of a turn's budget and latency. Tests replace it to put the
+        # deadline exactly where they need instead of racing the wall clock.
+        self.clock = clock
 
     async def process_message(
         self, message: InboundMessage, *, checkpoint: Callable[[], Awaitable[None]] | None = None
@@ -151,14 +155,14 @@ class AgentService:
         the stored message without a reply is answered, not replayed as empty.
         """
 
-        started = time.perf_counter()
+        started = self.clock()
         steps: list[str] = []
         timings: dict[str, int] = {}
         mark = started
 
         def lap(name: str) -> None:
             nonlocal mark
-            now = time.perf_counter()
+            now = self.clock()
             timings[name] = int((now - mark) * 1000)
             mark = now
 
@@ -445,7 +449,7 @@ class AgentService:
         await self.messages.add(assistant)
 
         lap("post_ms")
-        latency_ms = int((time.perf_counter() - started) * 1000)
+        latency_ms = int((self.clock() - started) * 1000)
         sources = [
             KnowledgeSource(id=hit.item.id, title=hit.item.title, category=hit.item.category) for hit in knowledge
         ]
@@ -623,7 +627,7 @@ class AgentService:
             created_at=now,
         )
         await self.messages.add(assistant)
-        latency_ms = int((time.perf_counter() - started) * 1000)
+        latency_ms = int((self.clock() - started) * 1000)
         return AgentResponse(
             response_text=text,
             customer_id=customer_id,
@@ -689,7 +693,7 @@ class AgentService:
     ) -> LLMGeneration:
         """One model call within the turn's budget. Failure or timeout is an empty draft, not a 503."""
 
-        remaining = deadline - time.perf_counter()
+        remaining = deadline - self.clock()
         if remaining < 0.5:
             return LLMGeneration("", [], False, None, 0.0, f"{tier}:timeout", 0, 0, 0.0)
         hedge_after = self.voice_hedge_after_s if getattr(context, "channel", None) == Channel.voice else 0.0
@@ -807,8 +811,8 @@ class AgentService:
             handoff_required=bool(meta.get("handoff")),
             handoff_reason=None,
             knowledge_sources=[],
-            usage=Usage(0, 0, 0.0, int((time.perf_counter() - started) * 1000)),
-            latency_ms=int((time.perf_counter() - started) * 1000),
+            usage=Usage(0, 0, 0.0, int((self.clock() - started) * 1000)),
+            latency_ms=int((self.clock() - started) * 1000),
             logs=["duplicate_message"],
             language=language,
             correlation_id=correlation_id,

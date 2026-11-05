@@ -15,7 +15,7 @@
 | Worker | `./dev.sh worker` | лог `worker_started`; остановка Ctrl+C |
 | Worker один проход | `.venv/bin/python -m app.worker --once` | обработает готовые задания и выйдет |
 | Unit-тесты, без БД | `./dev.sh test tests/unit` | все проходят |
-| Все тесты, нужна БД | `./dev.sh test` | все проходят, около 5 минут |
+| Все тесты, нужна БД | `./dev.sh test` | все проходят, около 6 минут |
 | Линт | `./dev.sh lint` | `All checks passed!` |
 | Приёмочный набор, без сети | `.venv/bin/python -m app.acceptance --mock` | отчёт в `work/acceptance/`; качество — только на живой модели, [ACCEPTANCE.md](../backend/docs/ACCEPTANCE.md) |
 
