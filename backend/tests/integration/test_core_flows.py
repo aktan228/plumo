@@ -187,21 +187,38 @@ async def test_model_outage_degrades_to_a_safe_line_not_a_503(agent):
     assert "fallback:greeting" in response.logs
 
 
-async def test_hung_model_on_a_call_answers_within_budget(agent):
-    """A caller must not sit in silence for the HTTP timeout: a line comes after the voice budget."""
+class _TurnClock:
+    """Real time plus a shift the test moves, so a turn's deadline lands where the test puts it.
 
+    The voice budget counts from the start of the turn, and a model call is not started with
+    less than 0.5 s left. Under a loaded full run the database part of the turn alone can eat a
+    short budget, so a test on the wall clock decided by machine speed which branch it checked.
+    """
+
+    def __init__(self) -> None:
+        self.shift = 0.0
+
+    def __call__(self) -> float:
+        return time.perf_counter() + self.shift
+
+
+def _hung_model():
     import asyncio
-    import time
 
-    from app.domain.models import ExtractedCustomerData, InboundMessage, SummaryDraft
+    from app.domain.models import ExtractedCustomerData, SummaryDraft
 
     class Hung:
         name = "hung"
         calls = 0
+        held_s: list[float] = []
 
         async def generate_response(self, context, route):
             Hung.calls += 1
-            await asyncio.sleep(30)
+            called = time.perf_counter()
+            try:
+                await asyncio.sleep(30)
+            finally:
+                Hung.held_s.append(time.perf_counter() - called)
 
         async def extract_customer_data(self, text):
             return ExtractedCustomerData()
@@ -209,15 +226,55 @@ async def test_hung_model_on_a_call_answers_within_budget(agent):
         async def summarize(self, messages, previous):
             return SummaryDraft("-", None, [], None)
 
+    return Hung
+
+
+async def test_hung_model_on_a_call_is_cut_off_at_the_budget(agent):
+    """A caller must not sit in silence for the HTTP timeout: the call ends with the voice budget."""
+
+    from app.domain.models import InboundMessage
+
+    Hung = _hung_model()
+    clock = _TurnClock()
+    agent.clock = clock
     agent.voice_budget_s = 0.6
     agent.llm_for_tier = lambda tier: Hung()
-    started = time.perf_counter()
+    turn_started = clock()
+
+    async def preparation_took_no_time() -> None:
+        # Called right before the model: the whole budget is left for it, however slow the run.
+        clock.shift -= clock() - turn_started
+
     response = await agent.process_message(
-        InboundMessage(channel="voice", external_user_id="+996555777009", text="Здравствуйте, какие квартиры есть?")
+        InboundMessage(channel="voice", external_user_id="+996555777009", text="Здравствуйте, какие квартиры есть?"),
+        checkpoint=preparation_took_no_time,
     )
-    assert time.perf_counter() - started < 3
     assert Hung.calls == 1  # no retry once the budget is spent
+    assert len(Hung.held_s) == 1 and Hung.held_s[0] < agent.voice_budget_s + 1.0  # cancelled, not awaited for 30 s
     assert response.response_text.strip()
+
+
+async def test_spent_voice_budget_skips_the_model_and_answers_with_a_fallback(agent):
+    """With under 0.5 s left no paid request starts; the caller still hears a line."""
+
+    from app.domain.models import InboundMessage
+
+    Hung = _hung_model()
+    clock = _TurnClock()
+    agent.clock = clock
+    agent.llm_for_tier = lambda tier: Hung()
+
+    async def preparation_ate_the_budget() -> None:
+        clock.shift += agent.voice_budget_s
+
+    response = await agent.process_message(
+        InboundMessage(channel="voice", external_user_id="+996555777010", text="Здравствуйте, какие квартиры есть?"),
+        checkpoint=preparation_ate_the_budget,
+    )
+    assert Hung.calls == 0
+    assert response.usage.estimated_cost == 0
+    assert response.response_text.strip()
+    assert any(step.startswith(("fallback:", "grounded_fallback")) for step in response.logs), response.logs
 
 
 async def test_mid_dialog_fallback_keeps_qualifying_instead_of_deflecting(agent):
