@@ -65,6 +65,32 @@ Telegram / Instagram ──webhook (HTTPS)────────────�
 
 Текущая рекомендуемая настройка из `.env.example`: малой модели нет (`SMALL_MODEL_PROVIDER=none`), большая — через выбранного провайдера. Выбор модели подтверждается тестами на русском, кыргызском и смешанной речи ([backend/docs/MODELS.md](../backend/docs/MODELS.md)). `TURN_RESERVE_USD` подбирается под модель по таблице в [limits.md](limits.md#резерв-против-максимального-расхода-хода).
 
+## Первое развёртывание: Supabase + Render + Vercel
+
+Supabase хранит только PostgreSQL. API и worker — Python-процессы: на Supabase и Vercel они не запускаются, их держит Render ([render.yaml](../render.yaml)). Кабинет остаётся на Vercel.
+
+1. **Supabase.**
+   - Project Settings → Database → Connection string → **Session pooler**. Превратить в `postgresql+asyncpg://…` — это `DATABASE_URL`. Пароль в Git и чаты не вставлять.
+   - Если в этой БД уже есть таблицы, сначала выполнить `alembic current` с этим `DATABASE_URL`. Ответ одной из ревизий `001`…`022` этой цепочки — можно продолжать. Неизвестная ревизия (например, `006_channels_dashboard` старого стенда) или таблицы без `alembic_version` — остановиться: нужен отдельный план переноса или новая пустая БД.
+   - Сделать backup до первой миграции (Database → Backups или `pg_dump`).
+2. **Секреты.** Каждый генерируется один раз и хранится только в панелях хостингов:
+   ```sh
+   python -c "import secrets; print(secrets.token_urlsafe(48))"
+   ```
+   Так создаются `PLUMO_API_KEY` (одно значение на Render и Vercel), `CHANNEL_SECRET_KEY` (не менять после подключения ботов) и `OPS_TOKEN`.
+3. **Render.**
+   - New → Blueprint → репозиторий, ветка `main` → Render прочитает `render.yaml`, создаст `plumo-api` и `plumo-worker` и спросит значения с `sync: false`. Одинаковые значения вводятся обоим сервисам.
+   - После создания адрес API — `https://plumo-api.onrender.com` или имя, которое назначит Render. Это `PUBLIC_BASE_URL`.
+   - `DASHBOARD_URL` и `AUTH_PUBLIC_URL` — адрес сайта на Vercel без пути.
+   - Миграции выполняет `preDeployCommand`. Если миграция падает, деплой останавливается, прежняя версия продолжает работать.
+4. **Vercel.** Settings → Environment Variables (Production): `PLUMO_API_URL` = адрес API без `/api/v1`, `PLUMO_API_KEY` = то же значение, что на Render. Затем Redeploy.
+5. **Почта.** Resend: добавить свой домен, внести DNS-записи у регистратора и дождаться Verified. `AUTH_EMAIL_FROM` — адрес на этом домене. Без своего домена письма уходят только на адрес владельца аккаунта Resend.
+6. **Служебный бот уведомлений.** `TELEGRAM_BOT_TOKEN` и `TELEGRAM_BOT_USERNAME` от @BotFather. Затем в Render Shell у `plumo-api` выполнить `python -m app.manager_bot` (ставит webhook и печатает имя бота для `TELEGRAM_BOT_USERNAME`), потом `python -m app.manager_bot --check`: webhook должен указывать на `<PUBLIC_BASE_URL>/api/v1/webhooks/telegram-manager`.
+7. **Smoke** — раздел «Проверки после запуска». Для автоматического smoke после push в GitHub задать `STAGING_API_URL`, `STAGING_FRONTEND_URL` и `STAGING_OPS_TOKEN`.
+8. **Внешний монитор.** Любой сервис HTTP-проверок с уведомлением в Telegram или на почту: `https://<api>/health` и `https://<api>/health/db` раз в минуту. Для `/ops/status` нужен монитор, который умеет передавать заголовок `Authorization`.
+
+Один стенд — он же пилотный: отдельного staging и production для первого пилота нет. Тогда тестовые данные двух проверочных бизнесов останутся в той же БД, что и данные пилотного бизнеса; изоляция по `business_id` это допускает. Отдельный staging — второй проект Supabase и вторая пара сервисов Render.
+
 ## Миграции
 
 Цепочка: `001` … `017` (main), `018`–`021` (Dashboard). Миграция `022_rate_windows` добавится после принятия PJ-01. Head проверяется в `/ops/status` (`schema_version`).
