@@ -47,8 +47,6 @@ async def output(services, row):
     result["notifications"] = [{"handoff_id": handoff.id, "conversation_id": handoff.conversation_id,
         "state": notification_state(job, handoff, attempt, services.runtime.settings.handoff_provider == "telegram"),
         "error": job.last_error, "updated_at": job.updated_at} for job, handoff, attempt in rows]
-    if result["state"] == "ready" and any(item["state"] in ("failed", "unknown") for item in result["notifications"]):
-        result["state"] = "attention"
     return result
 
 
@@ -120,7 +118,7 @@ async def change(action: str, body: VersionIn, operator: OperatorContext = Depen
     from app.domain.errors import InvalidMessage
     if action not in ("confirm", "disconnect", "cancel"):
         raise InvalidMessage("Unsupported recipient action")
-    row = await ManagerRecipientService(services.session).change(operator.business_id, body.version, action)
+    row = await ManagerRecipientService(services.session).change(operator.business_id, body.version, action, operator.operator_id)
     result = await output(services, row)
     await services.session.commit()
     return result

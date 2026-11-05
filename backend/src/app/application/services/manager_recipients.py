@@ -10,6 +10,7 @@ from the operator's session or from the code, never from the request.
 import base64
 import hashlib
 import hmac
+import os
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -34,6 +35,18 @@ NEEDS_ATTENTION = "needs_attention"
 BOUND_REPLY = "Код принят. Вернитесь в кабинет Plumo и подтвердите этот чат, чтобы получать сюда уведомления."
 UNKNOWN_CODE_REPLY = "Код не найден или просрочен. Получите новую ссылку в кабинете Plumo."
 CONTROL_TEXT = "Plumo: этот чат подтверждён. Сюда будут приходить уведомления, когда клиенту нужен менеджер."
+
+
+def service_bot_token() -> str:
+    """Token of the one service bot. TELEGRAM_BOT_TOKEN; MANAGER_BOT_TOKEN is the older Dashboard name."""
+
+    return (os.getenv("MANAGER_BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+
+
+def service_bot_username() -> str | None:
+    """@name of the service bot for t.me links: TELEGRAM_BOT_USERNAME, or the older MANAGER_BOT_USERNAME."""
+
+    return (os.getenv("MANAGER_BOT_USERNAME") or os.getenv("TELEGRAM_BOT_USERNAME") or "").strip().lstrip("@") or None
 
 
 def manager_webhook_secret(key: str) -> str:

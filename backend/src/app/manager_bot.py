@@ -3,17 +3,16 @@
     python -m app.manager_bot              # setWebhook to PUBLIC_BASE_URL, prints the bot's username
     python -m app.manager_bot --check      # only shows where the webhook points now
 
-Needs TELEGRAM_BOT_TOKEN (the service bot, not a business bot), CHANNEL_SECRET_KEY and
+Needs TELEGRAM_BOT_TOKEN (the service bot, not a business bot; MANAGER_BOT_TOKEN wins if set), CHANNEL_SECRET_KEY and
 PUBLIC_BASE_URL. Put the printed username into TELEGRAM_BOT_USERNAME so the dashboard can
 give managers a one-tap link.
 """
 
 import argparse
 import asyncio
-import os
 import sys
 
-from app.application.services.manager_recipients import manager_webhook_secret
+from app.application.services.manager_recipients import manager_webhook_secret, service_bot_token
 from app.config import get_settings
 from app.infrastructure.channels.base import ChannelError
 from app.infrastructure.channels.gateway import channel_secret_key
@@ -23,7 +22,8 @@ PATH = "/api/v1/webhooks/telegram-manager"
 
 
 async def main(check: bool) -> int:
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    # The same token the notifications are sent with (MANAGER_BOT_TOKEN, if set, wins).
+    token = service_bot_token()
     key = channel_secret_key()
     base = get_settings().webhook_base_url
     missing = [name for name, value in (("TELEGRAM_BOT_TOKEN", token), ("CHANNEL_SECRET_KEY", key), ("PUBLIC_BASE_URL", base)) if not value]

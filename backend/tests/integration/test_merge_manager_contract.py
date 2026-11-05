@@ -43,3 +43,83 @@ async def test_canonical_notification_ignores_an_older_attempt_result(session, r
     await notifier._finish(job, "merge-worker", "sent", None, generation=2)
     session.expire_all()
     assert (await session.get(HandoffRequestRow, job.handoff_id)).notify_status == "sent"
+
+
+def _start(command: str, chat_id: int) -> dict:
+    return {
+        "update_id": chat_id,
+        "message": {
+            "message_id": 1,
+            "date": 1761700000,
+            "chat": {"id": chat_id, "type": "private"},
+            "from": {"id": chat_id, "is_bot": False, "first_name": "Айбек", "username": "aibek_mgr"},
+            "text": command,
+        },
+    }
+
+
+async def _both(wizard) -> tuple[dict, dict]:
+    legacy = await wizard.http.get("/api/v1/manager-recipient")
+    canonical = await wizard.http.get("/api/v1/manager-notifications")
+    assert legacy.status_code == canonical.status_code == 200
+    return legacy.json(), canonical.json()
+
+
+# How a canonical status reads in the older API. One recipient, one state.
+_LEGACY_STATE = {
+    "not_configured": "not_configured",
+    "waiting_code": "awaiting_confirmation",
+    "awaiting_confirmation": "awaiting_confirmation",
+    "ready": "ready",
+    "needs_attention": "attention",
+}
+
+
+async def test_both_manager_apis_report_the_same_state_through_a_binding(wizard, monkeypatch):
+    """The recommended setup: one service bot under TELEGRAM_BOT_*, webhook signed from CHANNEL_SECRET_KEY."""
+
+    from app.application.services.manager_recipients import manager_webhook_secret
+
+    monkeypatch.setenv("CHANNEL_SECRET_KEY", "test-channel-secret")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "12345:test-only")
+    monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "plumo_service_test_bot")
+    for name in ("MANAGER_BOT_TOKEN", "MANAGER_BOT_USERNAME", "MANAGER_WEBHOOK_SECRET"):
+        monkeypatch.delenv(name, raising=False)
+    wizard.runtime.settings.handoff_provider = "telegram"
+    wizard.runtime.handoff_provider = Recorder()
+
+    async def agree(expected: str) -> tuple[dict, dict]:
+        legacy, canonical = await _both(wizard)
+        assert canonical["status"] == expected
+        assert legacy["state"] == _LEGACY_STATE[expected], (legacy, canonical)
+        return legacy, canonical
+
+    await agree("not_configured")
+    link = await wizard.http.post("/api/v1/manager-notifications/link")
+    assert link.status_code == 200, link.text
+    await agree("waiting_code")
+
+    signed = {"X-Telegram-Bot-Api-Secret-Token": manager_webhook_secret("test-channel-secret")}
+    accepted = await wizard.http.post("/api/v1/webhooks/telegram-manager", json=_start(link.json()["command"], 4401), headers=signed)
+    assert accepted.status_code == 200
+    legacy, canonical = await agree("awaiting_confirmation")
+    assert legacy["candidate"]["chat_id"] == "4401"
+
+    # Either API confirms the same candidate; here the older one.
+    confirmed = await wizard.http.post("/api/v1/manager-recipient/confirm", json={"version": legacy["version"]})
+    assert confirmed.status_code == 200, confirmed.text
+    legacy, canonical = await agree("ready")
+    assert legacy["recipient"]["chat_id"] == "4401" and canonical["recipient"]["label"].startswith("Айбек")
+
+    async with wizard.factory() as session:  # Telegram refused a send: the bot was blocked
+        row = await session.get(ManagerRecipientRow, wizard.ids[0])
+        row.attention = "delivery_rejected"
+        await session.commit()
+    await agree("needs_attention")
+
+    disconnected = await wizard.http.post("/api/v1/manager-recipient/disconnect", json={"version": legacy["version"]})
+    assert disconnected.status_code == 200, disconnected.text
+    await agree("not_configured")
+    async with wizard.factory() as session:
+        row = await session.get(ManagerRecipientRow, wizard.ids[0])
+        assert (row.chat_id, row.attention, row.confirmed_at) == (None, None, None)
