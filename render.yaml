@@ -1,0 +1,105 @@
+# Render Blueprint: Plumo API and worker from backend/Dockerfile (docs/operations.md).
+# Database: Supabase PostgreSQL (DATABASE_URL). Dashboard: Vercel (PLUMO_API_URL = this API's address).
+# Values marked `sync: false` are asked for in the Render dashboard and never stored in Git.
+services:
+  - type: web
+    name: plumo-api
+    runtime: docker
+    plan: starter            # free instances sleep after 15 min: Telegram webhooks would wait for a cold start
+    region: frankfurt        # keep next to the Supabase project's region
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /health
+    preDeployCommand: alembic upgrade head   # a failed migration stops the deploy; the old version keeps running
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: stand
+      - key: AI_MODE
+        value: production
+      - key: SMALL_MODEL_PROVIDER
+        value: none
+      - key: BIG_MODEL_PROVIDER
+        value: openrouter_big
+      - key: OPENROUTER_BIG_MODEL
+        value: anthropic/claude-haiku-5.5
+      - key: HANDOFF_PROVIDER
+        value: telegram
+      - key: CHANNEL_WORKER_ENABLED
+        value: "false"
+      - key: MIGRATE_ON_START
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: PLUMO_API_KEY
+        sync: false
+      - key: CHANNEL_SECRET_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: DASHBOARD_URL
+        sync: false
+      - key: AUTH_PUBLIC_URL
+        sync: false
+      - key: AUTH_EMAIL_FROM
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: OPS_TOKEN
+        sync: false
+  - type: worker
+    name: plumo-worker
+    runtime: docker
+    plan: starter            # Render has no free background workers
+    region: frankfurt
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    dockerCommand: python -m app.worker
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: stand
+      - key: AI_MODE
+        value: production
+      - key: SMALL_MODEL_PROVIDER
+        value: none
+      - key: BIG_MODEL_PROVIDER
+        value: openrouter_big
+      - key: OPENROUTER_BIG_MODEL
+        value: anthropic/claude-haiku-5.5
+      - key: HANDOFF_PROVIDER
+        value: telegram
+      - key: CHANNEL_WORKER_ENABLED
+        value: "false"
+      - key: MIGRATE_ON_START
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: PLUMO_API_KEY
+        sync: false
+      - key: CHANNEL_SECRET_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: DASHBOARD_URL
+        sync: false
+      - key: AUTH_PUBLIC_URL
+        sync: false
+      - key: AUTH_EMAIL_FROM
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: OPS_TOKEN
+        sync: false

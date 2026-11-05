@@ -10,14 +10,12 @@ jobs run one at a time. A job whose worker died is taken again after its lease.
 import argparse
 import asyncio
 import logging
-import os
-import socket
 from datetime import timedelta
-from uuid import uuid4
 
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
 
+from app import release
 from app.application.services.delivery_service import DeliveryService
 from app.application.services.handoff_notifier import HandoffNotifier
 from app.application.services.inbound_processor import InboundProcessor
@@ -45,7 +43,7 @@ LEADS_S = 10.0
 class Worker:
     def __init__(self, runtime: Runtime, *, worker_id: str | None = None) -> None:
         self.runtime = runtime
-        self.worker_id = worker_id or f"{socket.gethostname()}:{os.getpid()}:{uuid4().hex[:6]}"
+        self.worker_id = worker_id or release.worker_id()
         factory = runtime.session_factory
         self.inbound = InboundProcessor(factory, runtime, build_agent)
         self.delivery = DeliveryService(factory, runtime.channel_gateway)

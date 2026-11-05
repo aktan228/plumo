@@ -14,4 +14,7 @@ COPY alembic ./alembic
 RUN pip install --no-cache-dir .
 
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# MIGRATE_ON_START=false on a stand: migrations are a separate release step, and an older image
+# started for a rollback must not run `alembic upgrade head` against a newer schema it does not know.
+ENV MIGRATE_ON_START=true
+CMD ["sh", "-c", "if [ \"$MIGRATE_ON_START\" != false ]; then alembic upgrade head; fi && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

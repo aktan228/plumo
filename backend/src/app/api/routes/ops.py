@@ -20,6 +20,7 @@ from app.application.services.spend_limits import SERVICE, today
 from app.domain.enums import JobStatus, OutboundStatus
 from app.domain.errors import NotFound, Unauthorized
 from app.domain.models import utcnow
+from app.release import commit, config_status, worker_commit
 from app.worker import HEARTBEAT_S
 from app.infrastructure.database.models import (
     HandoffRequestRow,
@@ -76,9 +77,9 @@ async def ops_status(request: Request) -> JSONResponse:
         has_alembic = await session.scalar(text("SELECT to_regclass('alembic_version') IS NOT NULL"))
         schema = await session.scalar(text("SELECT version_num FROM alembic_version")) if has_alembic else None
         last_beat = await session.scalar(select(func.max(WorkerHeartbeatRow.seen_at)))
-        alive = await session.scalar(
-            select(func.count()).select_from(WorkerHeartbeatRow).where(WorkerHeartbeatRow.seen_at >= now - timedelta(seconds=STALE_AFTER_S))
-        )
+        alive_ids = (
+            await session.scalars(select(WorkerHeartbeatRow.worker_id).where(WorkerHeartbeatRow.seen_at >= now - timedelta(seconds=STALE_AFTER_S)))
+        ).all()
         due = (
             await session.execute(
                 select(func.count(), func.min(JobRow.run_at)).where(JobRow.status == JobStatus.queued, JobRow.run_at <= now)
@@ -105,14 +106,21 @@ async def ops_status(request: Request) -> JSONResponse:
         service = await session.get(SpendBudgetRow, (SERVICE, today()))
     oldest_age = int((now - due[1]).total_seconds()) if due[1] else 0
     worker_age = int((now - last_beat).total_seconds()) if last_beat else None
+    alive = len(alive_ids)
     healthy = alive > 0 and oldest_age < 300
     return JSONResponse(
         {
             "status": "ok" if healthy else "degraded",
             "app_version": request.app.version,
+            "commit": commit(),
             "schema_version": schema,
             "database": "ok",
-            "workers": {"alive": alive, "last_heartbeat_age_s": worker_age, "stale_after_s": int(STALE_AFTER_S)},
+            "workers": {
+                "alive": alive,
+                "commits": sorted({worker_commit(worker_id) for worker_id in alive_ids}),
+                "last_heartbeat_age_s": worker_age,
+                "stale_after_s": int(STALE_AFTER_S),
+            },
             "jobs": {
                 "due": due[0],
                 "oldest_due_age_s": oldest_age,
@@ -126,5 +134,6 @@ async def ops_status(request: Request) -> JSONResponse:
                 "service_spent_usd": float((service.spent + service.reserved) if service else 0),
                 "service_limit_usd": settings.limit_service_daily_usd,
             },
+            "config": config_status(settings),
         }
     )

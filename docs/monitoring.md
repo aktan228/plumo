@@ -16,7 +16,9 @@
 |---|---|---|
 | `status` | `ok` / `degraded` (нет живого worker или старейшее готовое задание старше 5 мин) / `unavailable` (503, нет БД) | не `ok` |
 | `app_version`, `schema_version` | версия API и head миграций (`null` — схема не из миграций) | `schema_version` не равен ожидаемому |
+| `commit` | первые 12 символов коммита API из `APP_COMMIT` или переменной хостинга (`RENDER_GIT_COMMIT` и др.); `unknown` — не задан | не равен выпущенному |
 | `workers.alive` | worker с heartbeat моложе `stale_after_s` (45 с; пишется раз в 15 с) | `0` |
+| `workers.commits` | коммиты живых worker (коммит — начало `worker_id`) | отличается от `commit` |
 | `workers.last_heartbeat_age_s` | возраст последнего heartbeat любого worker | > 45 |
 | `jobs.due`, `jobs.oldest_due_age_s` | задания, которые пора выполнять, и возраст старейшего | возраст растёт |
 | `jobs.delayed_retries` | повторы с будущим `run_at` — это не просрочка | — |
@@ -25,6 +27,9 @@
 | `deliveries_unknown` | ответы клиентам в `unknown`, ждут решения человека | > 0 |
 | `notifications_failed_or_unknown_24h` | уведомления менеджеру `failed`/`unknown` за сутки | > 0 |
 | `limits.service_spent_usd` / `service_limit_usd` | расход модели за UTC-сутки ([limits.md](limits.md)) | близко к пределу |
+| `config` | режим окружения и модели, имена провайдеров, `present` — заданы ли переменные стенда (только да/нет), `problems` — что не годится для стенда | `problems` не пуст |
+
+`config.problems`: `app_env_development`, `ai_mode_mock`, `model_provider_mock`, `handoff_provider_mock`, `worker_inside_api`, `public_base_url_not_https`, `missing:<ПЕРЕМЕННАЯ>`. Значения переменных в ответ не попадают. На `status` они не влияют: это проверка выпуска (smoke), а не тревога о сбое.
 
 ## Как воспроизвести отказы
 

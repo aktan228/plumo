@@ -1,0 +1,45 @@
+name: staging-smoke
+
+# After a push to main the hosting deploys staging on its own. This job waits until the API and the
+# worker report that commit in /ops/status, then runs backend/scripts/staging_smoke.py.
+# Repository settings (tech lead): variables STAGING_API_URL, STAGING_FRONTEND_URL; secret STAGING_OPS_TOKEN.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit expected on staging (empty = this run's commit)"
+        required: false
+
+jobs:
+  smoke:
+    # Until staging exists a push shows this job as skipped (not passed); a manual run fails instead.
+    if: vars.STAGING_API_URL != '' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      API: ${{ vars.STAGING_API_URL }}
+      FRONTEND: ${{ vars.STAGING_FRONTEND_URL }}
+      OPS_TOKEN: ${{ secrets.STAGING_OPS_TOKEN }}
+      COMMIT: ${{ inputs.commit || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - name: Staging configured
+        run: |
+          if [ -z "$API" ] || [ -z "$FRONTEND" ] || [ -z "$OPS_TOKEN" ]; then
+            echo "::error::STAGING_API_URL, STAGING_FRONTEND_URL or STAGING_OPS_TOKEN is not set in the repository settings"
+            exit 1
+          fi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Only Alembic, to read the expected head revision from this checkout.
+      - run: python -m pip install alembic
+      - name: Smoke
+        run: python scripts/staging_smoke.py --api "$API" --frontend "$FRONTEND" --expect-commit "$COMMIT" --wait-s 900
