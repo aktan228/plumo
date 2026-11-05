@@ -9,8 +9,9 @@
 | Что | Значение |
 |---|---|
 | Дата пакета | 2026-11-05 |
-| `main` (frontend и backend в одном репозитории) | `9390d78` — Merge Dashboard DB-01 through DB-11 |
-| Ветки PJ, ещё не влитые | PR [#11](https://github.com/aktan228/plumo/pull/11) PJ-00 `2167384`, [#12](https://github.com/aktan228/plumo/pull/12) PJ-01 `601057c`, [#13](https://github.com/aktan228/plumo/pull/13) PJ-02 `6c83bfd`, [#14](https://github.com/aktan228/plumo/pull/14) PJ-03 `508c288`; ветки `feature/pj-05-quality`, `feature/pj-06-monitoring`, `feature/pj-07-acceptance` |
+| `main` (frontend и backend в одном репозитории) | `159ccd9` |
+| Влито в `main` 05.11 | PR [#15](https://github.com/aktan228/plumo/pull/15) PJ-05, [#16](https://github.com/aktan228/plumo/pull/16) PJ-06, [#17](https://github.com/aktan228/plumo/pull/17) PJ-07 — `main` `159ccd9` |
+| Открыты, ждут ревью | PR [#11](https://github.com/aktan228/plumo/pull/11) PJ-00, [#12](https://github.com/aktan228/plumo/pull/12) PJ-01, [#13](https://github.com/aktan228/plumo/pull/13) PJ-02, [#14](https://github.com/aktan228/plumo/pull/14) PJ-03 (включая `render.yaml` для развёртывания) |
 | Версия схемы | `main`: `021_scenario_revisions`; после PJ-01: `022_rate_windows` |
 | Адрес staging | нет |
 
@@ -25,8 +26,8 @@
 | PJ-02 Менеджер | не принято: PR открыт | PR #13, CI success на `6c83bfd` | ревью; проверка с настоящим служебным ботом на staging |
 | PJ-03 Staging и выпуск | заблокировано: нет staging | PR #14, CI success на `508c288`; runbook `docs/operations.md`, smoke `backend/scripts/staging_smoke.py` | развёртывание тимлидом по инструкции, smoke на staging, настройки защиты ветки |
 | PJ-04 Путь двух бизнесов | заблокировано: нет staging, почты, ботов | протокол в [pilot-path.md](pilot-path.md#протокол-pj-04): все живые шаги «не проверено» | все живые и браузерные шаги |
-| PJ-05 Качество | не принято | `backend/docs/ACCEPTANCE.md` (ветка `feature/pj-05-quality`), прогон 05.11 | утверждённые материалы, эталоны, модель и бюджет; оценка человеком |
-| PJ-06 Мониторинг и восстановление | заблокировано: нет staging и внешнего монитора | `docs/monitoring.md`, `docs/restore.md` (ветка `feature/pj-06-monitoring`) | внешняя тревога, проверка отказов и восстановление на стенде |
+| PJ-05 Качество | не принято | `backend/docs/ACCEPTANCE.md` (PR #15), прогон 05.11 | утверждённые материалы, эталоны, модель и бюджет; оценка человеком |
+| PJ-06 Мониторинг и восстановление | заблокировано: нет staging и внешнего монитора | `docs/monitoring.md`, `docs/restore.md` (PR #16) | внешняя тревога, проверка отказов и восстановление на стенде |
 
 ## Проверки по видам
 
