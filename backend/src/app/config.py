@@ -118,7 +118,14 @@ class Settings(BaseSettings):
     limit_business_daily_usd: float = Field(default=3.0, gt=0)
     limit_service_daily_usd: float = Field(default=20.0, gt=0)
     limit_queue_per_business: int = Field(default=200, ge=1)
-    # Reserved before a customer turn: model reply, extraction and summary together, with margin.
+    # Paid turns started per fixed window, shared by every process. A turn over it waits for
+    # the next window instead of being dropped. The business share keeps one busy business
+    # from taking the whole service window.
+    limit_rate_window_s: int = Field(default=60, ge=10, le=3600)
+    limit_business_window_turns: int = Field(default=20, ge=1)
+    limit_service_window_turns: int = Field(default=60, ge=1)
+    # Reserved before a customer turn: every paid model call of it (main, fallback, retry), with margin.
+    # Extraction and summary run locally and cost nothing. See docs/limits.md for the estimate.
     turn_reserve_usd: float = Field(default=0.01, gt=0, le=1)
     # Which price table the estimates come from; stored with every reservation.
     cost_version: str = "2026-10"

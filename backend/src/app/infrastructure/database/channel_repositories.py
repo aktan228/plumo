@@ -474,6 +474,33 @@ class JobQueue:
         )
         return (result.rowcount or 0) == 1
 
+    async def defer(self, job: Job, worker_id: str, run_at: datetime, reason: str) -> bool:
+        """Put a claimed job back until `run_at` without using up one of its attempts.
+
+        For a turn that waits for the next rate window: nothing failed, so the waiting must
+        not bring the job closer to its final failure.
+        """
+
+        result = await self.session.execute(
+            update(JobRow)
+            .where(
+                JobRow.id == job.id,
+                JobRow.locked_by == worker_id[:64],
+                JobRow.attempts == job.attempts,
+                JobRow.status == JobStatus.running,
+            )
+            .values(
+                status=JobStatus.queued,
+                attempts=JobRow.attempts - 1,
+                run_at=run_at,
+                locked_until=None,
+                locked_by=None,
+                last_error=reason[:300],
+                updated_at=utcnow(),
+            )
+        )
+        return (result.rowcount or 0) == 1
+
     async def requeue_notification(self, handoff_id: UUID) -> bool:
         """Run a handoff's finished notification job again (one job per handoff), after a person decided to."""
 

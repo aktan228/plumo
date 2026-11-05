@@ -9,12 +9,13 @@ billed twice: deduplication of stored events cannot prevent that.
 
 import logging
 import random
+from datetime import timedelta
 
 from app.domain.enums import ConnectionStatus, InboundKind, InboundStatus
 from app.domain.errors import BusinessNotFound, CustomerNotFound, InvalidMessage
 from app.domain.models import InboundMessage, Job
 from app.application.services.outbound_service import OutboundService
-from app.application.services.spend_limits import SpendLimits
+from app.application.services.spend_limits import RATE_REASONS, Allowance, SpendLimits
 from app.infrastructure.database.channel_repositories import (
     ConnectionRepository,
     InboundEventRepository,
@@ -26,6 +27,8 @@ from app.infrastructure.database.repositories import ConversationRepository, Mes
 logger = logging.getLogger("plumo.inbound")
 
 _PERMANENT = (InvalidMessage, BusinessNotFound, CustomerNotFound)
+# Deferred turns start up to this many seconds into the next window, not all in its first instant.
+_DEFER_SPREAD_S = 5.0
 
 
 class InboundProcessor:
@@ -82,7 +85,17 @@ class InboundProcessor:
             contact_handle=event.data.get("contact_handle"),
         )
         if event.kind == InboundKind.text:
-            message.limit_reason = await self._limit(session, event, connection.business_id)
+            refused = await self._limit(session, event, connection.business_id)
+            if refused is not None and refused.reason in RATE_REASONS and refused.retry_at is not None:
+                # A full short window: the turn runs in the next one. Nothing is stored or
+                # sent yet, and later messages of this customer keep waiting behind it.
+                run_at = refused.retry_at + timedelta(seconds=random.uniform(0, _DEFER_SPREAD_S))
+                logger.warning(
+                    "turn_deferred",
+                    extra={"reason": refused.reason, "business_id": str(connection.business_id), "job_id": job.id},
+                )
+                return await jobs.defer(job, worker_id, run_at, refused.reason)
+            message.limit_reason = refused.reason if refused is not None else None
         agent = self.build_agent(session, self.runtime)
         response = await agent.process_message(message, checkpoint=session.commit)
         if event.kind == InboundKind.text and not message.limit_reason:
@@ -101,21 +114,23 @@ class InboundProcessor:
         await events.mark(event.id, InboundStatus.processed)
         return await jobs.complete(job, worker_id)
 
-    async def _limit(self, session, event, business_id) -> str | None:
-        """Why this turn may not call a paid model, or None. The reservation commits on its own."""
+    async def _limit(self, session, event, business_id) -> Allowance | None:
+        """Why this turn may not call a paid model now, or None. The reservation commits on its own."""
 
         limits = SpendLimits(session, self.runtime.settings)
         if await limits.sender_over_rate(event):
-            return "sender_rate_limit"
+            return Allowance(False, "sender_rate_limit")
         async with self.session_factory() as own:
             allowance = await SpendLimits(own, self.runtime.settings).reserve(event.id, business_id)
             if allowance.ok:
                 await own.commit()
             else:
                 await own.rollback()
-        if not allowance.ok:
+        if allowance.ok:
+            return None
+        if allowance.reason not in RATE_REASONS:
             logger.warning("turn_over_limit", extra={"reason": allowance.reason, "business_id": str(business_id)})
-        return allowance.reason
+        return allowance
 
     async def _failed(self, job: Job, worker_id: str, exc: Exception) -> None:
         permanent = isinstance(exc, _PERMANENT)
