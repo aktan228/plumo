@@ -49,9 +49,9 @@ class RegisterIn(BaseModel):
 
 
 class RegisterOut(BaseModel):
-    status: Literal["verification_required"] = "verification_required"
+    status: Literal["verification_required", "registered"] = "verification_required"
     email: str
-    email_delivery: Literal["sent", "unavailable"]
+    email_delivery: Literal["sent", "unavailable", "not_required"]
 
 
 class EmailRequestIn(BaseModel):

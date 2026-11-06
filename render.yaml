@@ -13,6 +13,8 @@ services:
     preDeployCommand: alembic upgrade head   # a failed migration stops the deploy; the old version keeps running
     autoDeploy: true
     envVars:
+      - key: AUTH_EMAIL_VERIFICATION_REQUIRED
+        value: "false"
       - key: APP_ENV
         value: stand
       - key: AI_MODE
@@ -69,6 +71,8 @@ services:
     dockerCommand: python -m app.worker
     autoDeploy: true
     envVars:
+      - key: AUTH_EMAIL_VERIFICATION_REQUIRED
+        value: "false"
       - key: APP_ENV
         value: stand
       - key: AI_MODE

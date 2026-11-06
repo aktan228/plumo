@@ -117,6 +117,7 @@ class Settings(BaseSettings):
     # Operator session lifetime in the dashboard.
     session_ttl_hours: float = 12.0
     # Frontend origin for account links; distinct from API/webhook PUBLIC_BASE_URL.
+    auth_email_verification_required: bool = True
     auth_public_url: str = ""
     auth_email_from: str = ""
     # Days the raw webhook copy of a customer message keeps its text; the dialog history stays.

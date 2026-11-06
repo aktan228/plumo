@@ -89,11 +89,13 @@ def config_status(settings: Settings) -> dict:
         problems.append("stt_mock")
     if settings.voice_messages_enabled and stt in STT_KEYS:
         keys[STT_KEYS[stt]] = _present(STT_KEYS[stt])
-    problems += [f"missing:{name}" for name, ok in {**present, **keys}.items() if not ok]
+    optional_mail = {"AUTH_PUBLIC_URL", "AUTH_EMAIL_FROM", "RESEND_API_KEY"} if not settings.auth_email_verification_required else set()
+    problems += [f"missing:{name}" for name, ok in {**present, **keys}.items() if not ok and name not in optional_mail]
     if settings.public_base_url and not settings.public_base_url.startswith("https://"):
         problems.append("public_base_url_not_https")
     return {
         "app_env": settings.app_env,
+        "email_verification_required": settings.auth_email_verification_required,
         "ai_mode": settings.ai_mode,
         "big_model_provider": settings.big_model_provider,
         "small_model_provider": settings.small_model_provider if settings.small_model_enabled else "none",

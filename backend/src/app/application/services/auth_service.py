@@ -92,10 +92,12 @@ LIMITER = LoginLimiter()
 
 
 class AuthService:
-    def __init__(self, operators, *, session_ttl_hours: float = 12.0, limiter: LoginLimiter = LIMITER) -> None:
+    def __init__(self, operators, *, session_ttl_hours: float = 12.0, limiter: LoginLimiter = LIMITER,
+                 email_verification_required: bool = True) -> None:
         self.operators = operators
         self.session_ttl = timedelta(hours=session_ttl_hours)
         self.limiter = limiter
+        self.email_verification_required = email_verification_required
 
     async def login(self, email: str, password: str) -> LoginResult:
         key = email.strip().lower()
@@ -110,7 +112,7 @@ class AuthService:
             self.limiter.failed(key)
             raise NotAuthenticated("wrong email or password")
         self.limiter.succeeded(key)
-        if not operator.email_verified:
+        if self.email_verification_required and not operator.email_verified:
             raise EmailNotVerified("Confirm your email before signing in.")
         return await self.issue_session(operator)
 
@@ -127,7 +129,7 @@ class AuthService:
         if found is None:
             raise NotAuthenticated("the session has expired; sign in again")
         session, operator = found
-        if not operator.email_verified:
+        if self.email_verification_required and not operator.email_verified:
             raise EmailNotVerified("Confirm your email before signing in.")
         return OperatorContext(
             operator_id=operator.id,
