@@ -56,7 +56,7 @@ services:
       - key: OPS_TOKEN
         sync: false
       - key: VOICE_MESSAGES_ENABLED
-        value: "false"
+        value: "true"
       - key: STT_PROVIDER
         value: elevenlabs
       - key: ELEVENLABS_API_KEY
@@ -114,7 +114,7 @@ services:
       - key: OPS_TOKEN
         sync: false
       - key: VOICE_MESSAGES_ENABLED
-        value: "false"
+        value: "true"
       - key: STT_PROVIDER
         value: elevenlabs
       - key: ELEVENLABS_API_KEY
