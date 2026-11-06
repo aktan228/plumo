@@ -136,7 +136,8 @@ def get_services(
         jobs=jobs,
         reads=ReadRepository(session),
         dialog_queries=DialogQueries(session),
-        auth=AuthService(operators, session_ttl_hours=runtime.settings.session_ttl_hours),
+        auth=AuthService(operators, session_ttl_hours=runtime.settings.session_ttl_hours,
+                         email_verification_required=runtime.settings.auth_email_verification_required),
         dialogs=DialogService(conversations, handoff_requests, messages, outbound_messages),
         outbound=OutboundService(
             conversations=conversations,

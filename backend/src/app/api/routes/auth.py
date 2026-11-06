@@ -23,10 +23,15 @@ def client_ip(request: Request) -> str:
 @router.post("/register", response_model=RegisterOut, status_code=201, summary="Создать аккаунт и отправить подтверждение почты")
 async def register(body: RegisterIn, request: Request, services: Services = Depends(get_services)) -> RegisterOut:
     emails = email_service(services)
-    emails.mailer.check_config()
+    require_verification = services.runtime.settings.auth_email_verification_required
+    if require_verification:
+        emails.mailer.check_config()
     operator = await RegistrationService(services.session, services.auth).register(
         name=body.name, email=str(body.email), password=body.password, locale=body.locale, client_ip=client_ip(request),
     )
+    if not require_verification:
+        await services.session.commit()
+        return RegisterOut(status="registered", email=operator.email, email_delivery="not_required")
     mail = await emails.prepare(operator.id, "verify", body.locale, initial=True)
     await services.session.commit()
     sent = await emails.deliver(mail)

@@ -25,6 +25,15 @@ def test_a_complete_stand_has_no_problems(monkeypatch):
     assert "sk-or-value" not in str(status)
 
 
+def test_mail_is_optional_only_when_verification_is_explicitly_disabled(monkeypatch):
+    for name, value in STAND.items():
+        monkeypatch.setenv(name, value)
+    for name in ("AUTH_PUBLIC_URL", "AUTH_EMAIL_FROM", "RESEND_API_KEY"):
+        monkeypatch.delenv(name)
+    assert config_status(stand(auth_email_verification_required=False))["problems"] == []
+    assert "missing:RESEND_API_KEY" in config_status(stand())["problems"]
+
+
 def test_mock_model_missing_key_and_worker_in_api_are_problems(monkeypatch):
     for name, value in STAND.items():
         monkeypatch.setenv(name, value)

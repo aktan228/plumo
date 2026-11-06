@@ -83,6 +83,13 @@ export function AuthScreen({ mode }: { mode: Mode }) {
         : verify && token ? { token } : forgot || verify ? { email: enteredEmail, locale } : { email: enteredEmail, password };
       const data = await send(path, payload);
       if (data === null) return;
+      if (register && data.status === "registered") {
+        const session = await send("login", { email: enteredEmail, password });
+        if (session === null) return;
+        navigating = true;
+        window.location.assign("/create/wizard");
+        return;
+      }
       if (register) { setNotice(data.email_delivery === "sent" ? "pending" : "delivery"); setCooldown(60); }
       else if (forgot || (verify && !token)) { setNotice("sent"); setCooldown(60); }
       else if (newPassword) { setNotice("done"); setToken(null); }

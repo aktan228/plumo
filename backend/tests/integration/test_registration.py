@@ -107,6 +107,27 @@ async def age_mail(signup):
         await session.commit()
 
 
+async def test_registration_without_email_allows_login_without_resend(signup, monkeypatch):
+    signup.runtime.settings.auth_email_verification_required = False
+    def unavailable_mail():
+        raise AssertionError("Registration must not use Resend when verification is disabled")
+    monkeypatch.setattr(signup.mailbox, "check_config", unavailable_mail)
+    response = await register(signup)
+    assert response.json()["status"] == "registered"
+    assert response.json()["email_delivery"] == "not_required"
+    assert signup.mailbox.messages == []
+    assert (await counts(signup))["auth_email_tokens"] == 0
+    login = await signup.client.post("/api/v1/auth/login", json={"email": BODY["email"].strip(), "password": BODY["password"]})
+    assert login.status_code == 200, login.text
+    headers = {"Authorization": f"Bearer {login.json()['token']}"}
+    assert (await signup.client.get("/api/v1/auth/me", headers=headers)).status_code == 200
+    async with signup.factory() as session:
+        operator, _ = await OperatorRepository(session).get_with_hash(BODY["email"].strip().lower())
+        assert not operator.email_verified
+    signup.runtime.settings.auth_email_verification_required = True
+    assert (await signup.client.get("/api/v1/auth/me", headers=headers)).status_code == 403
+
+
 async def test_signup_creates_atomic_empty_workspace_and_requires_verification(signup):
     response = await register(signup)
     assert response.json() == {
