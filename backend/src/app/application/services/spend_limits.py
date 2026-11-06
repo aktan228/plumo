@@ -102,8 +102,11 @@ class SpendLimits:
         )
         return (waiting or 0) >= self.settings.limit_queue_per_business
 
-    async def reserve(self, event_id, business_id) -> Allowance:
-        """Hold one turn's cost for this event. Call in its own transaction and commit it."""
+    async def reserve(self, event_id, business_id, extra_usd: float = 0.0) -> Allowance:
+        """Hold one turn's cost for this event. Call in its own transaction and commit it.
+
+        `extra_usd` is held on top of the turn: speech-to-text of a voice message.
+        """
 
         existing = await self.session.get(SpendReservationRow, event_id)
         if existing is not None:
@@ -113,7 +116,9 @@ class SpendLimits:
         if full is not None:
             return full
         day = today()
-        amount = Decimal(str(self.settings.turn_reserve_usd))
+        amount = (Decimal(str(self.settings.turn_reserve_usd)) + Decimal(str(max(extra_usd, 0.0)))).quantize(
+            Decimal("0.000001")
+        )
         scopes = (
             (business_scope(business_id), Decimal(str(self.settings.limit_business_daily_usd)), self.settings.limit_business_daily_calls, "business_budget"),
             (SERVICE, Decimal(str(self.settings.limit_service_daily_usd)), None, "service_budget"),

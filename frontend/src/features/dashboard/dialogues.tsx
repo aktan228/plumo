@@ -5,6 +5,7 @@ import Alert02Icon from "@hugeicons/core-free-icons/Alert02Icon";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import Loading03Icon from "@hugeicons/core-free-icons/Loading03Icon";
+import Mic01Icon from "@hugeicons/core-free-icons/Mic01Icon";
 import Refresh01Icon from "@hugeicons/core-free-icons/Refresh01Icon";
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import SentIcon from "@hugeicons/core-free-icons/SentIcon";
@@ -20,7 +21,7 @@ import { apiErrorText } from "./api-messages";
 import { conversationHref, dashboardConversation } from "./navigation";
 import {
   channelName, customerName, deliveryLabel, deliveryReason, eventText, formatTime, initials, mergeMessages,
-  notificationText, notificationTone, draftAfterAcceptance, loadDialogWindow, modeLabel, replyHint, sendKey, textFits, textUsage, unsupportedText, type PendingSend,
+  notificationText, notificationTone, draftAfterAcceptance, loadDialogWindow, modeLabel, replyHint, sendKey, textFits, textUsage, unsupportedText, voiceLabel, type PendingSend,
 } from "./dialogue-model";
 
 const labels = {
@@ -321,7 +322,9 @@ export function Dialogues({ active, initialId = null }: { active: boolean; initi
     return <div key={message.id} className={`flex max-w-[88%] flex-col sm:max-w-[80%] ${mine ? "self-end" : "self-start"}`}>
       <span className={`mb-1.5 text-[10px] text-plumo-muted ${mine ? "text-right" : ""}`}>{author}</span>
       <div className={`rounded-2xl px-4 py-3 ${mine ? "rounded-tr-sm bg-plumo-soft" : "rounded-tl-sm border border-solid border-plumo-line bg-white"} ${delivery && (delivery.status === "cancelled" || delivery.status === "failed") ? "opacity-70" : ""}`}>
-        {message.unsupported ? <p className="m-0 text-[13px] italic leading-[1.65] text-plumo-muted">{unsupportedText(message.unsupported, locale)}</p>
+        {message.voice && <p className="m-0 mb-1 flex items-center gap-1.5 text-[11px] text-plumo-muted"><PlumoIcon icon={Mic01Icon} size={16} />{voiceLabel(message.voice, locale)}</p>}
+        {message.voice && !message.voice.transcribed ? null
+          : message.unsupported ? <p className="m-0 text-[13px] italic leading-[1.65] text-plumo-muted">{unsupportedText(message.unsupported, locale)}</p>
           : <p className="m-0 whitespace-pre-wrap break-words text-[13px] leading-[1.65] [overflow-wrap:anywhere]">{message.text}</p>}
         <p className="mb-0 mt-1.5 text-right text-[10px] text-plumo-muted">{formatTime(message.timestamp, locale)}</p>
       </div>

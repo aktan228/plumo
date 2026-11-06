@@ -33,6 +33,9 @@ MODEL_KEYS = {
     "openai_compat": "LLM_API_KEY",
 }
 
+# The key each speech-to-text provider reads, checked only when voice messages are on.
+STT_KEYS = {"elevenlabs": "ELEVENLABS_API_KEY"}
+
 
 def commit() -> str:
     for name in COMMIT_VARS:
@@ -80,6 +83,12 @@ def config_status(settings: Settings) -> dict:
         problems.append("handoff_provider_mock")
     if settings.channel_worker_enabled:
         problems.append("worker_inside_api")
+    stt = settings.stt_provider.strip().lower()
+    if settings.voice_messages_enabled and (settings.mock_mode or stt in ("", "mock")):
+        # Voice messages are on but would only get the "text only" line: the mock never transcribes them.
+        problems.append("stt_mock")
+    if settings.voice_messages_enabled and stt in STT_KEYS:
+        keys[STT_KEYS[stt]] = _present(STT_KEYS[stt])
     problems += [f"missing:{name}" for name, ok in {**present, **keys}.items() if not ok]
     if settings.public_base_url and not settings.public_base_url.startswith("https://"):
         problems.append("public_base_url_not_https")
@@ -89,6 +98,8 @@ def config_status(settings: Settings) -> dict:
         "big_model_provider": settings.big_model_provider,
         "small_model_provider": settings.small_model_provider if settings.small_model_enabled else "none",
         "handoff_provider": settings.handoff_provider,
+        "voice_messages_enabled": settings.voice_messages_enabled,
+        "stt_provider": settings.stt_provider if settings.voice_messages_enabled else "off",
         "worker_inside_api": settings.channel_worker_enabled,
         "present": {**present, **keys},
         "problems": problems,

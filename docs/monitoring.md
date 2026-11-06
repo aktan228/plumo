@@ -29,7 +29,7 @@
 | `limits.service_spent_usd` / `service_limit_usd` | расход модели за UTC-сутки ([limits.md](limits.md)) | близко к пределу |
 | `config` | режим окружения и модели, имена провайдеров, `present` — заданы ли переменные стенда (только да/нет), `problems` — что не годится для стенда | `problems` не пуст |
 
-`config.problems`: `app_env_development`, `ai_mode_mock`, `model_provider_mock`, `handoff_provider_mock`, `worker_inside_api`, `public_base_url_not_https`, `missing:<ПЕРЕМЕННАЯ>`. Значения переменных в ответ не попадают. На `status` они не влияют: это проверка выпуска (smoke), а не тревога о сбое.
+`config.problems`: `app_env_development`, `ai_mode_mock`, `model_provider_mock`, `handoff_provider_mock`, `worker_inside_api`, `public_base_url_not_https`, `stt_mock` (голосовые включены, но распознавать нечем — клиенты получат «пока читаю только текст»), `missing:<ПЕРЕМЕННАЯ>` (при включённых голосовых — и ключ провайдера распознавания). Значения переменных в ответ не попадают. На `status` они не влияют: это проверка выпуска (smoke), а не тревога о сбое.
 
 ## Как воспроизвести отказы
 

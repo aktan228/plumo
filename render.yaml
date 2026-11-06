@@ -53,6 +53,12 @@ services:
         sync: false
       - key: OPS_TOKEN
         sync: false
+      - key: VOICE_MESSAGES_ENABLED
+        value: "false"
+      - key: STT_PROVIDER
+        value: elevenlabs
+      - key: ELEVENLABS_API_KEY
+        sync: false
   - type: worker
     name: plumo-worker
     runtime: docker
@@ -102,4 +108,10 @@ services:
       - key: TELEGRAM_BOT_USERNAME
         sync: false
       - key: OPS_TOKEN
+        sync: false
+      - key: VOICE_MESSAGES_ENABLED
+        value: "false"
+      - key: STT_PROVIDER
+        value: elevenlabs
+      - key: ELEVENLABS_API_KEY
         sync: false

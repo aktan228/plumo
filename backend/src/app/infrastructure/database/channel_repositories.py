@@ -266,6 +266,14 @@ class InboundEventRepository:
         )
         return result.rowcount or 0
 
+    async def save_voice_result(self, event_id: UUID, text: str | None, data: dict) -> None:
+        """Keep what a paid transcription produced, so a retried job neither downloads nor pays again."""
+
+        values: dict = {"data": data}
+        if text is not None:
+            values["text"] = text
+        await self.session.execute(update(InboundEventRow).where(InboundEventRow.id == event_id).values(**values))
+
     async def mark(self, event_id: UUID, status: str, error_code: str | None = None) -> None:
         await self.session.execute(
             update(InboundEventRow)

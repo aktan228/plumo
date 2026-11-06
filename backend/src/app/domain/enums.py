@@ -92,12 +92,22 @@ class ConnectionStatus(StrEnum):
 
 
 class InboundKind(StrEnum):
-    """What a stored channel event is. Only text, start and unsupported reach the agent."""
+    """What a stored channel event is. Only text, start, voice and unsupported reach the agent."""
 
     text = "text"
     start = "start"
+    # A Telegram voice message: the worker downloads and transcribes it, the agent sees text.
+    voice = "voice"
     unsupported = "unsupported"
     ignored = "ignored"
+
+
+class VoiceNotice(StrEnum):
+    """A voice message the agent answers with a fixed line, no model call. Message kinds, never stored events."""
+
+    too_long = "voice_too_long"
+    unclear = "voice_unclear"
+    failed = "voice_failed"
 
 
 class InboundStatus(StrEnum):

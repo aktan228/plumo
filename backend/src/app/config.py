@@ -47,6 +47,22 @@ class Settings(BaseSettings):
     manager_pause_hours: float = 24.0
     # Below this speech-recognition confidence a turn goes to the big model.
     stt_low_confidence: float = 0.6
+    # Telegram voice messages (docs/voice-messages.md). Off: they get the "text only" line.
+    # On, they are transcribed only with AI_MODE=production and a real STT_PROVIDER; never by the mock.
+    voice_messages_enabled: bool = False
+    # Longer voice messages are refused before download, with a fixed line.
+    voice_max_duration_s: int = Field(default=120, ge=1, le=1800)
+    # Below this mean word confidence the transcript counts as unclear: a fixed "repeat" line,
+    # no model call. 0 = off; not calibrated on live recordings yet.
+    stt_min_confidence: float = Field(default=0.0, ge=0, le=1)
+    # Speech-to-text price estimate for the spend reservation and settlement, and its price list.
+    # ElevenLabs Scribe v2: $0.22 per hour of audio (elevenlabs.io/pricing/api, 2026-11-06).
+    stt_usd_per_minute: float = Field(default=0.0037, ge=0, le=1)
+    stt_cost_version: str = "elevenlabs-scribe_v2-2026-11-06"
+    stt_timeout_s: float = Field(default=30.0, gt=0, le=120)
+    # STT_PROVIDER=elevenlabs. Key: ELEVENLABS_API_KEY. Zero retention is for enterprise plans only.
+    elevenlabs_stt_model: str = "scribe_v2"
+    elevenlabs_stt_zero_retention: bool = False
     app_name: str = "Plumo"
     # gemini-2.5-flash and -lite are retired on 2026-10-20 (OpenRouter catalog,
     # checked 2026-10-09). Model ids come from env; fallbacks take over on 404.

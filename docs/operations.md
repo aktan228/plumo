@@ -52,6 +52,7 @@ Telegram / Instagram ──webhook (HTTPS)────────────�
 | `INSTAGRAM_APP_SECRET`, `INSTAGRAM_VERIFY_TOKEN` | API | только если пилот на Instagram | тимлид |
 | `OPS_TOKEN` | API | доступ внешнего монитора к `/ops/status` | тимлид |
 | `LIMIT_*`, `TURN_RESERVE_USD`, `TEST_CHAT_*` | API, worker | пределы частоты и расходов, [limits.md](limits.md) | значения утверждает тимлид |
+| `VOICE_MESSAGES_ENABLED`, `STT_PROVIDER=elevenlabs`, `ELEVENLABS_API_KEY`, `VOICE_MAX_DURATION_S`, `STT_MIN_CONFIDENCE`, `STT_USD_PER_MINUTE`, `STT_COST_VERSION`, `STT_TIMEOUT_S`, `ELEVENLABS_STT_MODEL`, `ELEVENLABS_STT_ZERO_RETENTION` | worker (распознаёт), API (`/ops/status`) | голосовые Telegram, [voice-messages.md](voice-messages.md); по умолчанию выключены | тимлид включает после живой проверки и решения о согласии |
 | `WORKER_CONCURRENCY` | worker | слоты worker; по умолчанию в `.env.example` — 4 | — |
 | `CHANNEL_WORKER_ENABLED=false` | API | один режим worker | — |
 | `MIGRATE_ON_START=false` | API | миграция — отдельный шаг выпуска; образ для отката не трогает схему (раздел «Откат») | — |

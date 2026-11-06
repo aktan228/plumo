@@ -19,7 +19,16 @@ from app.application.services.memory_service import MemoryService, read_unclear_
 from app.application.services.response_validator import ResponseValidator, ambiguous_offers
 from app.correlation import get_correlation_id, get_request_id
 from app.domain.agent_settings import configured_text, opening_reply, published_settings, scenario_handoff
-from app.domain.enums import PHONE_CHANNELS, ActionType, Channel, ConversationMode, InboundKind, MessageRole, RouteModel
+from app.domain.enums import (
+    PHONE_CHANNELS,
+    ActionType,
+    Channel,
+    ConversationMode,
+    InboundKind,
+    MessageRole,
+    RouteModel,
+    VoiceNotice,
+)
 from app.domain.errors import (
     BusinessNotFound,
     CustomerNotFound,
@@ -52,6 +61,9 @@ from app.domain.phrases import (
     human_phrase,
     unknown_phrase,
     unsupported_phrase,
+    voice_failed_phrase,
+    voice_too_long_phrase,
+    voice_unclear_phrase,
     which_offer_phrase,
     with_ai_disclosure,
 )
@@ -172,7 +184,10 @@ class AgentService:
 
         business = await self._business(message.business_id)
         customer = await self.resolver.resolve_customer(message, business.id)
-        customer = await self.resolver.remember_contact_phone(customer, message.text)
+        if not message.metadata.get("voice"):
+            # A number heard in a voice message may be misheard: the agent repeats it back,
+            # and only a typed one is kept for the manager's callback.
+            customer = await self.resolver.remember_contact_phone(customer, message.text)
         language = await self._language(message, business)
         customer = await self.memory.update_language(customer, language)
         steps.append(f"customer:{customer.id}")
@@ -220,7 +235,7 @@ class AgentService:
             )
         if message.limit_reason:
             return await self._over_limit(message, business, customer, conversation, language, correlation_id, started)
-        if message.kind in (InboundKind.start, InboundKind.unsupported):
+        if message.kind in (InboundKind.start, InboundKind.unsupported, *VoiceNotice):
             return await self._service_reply(
                 message, business, customer.id, conversation, language, correlation_id, started
             )
@@ -241,6 +256,7 @@ class AgentService:
             channel=message.channel,
         )
         context.stt_confidence = _stt_confidence(message.metadata)
+        context.voice_message = bool(message.metadata.get("voice"))
         steps.append("knowledge:" + ",".join(hit.item.title for hit in knowledge))
         lap("prepare_ms")
 
@@ -585,7 +601,7 @@ class AgentService:
         correlation_id: str,
         started: float,
     ) -> AgentResponse:
-        """Telegram /start and unsupported attachments: a fixed line, no model call.
+        """Telegram /start, unsupported attachments and voice notices: a fixed line, no model call.
 
         The unsupported notice is not repeated back to back, so a customer who
         sends three photos gets it once.
@@ -602,6 +618,12 @@ class AgentService:
                     conversation.mode_version, handoff=False,
                 )
             text = unsupported_phrase(language)
+        elif kind == VoiceNotice.too_long:
+            text = voice_too_long_phrase(language, int(message.metadata.get("voice_limit_s") or 0))
+        elif kind == VoiceNotice.unclear:
+            text = voice_unclear_phrase(language)
+        elif kind == VoiceNotice.failed:
+            text = voice_failed_phrase(language)
         else:
             text = fallback_phrase("greeting", language, str(conversation.id))
             greeting = configured_text(business.profile, "greeting", 1000)
@@ -765,7 +787,7 @@ class AgentService:
         if len(text) > 4000:
             raise InvalidMessage("text is too long")
         metadata = scrub_mapping(message.metadata)
-        if message.channel == Channel.voice:
+        if message.channel == Channel.voice or (metadata.get("voice") and message.kind == InboundKind.text):
             # Speech recognition writes "восемьдесят пять тысяч"; retrieval and
             # the validator match digits. The heard text stays in metadata.
             spoken = spoken_to_digits(text)

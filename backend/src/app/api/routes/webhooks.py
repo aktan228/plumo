@@ -37,7 +37,7 @@ logger = logging.getLogger("plumo.webhooks")
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 MAX_BODY = 1_000_000
-_ACTIONABLE = (InboundKind.text, InboundKind.start, InboundKind.unsupported)
+_ACTIONABLE = (InboundKind.text, InboundKind.start, InboundKind.voice, InboundKind.unsupported)
 
 
 @router.post("/manager-telegram", summary="Service notification bot: authenticated manager binding")

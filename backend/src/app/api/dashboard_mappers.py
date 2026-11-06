@@ -10,6 +10,7 @@ from app.api.dashboard_schemas import (
     DialogMessageOut,
     ErrorStateOut,
     LastMessageOut,
+    VoiceInfoOut,
 )
 from app.domain.models import ChannelConnection, Message, OutboundMessage
 from app.infrastructure.database.dialog_queries import DialogRow
@@ -134,5 +135,16 @@ def dialog_message_out(message: Message, delivery: OutboundMessage | None = None
         author=str(meta.get("author") or meta.get("operator"))[:100] if (meta.get("author") or meta.get("operator")) else None,
         event=str(meta["event"]) if meta.get("event") else None,
         unsupported=str(unsupported) if unsupported else None,
+        voice=_voice(meta) if message.role == "user" else None,
         delivery=delivery_out(delivery) if delivery else None,
+    )
+
+
+def _voice(meta: dict) -> VoiceInfoOut | None:
+    if not meta.get("voice"):
+        return None
+    duration = meta.get("voice_duration_s")
+    return VoiceInfoOut(
+        duration_s=duration if isinstance(duration, int) else None,
+        transcribed=meta.get("voice_status") == "transcribed",
     )

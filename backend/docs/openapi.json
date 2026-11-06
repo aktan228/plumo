@@ -5205,6 +5205,17 @@
             "title": "Unsupported",
             "description": "Тип вложения, которое канал прислал вместо текста."
           },
+          "voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoiceInfoOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Сообщение клиента пришло голосовым."
+          },
           "delivery": {
             "anyOf": [
               {
@@ -5804,6 +5815,21 @@
           "limit_usd": {
             "type": "number",
             "title": "Limit Usd"
+          },
+          "window_s": {
+            "type": "integer",
+            "title": "Window S",
+            "description": "Длина короткого окна частоты, секунд"
+          },
+          "window_turns": {
+            "type": "integer",
+            "title": "Window Turns",
+            "description": "Платных ответов этого бизнеса в текущем окне"
+          },
+          "window_turns_limit": {
+            "type": "integer",
+            "title": "Window Turns Limit",
+            "description": "Предел ответов бизнеса за окно; сверх него ответ ждёт следующего окна"
           }
         },
         "type": "object",
@@ -5812,7 +5838,10 @@
           "calls",
           "calls_limit",
           "spent_usd",
-          "limit_usd"
+          "limit_usd",
+          "window_s",
+          "window_turns",
+          "window_turns_limit"
         ],
         "title": "LimitsOut"
       },
@@ -7441,6 +7470,30 @@
           "version"
         ],
         "title": "VersionIn"
+      },
+      "VoiceInfoOut": {
+        "properties": {
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "transcribed": {
+            "type": "boolean",
+            "title": "Transcribed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transcribed"
+        ],
+        "title": "VoiceInfoOut"
       },
       "VoiceRespondIn": {
         "properties": {

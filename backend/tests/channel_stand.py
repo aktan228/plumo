@@ -32,6 +32,8 @@ class FakeProviders:
         self.bot = {"id": 777000, "is_bot": True, "first_name": "Plumo Test", "username": "plumo_test_bot"}
         self.ig_account = {"user_id": "17841400000000001", "username": "plumo.test", "name": "Plumo Test"}
         self._next_id = 100
+        # Telegram files by file_id: the bytes getFile + /file/bot<token>/<path> return.
+        self.files: dict[str, bytes] = {}
 
     def fail(self, method: str, *responses) -> None:
         """Queue responses for `method`: (status, body) tuples or exceptions to raise."""
@@ -39,6 +41,17 @@ class FakeProviders:
         self.failures.setdefault(method, []).extend(responses)
 
     def handler(self, request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.telegram.org" and request.url.path.startswith("/file/"):
+            self.calls.append("download")
+            queued = self.failures.get("download")
+            if queued:
+                item = queued.pop(0)
+                if isinstance(item, Exception):
+                    raise item
+                return httpx.Response(item[0], json=item[1])
+            file_id = request.url.path.rsplit("/", 1)[-1]
+            content = self.files.get(file_id)
+            return httpx.Response(200, content=content) if content is not None else httpx.Response(404)
         if request.url.host == "api.telegram.org":
             method = request.url.path.rsplit("/", 1)[-1]
             body = json.loads(request.content or b"{}")
@@ -66,6 +79,12 @@ class FakeProviders:
         if method == "deleteWebhook":
             self.webhook_url = ""
             return httpx.Response(200, json={"ok": True, "result": True})
+        if method == "getFile":
+            content = self.files.get(body["file_id"])
+            if content is None:
+                return httpx.Response(400, json={"ok": False, "description": "Bad Request: invalid file_id"})
+            path = f"voice/{body['file_id']}"
+            return httpx.Response(200, json={"ok": True, "result": {"file_id": body["file_id"], "file_unique_id": "u", "file_size": len(content), "file_path": path}})
         if method == "sendMessage":
             self._next_id += 1
             self.sent.append({"channel": "telegram", "chat_id": str(body["chat_id"]), "text": body["text"]})
@@ -79,6 +98,28 @@ class FakeProviders:
             self.sent.append({"channel": "instagram", "chat_id": body["recipient"]["id"], "text": body["message"]["text"]})
             return httpx.Response(200, json={"recipient_id": body["recipient"]["id"], "message_id": f"mid.{self._next_id}"})
         return httpx.Response(404, json={"ok": False, "description": f"unexpected {method}"})
+
+
+class FakeSTT:
+    """api.elevenlabs.io/v1/speech-to-text in memory: transcripts by audio bytes, queued failures."""
+
+    def __init__(self) -> None:
+        self.transcripts: dict[bytes, dict] = {}
+        self.failures: list = []
+        self.requests: list[dict] = []
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        body = request.read()
+        self.requests.append({"key": request.headers.get("xi-api-key"), "size": len(body), "query": dict(request.url.params)})
+        if self.failures:
+            item = self.failures.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return httpx.Response(item, json={"detail": {"status": "error", "message": "fake failure"}})
+        for audio, result in self.transcripts.items():
+            if audio in body:
+                return httpx.Response(200, json=result)
+        return httpx.Response(200, json={"text": "", "language_code": "rus", "language_probability": 0.5, "words": []})
 
 
 @dataclass
