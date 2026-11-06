@@ -425,6 +425,35 @@ def unsupported_phrase(language: str) -> str:
     return "Пока я читаю только текстовые сообщения. Напишите, пожалуйста, вопрос текстом."
 
 
+# Telegram voice messages. The Kyrgyz lines are drafts: a native speaker has not checked them yet.
+
+
+def voice_too_long_phrase(language: str, max_seconds: int) -> str:
+    if language == "ky":
+        return (
+            "Үн билдирүү өтө узун. Кыскача текст менен жазып жибериңизчи "
+            f"же {max_seconds} секунддан ашпаган үн билдирүү жөнөтүңүз."
+        )
+    return (
+        "Голосовое слишком длинное, напишите, пожалуйста, коротко текстом "
+        f"или пришлите голосовое до {max_seconds} секунд."
+    )
+
+
+def voice_unclear_phrase(language: str) -> str:
+    """Silence, noise or only "э-э": ask again, do not guess what was said."""
+
+    if language == "ky":
+        return "Кечиресиз, үн билдирүүнү түшүнө албадым. Кайра айтып бериңизчи же текст менен жазыңыз."
+    return "Извините, не расслышал голосовое. Повторите, пожалуйста, или напишите текстом."
+
+
+def voice_failed_phrase(language: str) -> str:
+    if language == "ky":
+        return "Кечиресиз, үн билдирүүнү ача албадым. Текст менен жазып жибериңизчи."
+    return "Не получилось разобрать голосовое, напишите, пожалуйста, текстом."
+
+
 def _pick(variants: tuple[str, ...], seed: str) -> str:
     """Stable variety: the same turn gets the same line, different turns rotate."""
 

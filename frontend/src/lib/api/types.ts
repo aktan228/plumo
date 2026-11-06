@@ -81,6 +81,8 @@ export type DialogMessage = {
   author: string | null;
   event: string | null;
   unsupported: string | null;
+  /** The customer sent a voice message; `text` is its transcript when `transcribed`. */
+  voice?: { duration_s: number | null; transcribed: boolean } | null;
   delivery: Delivery | null;
 };
 

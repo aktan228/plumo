@@ -112,3 +112,11 @@ test('the dashboard says "notified" only after Telegram accepted the notificatio
   assert.equal(notificationTone('unknown'), 'error');
   assert.equal(notificationTone('sent'), 'ok');
 });
+
+test('a voice message shows its duration over the transcript, or that it was not recognized', async () => {
+  const { voiceLabel } = await import('../src/features/dashboard/dialogue-model.ts');
+  assert.equal(voiceLabel({ duration_s: 12, transcribed: true }, 'ru'), 'Голосовое, 12 с');
+  assert.equal(voiceLabel({ duration_s: null, transcribed: true }, 'ru'), 'Голосовое');
+  assert.equal(voiceLabel({ duration_s: 300, transcribed: false }, 'ru'), 'Голосовое, не распознано');
+  assert.equal(voiceLabel({ duration_s: 7, transcribed: true }, 'en'), 'Voice message, 7 s');
+});

@@ -48,6 +48,21 @@ class AIProviderFactory:
     def stt(self) -> STTProvider:
         return self._pick(self._stt, "mock" if self.settings.mock_mode else self.settings.stt_provider, "STT")
 
+    def voice_message_stt(self) -> tuple[str, STTProvider] | None:
+        """The real STT for chat voice messages, or None when they must not be transcribed.
+
+        Unlike `stt()`, this never returns the mock: its canned transcript ("хочу узнать
+        про квартиру") would reach a customer as if they had said it.
+        """
+
+        if not getattr(self.settings, "voice_messages_enabled", False) or self.settings.mock_mode:
+            return None
+        name = self.settings.stt_provider.strip().lower()
+        provider = self._stt.get(name)
+        if name == "mock" or provider is None or isinstance(provider, MockSTTProvider):
+            return None
+        return name, provider
+
     def tts(self) -> TTSProvider:
         return self._pick(self._tts, "mock" if self.settings.mock_mode else self.settings.tts_provider, "TTS")
 

@@ -4,6 +4,12 @@ Methods per https://core.telegram.org/bots/api (checked 2026-10-14): getMe,
 getWebhookInfo, setWebhook (secret_token, 1-256 chars of A-Za-z0-9_-, comes back
 in X-Telegram-Bot-Api-Secret-Token), deleteWebhook, sendMessage (1-4096 chars).
 
+Voice messages (checked 2026-11-06, Bot API 10.3): getFile(file_id) returns a File with
+file_path; the bytes are at https://api.telegram.org/file/bot<token>/<file_path>, the link
+is valid for at least 1 hour, and "bots can download files of up to 20MB in size".
+Voice has file_id, file_unique_id, duration (seconds, as defined by the sender), and
+optional mime_type and file_size.
+
 The bot token is part of every URL. It is never logged, never put into an
 exception message, and httpx request logging is switched off for it.
 """
@@ -19,6 +25,8 @@ from app.infrastructure.channels.base import AccountInfo, ChannelError, ChannelE
 logger = logging.getLogger("plumo.channels.telegram")
 
 API = "https://api.telegram.org"
+# getFile: "bots can download files of up to 20MB in size" (core.telegram.org/bots/api, 2026-11-06).
+DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024
 # Only private messages are needed; edits, reactions and member updates are not requested.
 ALLOWED_UPDATES = ["message"]
 _MEDIA = (
@@ -90,6 +98,38 @@ class TelegramClient:
         if message_id is None:
             raise ChannelError("ambiguous", "no_message_id", "sendMessage answered without message_id")
         return str(message_id)
+
+    async def download_file(self, file_id: str, max_bytes: int = DOWNLOAD_LIMIT_BYTES) -> bytes:
+        """getFile, then the file itself, in memory. Neither the token nor the file path leaves this method."""
+
+        info = await self._call("getFile", {"file_id": file_id})
+        file_path = info.get("file_path") if isinstance(info, dict) else None
+        size = info.get("file_size") if isinstance(info, dict) else None
+        if not file_path:
+            raise ChannelError("bad_request", "file_unavailable", "getFile returned no file_path")
+        if isinstance(size, int) and size > max_bytes:
+            raise ChannelError("bad_request", "file_too_big", "file is over the download limit")
+        url = f"{API}/file/bot{self._token}/{file_path}"
+        try:
+            async with self._client.stream("GET", url) as response:
+                if response.status_code == 404:
+                    raise ChannelError("bad_request", "file_unavailable", "file link expired or is unknown", status=404)
+                if response.status_code >= 500 or response.status_code == 429:
+                    raise ChannelError("transient", "telegram_server_error", f"HTTP {response.status_code}", status=response.status_code)
+                if response.status_code >= 300:
+                    raise ChannelError("bad_request", "file_download_failed", f"HTTP {response.status_code}", status=response.status_code)
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in response.aiter_bytes():
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise ChannelError("bad_request", "file_too_big", "file is over the download limit")
+                    chunks.append(chunk)
+        except httpx.TimeoutException:
+            raise ChannelError("transient", "telegram_timeout", "Telegram did not answer in time") from None
+        except httpx.HTTPError:
+            raise ChannelError("transient", "telegram_network_error", "network error talking to Telegram") from None
+        return b"".join(chunks)
 
     async def _call(self, method: str, body: dict, *, sends: bool = False):
         url = f"{API}/bot{self._token}/{method}"
@@ -177,12 +217,37 @@ def parse_update(update: dict[str, Any]) -> ChannelEvent | None:
         if cut:
             data["truncated"] = True
         return ChannelEvent(event_id, "text", sender_id, chat_id, message_id, clipped, when, data)
+    voice = _voice(message)
+    if voice is not None:
+        data.update(voice)
+        return ChannelEvent(event_id, "voice", sender_id, chat_id, message_id, "[voice]", when, data)
     media = next((key for key in _MEDIA if key in message), "other")
     data["unsupported"] = media
     caption = message.get("caption")
     if isinstance(caption, str) and caption.strip():
         data["has_caption"] = True
     return ChannelEvent(event_id, "unsupported", sender_id, chat_id, message_id, f"[{media}]", when, data)
+
+
+def _voice(message: dict) -> dict[str, Any] | None:
+    """File reference of a voice note, or of an audio file with an audio MIME type. No bytes, no link."""
+
+    item = message.get("voice")
+    if not isinstance(item, dict):
+        audio = message.get("audio")
+        mime = str(audio.get("mime_type") or "") if isinstance(audio, dict) else ""
+        item = audio if mime.startswith("audio/") else None
+    if not isinstance(item, dict) or not isinstance(item.get("file_id"), str) or not item["file_id"]:
+        return None
+    data: dict[str, Any] = {"file_id": item["file_id"][:256]}
+    if isinstance(item.get("file_unique_id"), str):
+        data["file_unique_id"] = item["file_unique_id"][:128]
+    for key in ("duration", "file_size"):
+        if isinstance(item.get(key), int) and item[key] >= 0:
+            data[key] = item[key]
+    if isinstance(item.get("mime_type"), str):
+        data["mime_type"] = item["mime_type"][:64]
+    return data
 
 
 def _contact(sender: dict) -> dict[str, Any]:

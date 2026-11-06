@@ -72,6 +72,17 @@ class ChannelGateway:
                 await client.aclose()
         raise ChannelError("bad_request", "channel_unsupported", f"no adapter for {connection.channel}")
 
+    async def download_file(self, connection: ChannelConnection, file_id: str, max_bytes: int) -> bytes:
+        """A customer's file from the channel, in memory. Telegram only."""
+
+        if connection.channel != "telegram":
+            raise ChannelError("bad_request", "channel_unsupported", f"no file download for {connection.channel}")
+        client = self.telegram(self.token(connection))
+        try:
+            return await client.download_file(file_id, max_bytes)
+        finally:
+            await client.aclose()
+
 
 def channel_secret_key() -> str:
     return os.getenv("CHANNEL_SECRET_KEY", "").strip()

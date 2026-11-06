@@ -157,6 +157,13 @@ export function unsupportedText(kind: string, locale: Locale): string {
   return locale === "ru" ? `Вложение: ${name} — в этой версии не поддерживается` : `Attachment: ${name} — not supported in this version`;
 }
 
+/** "Голосовое, 12 с" over a transcript, or "Голосовое, не распознано". */
+export function voiceLabel(voice: { duration_s: number | null; transcribed: boolean }, locale: Locale): string {
+  const seconds = voice.duration_s != null ? (locale === "ru" ? `, ${voice.duration_s} с` : `, ${voice.duration_s} s`) : "";
+  if (!voice.transcribed) return locale === "ru" ? "Голосовое, не распознано" : "Voice message, not recognized";
+  return locale === "ru" ? `Голосовое${seconds}` : `Voice message${seconds}`;
+}
+
 const conversationId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** The dialog a notification link points at (`/dashboard?conversation=<id>`), or null for anything else. */

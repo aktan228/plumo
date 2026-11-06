@@ -136,7 +136,8 @@ class InboundMessage:
     request_id: str | None = None
     # Set by the channel worker, never by a payload: the connection proves the business.
     connection_id: UUID | None = None
-    # "text", "start" (Telegram /start) or "unsupported" (photo, voice...): the last two skip the model.
+    # "text", "start" (Telegram /start), "unsupported" (photo, file...) or a VoiceNotice:
+    # all but text skip the model. A transcribed voice message arrives as "text".
     kind: str = "text"
     # False: store the message, do not answer (agent switched off on the connection).
     # Set by the worker when a rate or spend limit is reached: store the message, call no paid model.
@@ -197,6 +198,8 @@ class AgentContext:
     channel: str = "whatsapp"
     # 0..1 from a voice layer that reports it; None for chats and for platforms that do not.
     stt_confidence: float | None = None
+    # The current message is a transcribed chat voice message: it may hold recognition errors.
+    voice_message: bool = False
 
 
 @dataclass(slots=True)
@@ -374,6 +377,11 @@ class ActionContext:
 class AudioInput:
     audio_id: str
     metadata: dict[str, Any] = field(default_factory=dict)
+    # The audio itself, held in memory for one transcription. None: the mock looks up `audio_id`.
+    content: bytes | None = None
+    mime_type: str | None = None
+    # ru, ky or None: a hint only, the provider detects the language itself.
+    language_hint: str | None = None
 
 
 @dataclass(slots=True)
@@ -381,6 +389,10 @@ class Transcript:
     text: str
     language: str
     audio_id: str
+    # 0..1 when the provider reports one, else None.
+    confidence: float | None = None
+    # Seconds of audio, when the provider reports them.
+    duration_s: float | None = None
 
 
 @dataclass(slots=True)

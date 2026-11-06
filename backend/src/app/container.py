@@ -91,6 +91,7 @@ def build_runtime(settings: Settings, engine: AsyncEngine | None = None) -> Runt
     router = _router(settings)
     providers = AIProviderFactory(settings)
     _register_llm_providers(providers, settings)
+    _register_stt_providers(providers, settings)
     return Runtime(
         settings=settings,
         auth_mailer=ResendAuthMailer(settings),
@@ -209,6 +210,22 @@ def _handoff_provider(settings: Settings) -> HumanHandoffProvider:
     raise ProviderUnavailable(
         f"handoff provider '{settings.handoff_provider}' is not registered."
     )
+
+
+def _register_stt_providers(providers: AIProviderFactory, settings: Settings) -> None:
+    """Only the provider STT_PROVIDER names, so an unused vendor opens no client."""
+
+    if settings.stt_provider.strip().lower() == "elevenlabs":
+        from app.infrastructure.ai.elevenlabs_stt import ElevenLabsSTTProvider
+
+        providers.register_stt(
+            "elevenlabs",
+            ElevenLabsSTTProvider(
+                model=settings.elevenlabs_stt_model,
+                zero_retention=settings.elevenlabs_stt_zero_retention,
+                timeout_s=settings.stt_timeout_s,
+            ),
+        )
 
 
 def _register_llm_providers(providers: AIProviderFactory, settings: Settings) -> None:

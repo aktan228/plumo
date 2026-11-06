@@ -265,6 +265,12 @@ class DeliveryOut(BaseModel):
     updated_at: DateTime
 
 
+class VoiceInfoOut(BaseModel):
+    duration_s: int | None = None
+    # true: `text` is the transcript; false: not recognized (off, too long, unclear, error, limit).
+    transcribed: bool
+
+
 class DialogMessageOut(BaseModel):
     id: UUID
     seq: int | None = None
@@ -274,6 +280,7 @@ class DialogMessageOut(BaseModel):
     author: str | None = None
     event: str | None = Field(default=None, description="takeover / resume для системных событий.")
     unsupported: str | None = Field(default=None, description="Тип вложения, которое канал прислал вместо текста.")
+    voice: VoiceInfoOut | None = Field(default=None, description="Сообщение клиента пришло голосовым.")
     delivery: DeliveryOut | None = None
 
 
